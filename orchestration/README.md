@@ -44,8 +44,8 @@ Codex больше не участвует. Всё, что он успел сд�
 | Gemini (раунд 2, done) | [`TZ_GEMINI_2.md`](./TZ_GEMINI_2.md) | [`STATUS_GEMINI_2.md`](./STATUS_GEMINI_2.md) | Реальный ClamAV + тесты на `ReferralsService` — сдано, в `main` |
 | Gemini (раунд 3, done) | [`TZ_GEMINI_3.md`](./TZ_GEMINI_3.md) | [`STATUS_GEMINI_3.md`](./STATUS_GEMINI_3.md) | Тесты на `OrdersService`/`AdminService` (споры) + реальная отправка email — сдано, в `main` |
 | Gemini (раунд 4, done) | [`TZ_GEMINI_4.md`](./TZ_GEMINI_4.md) | [`STATUS_GEMINI_4.md`](./STATUS_GEMINI_4.md) | Инфраструктурный P0: миграции, payout-воркер, rate limiting, health-check, CORS, structured logging — сдано, в `main` |
-| Gemini (раунд 5) | [`TZ_GEMINI_5.md`](./TZ_GEMINI_5.md) | [`STATUS_GEMINI_5.md`](./STATUS_GEMINI_5.md) | Монетизация — бэкенд: комиссия за вывод, комиссия по тиру подписки, лимиты по тиру, сортировка по Promotion, джоба экспирации подписок |
-| Claude (я) | — | этот разговор | Раунд 4 (email-верификация, password reset, CI) — сделано. Раунд 5: схема Subscription/Promotion, чекауты, вывод средств/профиль/поддержка на фронте, страница тарифов |
+| Gemini (раунд 5, done) | [`TZ_GEMINI_5.md`](./TZ_GEMINI_5.md) | [`STATUS_GEMINI_5.md`](./STATUS_GEMINI_5.md) | Монетизация — бэкенд: комиссия за вывод, комиссия по тиру подписки, лимиты по тиру, сортировка по Promotion, джоба экспирации подписок — сдано, в `main` |
+| Claude (я) | — | этот разговор | Раунд 4 (email-верификация, password reset, CI) — сделано. Схема Subscription/Promotion — сделано. Сейчас: чекауты, вывод средств/профиль/поддержка на фронте, страница тарифов |
 
 Бизнес-модель монетизации (тиры, цены, продвижение) —
 [`docs/MONETIZATION.md`](../docs/MONETIZATION.md).
