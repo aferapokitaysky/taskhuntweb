@@ -3,9 +3,17 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import type { CommissionRule, Dispute, FeatureFlag, User } from '@/lib/types';
+import type { Category, CommissionRule, Dispute, FeatureFlag, Skill, User } from '@/lib/types';
 
-type Tab = 'users' | 'disputes' | 'flags' | 'commissions';
+type Tab = 'users' | 'disputes' | 'flags' | 'commissions' | 'catalog' | 'metrics';
+
+interface AdminMetrics {
+  revenue: { total: number; thisMonth: number };
+  activeDisputes: number;
+  ordersByStatus: Record<string, number>;
+  newUsersThisWeek: number;
+  activeSubscriptionsByTier: Record<string, number>;
+}
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('users');
@@ -14,6 +22,11 @@ export default function AdminPage() {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [commissions, setCommissions] = useState<CommissionRule[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newSkillName, setNewSkillName] = useState('');
   const [notesByDispute, setNotesByDispute] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +49,11 @@ export default function AdminPage() {
       if (tab === 'disputes') setDisputes(await api<Dispute[]>('/admin/disputes'));
       if (tab === 'flags') setFlags(await api<FeatureFlag[]>('/admin/feature-flags'));
       if (tab === 'commissions') setCommissions(await api<CommissionRule[]>('/admin/commission-rules'));
+      if (tab === 'catalog') {
+        setCategories(await api<Category[]>('/categories'));
+        setSkills(await api<Skill[]>('/skills'));
+      }
+      if (tab === 'metrics') setMetrics(await api<AdminMetrics>('/admin/metrics'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить данные');
     }
@@ -79,10 +97,12 @@ export default function AdminPage() {
 
       <div className="mb-6 flex flex-wrap gap-2">
         {[
+          ['metrics', 'Метрики'],
           ['users', 'Users'],
           ['disputes', 'Disputes'],
           ['flags', 'Feature Flags'],
           ['commissions', 'Commissions'],
+          ['catalog', 'Категории и навыки'],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -224,6 +244,127 @@ export default function AdminPage() {
               body: JSON.stringify({ percentage }),
             }))} />
           ))}
+        </section>
+      )}
+
+      {tab === 'metrics' && metrics && (
+        <section className="space-y-6">
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+            {[
+              ['Выручка всего', `$${metrics.revenue.total}`],
+              ['Выручка в этом месяце', `$${metrics.revenue.thisMonth}`],
+              ['Активных споров', metrics.activeDisputes],
+              ['Новых юзеров за неделю', metrics.newUsersThisWeek],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs uppercase text-slate-500">{label}</p>
+                <p className="mt-1 text-xl font-semibold">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 font-semibold">Заказы по статусам</h3>
+              <div className="space-y-1 text-sm">
+                {Object.entries(metrics.ordersByStatus).map(([status, count]) => (
+                  <div key={status} className="flex justify-between">
+                    <span className="text-slate-600">{status}</span>
+                    <span className="font-medium">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 font-semibold">Активные подписки по тирам</h3>
+              <div className="space-y-1 text-sm">
+                {Object.entries(metrics.activeSubscriptionsByTier).map(([tier, count]) => (
+                  <div key={tier} className="flex justify-between">
+                    <span className="text-slate-600">{tier}</span>
+                    <span className="font-medium">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {tab === 'catalog' && (
+        <section className="grid gap-6 md:grid-cols-2">
+          <div>
+            <h3 className="mb-3 font-semibold">Категории</h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                mutate(() => api('/admin/categories', { method: 'POST', body: JSON.stringify({ name: newCategoryName } ) }));
+                setNewCategoryName('');
+              }}
+              className="mb-3 flex gap-2"
+            >
+              <input
+                required
+                placeholder="Новая категория"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white">
+                Добавить
+              </button>
+            </form>
+            <div className="space-y-2">
+              {categories.map((c) => (
+                <div key={c.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                  <span>{c.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => mutate(() => api(`/admin/categories/${c.id}`, { method: 'DELETE' }))}
+                    className="text-red-600 hover:underline"
+                  >
+                    Удалить
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="mb-3 font-semibold">Навыки</h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                mutate(() => api('/admin/skills', { method: 'POST', body: JSON.stringify({ name: newSkillName }) }));
+                setNewSkillName('');
+              }}
+              className="mb-3 flex gap-2"
+            >
+              <input
+                required
+                placeholder="Новый навык"
+                value={newSkillName}
+                onChange={(e) => setNewSkillName(e.target.value)}
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white">
+                Добавить
+              </button>
+            </form>
+            <div className="space-y-2">
+              {skills.map((s) => (
+                <div key={s.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                  <span>{s.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => mutate(() => api(`/admin/skills/${s.id}`, { method: 'DELETE' }))}
+                    className="text-red-600 hover:underline"
+                  >
+                    Удалить
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
       )}
     </main>
