@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model FraudSignal {
+  id        String   @id @default(uuid())
+  orderId   String   @unique
+  riskScore Int
+  reasons   String[]
+  createdAt DateTime @default(now())
+
+  @@map("fraud_signals")
+}
+
+model User {
+  id        String    @id
+  createdAt DateTime
+  profile   Profile?
+  orders    Order[]   @relation("ClientOrders")
+  bids      Bid[]
+
+  @@map("users")
+}
+
+model Profile {
+  id            String @id
+  userId        String @unique
+  user          User   @relation(fields: [userId], references: [id])
+  disputesCount Int
+  lateDeliveries Int
+
+  @@map("profiles")
+}
+
+model Order {
+  id        String   @id
+  clientId  String
+  client    User     @relation("ClientOrders", fields: [clientId], references: [id])
+  budgetMin Decimal
+  status    String
+  bids      Bid[]
+  disputes  Dispute[]
+  createdAt DateTime
+
+  @@map("orders")
+}
+
+model Bid {
+  id           String  @id
+  orderId      String
+  order        Order   @relation(fields: [orderId], references: [id])
+  freelancerId String
+  freelancer   User    @relation(fields: [freelancerId], references: [id])
+  amount       Decimal
+  status       String
+
+  @@map("bids")
+}
+
+model Dispute {
+  id        String @id
+  orderId   String
+  order     Order  @relation(fields: [orderId], references: [id])
+  openedById String
+  reason    String
+  status    String
+
+  @@map("disputes")
+}

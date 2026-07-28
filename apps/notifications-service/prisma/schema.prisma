@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum NotificationChannel {
+  PUSH
+  EMAIL
+  TELEGRAM
+  IN_APP
+  SMS
+}
+
+model User {
+  id                  String                   @id
+  email               String                   @unique
+  notificationPrefs   NotificationPreference[]
+
+  @@map("users")
+}
+
+model NotificationPreference {
+  id      String              @id
+  userId  String
+  user    User                @relation(fields: [userId], references: [id])
+  channel NotificationChannel
+  enabled Boolean
+
+  @@unique([userId, channel])
+  @@map("notification_preferences")
+}
