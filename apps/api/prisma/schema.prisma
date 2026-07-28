@@ -1,0 +1,762 @@
+// ============================================================================
+// TaskHunt — Prisma schema (apps/api)
+//
+// Единственный источник правды для денег — LedgerEntry/LedgerTransaction.
+// Никаких прямых UPDATE баланса: любое движение денег — новая запись
+// в леджере внутри БД-транзакции (см. WalletService).
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USERS & AUTH
+// ============================================================================
+
+enum MarketplaceRole {
+  CLIENT
+  FREELANCER
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  APPLE
+  GITHUB
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+model User {
+  id                String        @id @default(uuid())
+  email             String        @unique
+  passwordHash      String?
+  authProvider      AuthProvider  @default(LOCAL)
+  oauthId           String?
+
+  // выбирается на регистрации; пользователь может позже включить вторую роль
+  // (стать ещё и фрилансером, если начинал как заказчик) — см. roles[]
+  primaryRole       MarketplaceRole
+  roles             MarketplaceRole[] @default([])
+
+  status            UserStatus    @default(PENDING_VERIFICATION)
+  isStaff           Boolean       @default(false)
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  lastSeenAt        DateTime?
+
+  profile           Profile?
+  wallet            Wallet?
+  onboarding        OnboardingResponse?
+
+  ordersAsClient    Order[]         @relation("ClientOrders")
+  bids              Bid[]
+  reviewsAuthored   Review[]        @relation("ReviewAuthor")
+  reviewsReceived   Review[]        @relation("ReviewTarget")
+
+  sentChatMessages  ChatMessage[]   @relation("ChatSender")
+  supportTickets    SupportTicket[] @relation("TicketOwner")
+  assignedTickets   SupportTicket[] @relation("TicketAssignee")
+  supportMessages   SupportMessage[]
+
+  disputesOpened    Dispute[]       @relation("DisputeOpener")
+  disputesAssigned  Dispute[]       @relation("DisputeArbitrator")
+
+  staffRoles        UserStaffRole[]
+  auditLogs         AuditLog[]
+
+  referralCode      ReferralCode?
+  referredBy        ReferralUse?    @relation("ReferredUser")
+
+  notificationPrefs NotificationPreference[]
+  files             FileAsset[]
+
+  @@index([status])
+  @@map("users")
+}
+
+// Профиль — публичные данные + то, что видно в карточке пользователя
+model Profile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  displayName     String
+  avatarUrl       String?
+  bio             String?
+  country         String?
+  city            String?
+  githubUrl       String?
+  websiteUrl      String?
+
+  successRate     Decimal? @db.Decimal(5, 2) // % успешных сделок
+  completionRate  Decimal? @db.Decimal(5, 2)
+  avgResponseMins Int?
+  disputesCount   Int      @default(0)
+  lateDeliveries  Int      @default(0)
+
+  skills          ProfileSkill[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("profiles")
+}
+
+model Skill {
+  id       String         @id @default(uuid())
+  name     String         @unique
+  slug     String         @unique
+  profiles ProfileSkill[]
+
+  @@map("skills")
+}
+
+model ProfileSkill {
+  profileId String
+  skillId   String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skill     Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, skillId])
+  @@map("profile_skills")
+}
+
+// Анкета/квиз при регистрации — ответы различаются в зависимости от роли,
+// поэтому большая часть хранится как гибкий JSON (structuredAnswers),
+// а самые важные для матчинга поля вынесены в колонки.
+model OnboardingResponse {
+  id                 String          @id @default(uuid())
+  userId             String          @unique
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role               MarketplaceRole
+  experienceLevel    String?         // junior/middle/senior — для фрилансера
+  primaryGoal        String?         // "найти исполнителя" / "найти подработку" / "нанять команду"
+  interestedCategoryIds String[]     @default([])
+  expectedBudgetMin  Decimal?        @db.Decimal(12, 2) // для клиента: типичный бюджет заказа
+  expectedRateMin    Decimal?        @db.Decimal(12, 2) // для фрилансера: ожидаемая ставка
+  availability       String?         // full-time/part-time/occasional
+  structuredAnswers  Json            @default("{}")
+
+  completedAt        DateTime        @default(now())
+
+  @@map("onboarding_responses")
+}
+
+// ============================================================================
+// CATEGORIES (дерево, мультиниша)
+// ============================================================================
+
+model Category {
+  id        String     @id @default(uuid())
+  name      String
+  slug      String     @unique
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  orders    Order[]
+
+  @@index([parentId])
+  @@map("categories")
+}
+
+// ============================================================================
+// ORDERS / BIDS / MILESTONES / VERSIONING
+// ============================================================================
+
+enum OrderStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+model Order {
+  id           String        @id @default(uuid())
+  clientId     String
+  client       User          @relation("ClientOrders", fields: [clientId], references: [id])
+
+  categoryId   String
+  category     Category      @relation(fields: [categoryId], references: [id])
+
+  title        String
+  description  String
+  budgetMin    Decimal       @db.Decimal(12, 2)
+  budgetMax    Decimal?      @db.Decimal(12, 2)
+  currency     String        @default("USD")
+  deadline     DateTime?
+
+  status       OrderStatus   @default(OPEN)
+  acceptedBidId String?      @unique
+
+  bids         Bid[]
+  milestones   Milestone[]
+  versions     OrderVersion[]
+  chatThread   ChatThread?
+  deliveries   Delivery[]
+  disputes     Dispute[]
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([status])
+  @@index([categoryId])
+  @@map("orders")
+}
+
+// Хранит снапшот заказа при каждом значимом изменении — можно строить diff
+model OrderVersion {
+  id            String   @id @default(uuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  snapshot      Json
+  editedById    String
+  createdAt     DateTime @default(now())
+
+  @@unique([orderId, versionNumber])
+  @@map("order_versions")
+}
+
+enum BidStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+model Bid {
+  id            String    @id @default(uuid())
+  orderId       String
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  freelancerId  String
+  freelancer    User      @relation(fields: [freelancerId], references: [id])
+
+  amount        Decimal   @db.Decimal(12, 2)
+  deliveryDays  Int
+  message       String
+  status        BidStatus @default(PENDING)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([orderId])
+  @@index([freelancerId])
+  @@map("bids")
+}
+
+enum MilestoneStatus {
+  PENDING
+  FUNDED
+  IN_PROGRESS
+  DELIVERED
+  APPROVED
+  RELEASED
+  DISPUTED
+}
+
+model Milestone {
+  id         String          @id @default(uuid())
+  orderId    String
+  order      Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  title      String
+  amount     Decimal         @db.Decimal(12, 2)
+  position   Int             // порядок этапа (Design -> Frontend -> Backend -> ...)
+  status     MilestoneStatus @default(PENDING)
+  dueDate    DateTime?
+
+  invoices   Invoice[]
+  deliveries Delivery[]
+
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([orderId])
+  @@map("milestones")
+}
+
+// ============================================================================
+// WALLET / LEDGER (double-entry) / ESCROW / INVOICES
+// ============================================================================
+
+enum BalanceType {
+  MAIN          // доступные средства
+  ESCROW        // заморожено в активной сделке
+  LOCKED        // заблокировано (спор, ручная проверка)
+  WITHDRAWABLE  // прошло холд-период, готово к выводу
+  PENDING       // ожидает подтверждения сети (крипто-депозит не подтверждён)
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+enum LedgerTransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  ESCROW_LOCK
+  ESCROW_RELEASE
+  REFUND
+  COMMISSION
+  BONUS
+  REFERRAL
+  PROMO
+  CHARGEBACK
+}
+
+model Wallet {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency    String   @default("USD")
+
+  // Денормализованный кэш баланса для быстрого чтения.
+  // Источник правды — SUM(LedgerEntry), эти поля пересчитываются
+  // в той же БД-транзакции, что и запись в леджер (см. WalletService.applyTransaction).
+  mainBalance         Decimal @default(0) @db.Decimal(18, 8)
+  escrowBalance       Decimal @default(0) @db.Decimal(18, 8)
+  lockedBalance       Decimal @default(0) @db.Decimal(18, 8)
+  withdrawableBalance Decimal @default(0) @db.Decimal(18, 8)
+  pendingBalance      Decimal @default(0) @db.Decimal(18, 8)
+
+  entries     LedgerEntry[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("wallets")
+}
+
+// Группа проводок, которая обязана балансироваться (сумма DEBIT == сумма CREDIT)
+model LedgerTransaction {
+  id            String                @id @default(uuid())
+  type          LedgerTransactionType
+  referenceType String                // "ORDER" | "MILESTONE" | "INVOICE" | "WITHDRAWAL" | ...
+  referenceId   String?
+  description   String?
+  createdById   String?               // null = система
+  entries       LedgerEntry[]
+  createdAt     DateTime              @default(now())
+
+  @@index([referenceType, referenceId])
+  @@map("ledger_transactions")
+}
+
+// Одна проводка. Баланс кошелька = SUM(CREDIT) - SUM(DEBIT) по каждому balanceType.
+model LedgerEntry {
+  id            String            @id @default(uuid())
+  transactionId String
+  transaction   LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  walletId      String
+  wallet        Wallet            @relation(fields: [walletId], references: [id])
+  balanceType   BalanceType
+  direction     LedgerDirection
+  amount        Decimal           @db.Decimal(18, 8)
+  currency      String            @default("USD")
+  createdAt     DateTime          @default(now())
+
+  @@index([walletId, balanceType])
+  @@map("ledger_entries")
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  CANCELLED
+  EXPIRED
+}
+
+// Инвойс/счёт, выставляемый прямо в чате заказа
+model Invoice {
+  id                 String        @id @default(uuid())
+  orderId            String
+  order              Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  milestoneId        String?
+  milestone          Milestone?    @relation(fields: [milestoneId], references: [id])
+
+  issuedById         String        // фрилансер
+  payerId            String        // заказчик
+  amount             Decimal       @db.Decimal(12, 2)
+  currency           String        @default("USD")
+  description        String?
+  status             InvoiceStatus @default(PENDING)
+
+  nowPaymentsPaymentId String?     @unique
+  paidAt             DateTime?
+
+  chatMessage        ChatMessage?
+
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+  @@map("invoices")
+}
+
+// ============================================================================
+// CHAT (по заказу) + SUPPORT CHAT
+// ============================================================================
+
+model ChatThread {
+  id        String        @id @default(uuid())
+  orderId   String        @unique
+  order     Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+
+  @@map("chat_threads")
+}
+
+enum ChatMessageType {
+  TEXT
+  FILE
+  INVOICE
+  SYSTEM
+}
+
+model ChatMessage {
+  id         String          @id @default(uuid())
+  threadId   String
+  thread     ChatThread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User            @relation("ChatSender", fields: [senderId], references: [id])
+
+  type       ChatMessageType @default(TEXT)
+  body       String?
+  invoiceId  String?         @unique
+  invoice    Invoice?        @relation(fields: [invoiceId], references: [id])
+  fileId     String?
+  file       FileAsset?      @relation(fields: [fileId], references: [id])
+
+  editedAt   DateTime?
+  deletedAt  DateTime?       // soft delete — видно в audit log, не пропадает физически
+  createdAt  DateTime        @default(now())
+
+  @@index([threadId])
+  @@map("chat_messages")
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model SupportTicket {
+  id             String           @id @default(uuid())
+  userId         String
+  user           User             @relation("TicketOwner", fields: [userId], references: [id])
+  assignedToId   String?
+  assignedTo     User?            @relation("TicketAssignee", fields: [assignedToId], references: [id])
+
+  subject        String
+  status         TicketStatus     @default(OPEN)
+  priority       TicketPriority   @default(NORMAL)
+
+  messages       SupportMessage[]
+
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([status])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id         String        @id @default(uuid())
+  ticketId   String
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User          @relation(fields: [senderId], references: [id])
+  body       String
+  fileId     String?
+  file       FileAsset?    @relation(fields: [fileId], references: [id])
+  createdAt  DateTime      @default(now())
+
+  @@index([ticketId])
+  @@map("support_messages")
+}
+
+// ============================================================================
+// FILES / DELIVERY
+// ============================================================================
+
+enum FileKind {
+  IMAGE
+  VIDEO
+  ARCHIVE
+  DOCUMENT
+  EXECUTABLE
+  OTHER
+}
+
+enum ScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+}
+
+model FileAsset {
+  id          String       @id @default(uuid())
+  ownerId     String
+  owner       User         @relation(fields: [ownerId], references: [id])
+  url         String
+  mimeType    String
+  sizeBytes   Int
+  kind        FileKind
+  scanStatus  ScanStatus   @default(PENDING)
+
+  chatMessages    ChatMessage[]
+  supportMessages SupportMessage[]
+  deliveryFiles   DeliveryFile[]
+
+  createdAt   DateTime     @default(now())
+
+  @@map("file_assets")
+}
+
+model Delivery {
+  id            String         @id @default(uuid())
+  orderId       String
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  milestoneId   String?
+  milestone     Milestone?     @relation(fields: [milestoneId], references: [id])
+  submittedById String
+  description   String
+  notes         String?
+  versionNumber Int            @default(1)
+  files         DeliveryFile[]
+  createdAt     DateTime       @default(now())
+
+  @@index([orderId])
+  @@map("deliveries")
+}
+
+model DeliveryFile {
+  deliveryId String
+  fileId     String
+  delivery   Delivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  file       FileAsset @relation(fields: [fileId], references: [id])
+
+  @@id([deliveryId, fileId])
+  @@map("delivery_files")
+}
+
+// ============================================================================
+// REVIEWS / DISPUTES
+// ============================================================================
+
+model Review {
+  id         String   @id @default(uuid())
+  orderId    String
+  authorId   String
+  author     User     @relation("ReviewAuthor", fields: [authorId], references: [id])
+  targetId   String
+  target     User     @relation("ReviewTarget", fields: [targetId], references: [id])
+  rating     Int      // 1..5
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  @@unique([orderId, authorId])
+  @@map("reviews")
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_CLIENT
+  RESOLVED_FREELANCER
+  RESOLVED_SPLIT
+  CLOSED
+}
+
+model Dispute {
+  id                String        @id @default(uuid())
+  orderId           String
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  milestoneId       String?
+  openedById        String
+  openedBy          User          @relation("DisputeOpener", fields: [openedById], references: [id])
+  assignedToId      String?
+  assignedTo        User?         @relation("DisputeArbitrator", fields: [assignedToId], references: [id])
+
+  reason            String
+  status            DisputeStatus @default(OPEN)
+  resolutionNotes   String?
+
+  createdAt         DateTime      @default(now())
+  resolvedAt        DateTime?
+
+  @@index([status])
+  @@map("disputes")
+}
+
+// ============================================================================
+// STAFF RBAC (granular permissions)
+// ============================================================================
+
+model StaffRole {
+  id          String            @id @default(uuid())
+  name        String            @unique // OWNER, SUPPORT, FINANCE, MODERATOR, ARBITRATOR, ANALYST, DEVELOPER...
+  description String?
+  permissions StaffRolePermission[]
+  users       UserStaffRole[]
+
+  @@map("staff_roles")
+}
+
+model Permission {
+  id          String                @id @default(uuid())
+  code        String                @unique // "escrow.release", "user.ban", "dispute.resolve", ...
+  description String?
+  roles       StaffRolePermission[]
+
+  @@map("permissions")
+}
+
+model StaffRolePermission {
+  roleId       String
+  permissionId String
+  role         StaffRole  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("staff_role_permissions")
+}
+
+model UserStaffRole {
+  userId String
+  roleId String
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   StaffRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_staff_roles")
+}
+
+// ============================================================================
+// AUDIT LOG
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?  // null = system
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String   // "ORDER_EDITED", "ESCROW_RELEASED", "MODERATOR_CHANGED_STATUS", ...
+  targetType String   // "Order", "Wallet", "Dispute", ...
+  targetId   String?
+  metadata   Json      @default("{}")
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// NOTIFICATIONS (только настройки; сама доставка — в notifications-service)
+// ============================================================================
+
+enum NotificationChannel {
+  PUSH
+  EMAIL
+  TELEGRAM
+  IN_APP
+  SMS
+}
+
+model NotificationPreference {
+  id      String              @id @default(uuid())
+  userId  String
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel NotificationChannel
+  enabled Boolean             @default(true)
+
+  @@unique([userId, channel])
+  @@map("notification_preferences")
+}
+
+// ============================================================================
+// REFERRALS / COMMISSIONS / FEATURE FLAGS
+// ============================================================================
+
+model ReferralCode {
+  id        String        @id @default(uuid())
+  ownerId   String        @unique
+  code      String        @unique
+  createdAt DateTime      @default(now())
+  uses      ReferralUse[]
+
+  @@map("referral_codes")
+}
+
+model ReferralUse {
+  id               String       @id @default(uuid())
+  referralCodeId   String
+  referralCode     ReferralCode @relation(fields: [referralCodeId], references: [id])
+  referredUserId   String       @unique
+  referredUser     User         @relation("ReferredUser", fields: [referredUserId], references: [id])
+  rewardLedgerTxId String?
+  createdAt        DateTime     @default(now())
+
+  @@map("referral_uses")
+}
+
+enum CommissionType {
+  MARKETPLACE_FEE
+  WITHDRAWAL_FEE
+  REFERRAL_FEE
+  PROMOTION_FEE
+  DISPUTE_FEE
+  PRIORITY_SUPPORT_FEE
+}
+
+// Настраиваемые из админки комиссии — не хардкодим % в коде
+model CommissionRule {
+  id          String         @id @default(uuid())
+  type        CommissionType @unique
+  percentage  Decimal?       @db.Decimal(5, 2)
+  fixedAmount Decimal?       @db.Decimal(12, 2)
+  active      Boolean        @default(true)
+  updatedAt   DateTime       @updatedAt
+
+  @@map("commission_rules")
+}
+
+model FeatureFlag {
+  id               String   @id @default(uuid())
+  key              String   @unique // "AI_FRAUD_SCORING", "MILESTONES", "REFERRALS", ...
+  enabled          Boolean  @default(false)
+  rolloutPercent   Int      @default(100)
+  updatedAt        DateTime @updatedAt
+
+  @@map("feature_flags")
+}
