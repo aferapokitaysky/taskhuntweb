@@ -63,6 +63,18 @@ export interface ChatMessage {
   sender?: User & { profile?: Profile | null };
 }
 
+export type MilestoneStatus = 'PENDING' | 'FUNDED' | 'IN_PROGRESS' | 'DELIVERED' | 'APPROVED' | 'RELEASED' | 'DISPUTED';
+
+export interface Milestone {
+  id: string;
+  orderId: string;
+  title: string;
+  amount: string;
+  position: number;
+  status: MilestoneStatus;
+  dueDate?: string | null;
+}
+
 export interface Order {
   id: string;
   clientId: string;
@@ -77,7 +89,7 @@ export interface Order {
   acceptedBidId?: string | null;
   category?: Category;
   bids?: Bid[];
-  milestones?: Array<{ id: string; title: string; amount: string; status: string }>;
+  milestones?: Milestone[];
   chatThread?: { id: string } | null;
   _count?: { bids: number };
 }

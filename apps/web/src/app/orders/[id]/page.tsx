@@ -7,6 +7,19 @@ import { io, type Socket } from 'socket.io-client';
 import { api, getStoredAccessToken } from '@/lib/api';
 import type { ChatMessage, Order, User } from '@/lib/types';
 import { money } from '@/lib/types';
+import { FileUpload, type UploadedFile } from '@/components/FileUpload';
+import { PaperclipIcon } from '@/components/icons/PaperclipIcon';
+import { StarIcon } from '@/components/icons/StarIcon';
+
+const MILESTONE_STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Не оплачен',
+  FUNDED: 'Оплачен, ждёт сдачи',
+  IN_PROGRESS: 'В работе',
+  DELIVERED: 'Сдан, ждёт приёмки',
+  APPROVED: 'Принят',
+  RELEASED: 'Оплата отправлена',
+  DISPUTED: 'Спор',
+};
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -23,6 +36,24 @@ export default function OrderPage() {
   const [error, setError] = useState<string | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
 
+  // --- Milestones/сдача работы/приёмка ---
+  const [milestoneForm, setMilestoneForm] = useState({ title: '', amount: '', dueDate: '' });
+  const [deliverTarget, setDeliverTarget] = useState<'order' | string | null>(null);
+  const [deliverDescription, setDeliverDescription] = useState('');
+  const [deliverNotes, setDeliverNotes] = useState('');
+  const [deliverFiles, setDeliverFiles] = useState<UploadedFile[]>([]);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+
+  // --- Отзыв после завершения заказа ---
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+
+  async function refreshOrder() {
+    const fresh = await api<Order>(`/orders/${orderId}`);
+    setOrder(fresh);
+  }
+
   useEffect(() => {
     Promise.all([api<User>('/users/me'), api<Order>(`/orders/${orderId}`)])
       .then(([user, orderDetails]) => {
@@ -34,7 +65,90 @@ export default function OrderPage() {
 
   const acceptedBid = useMemo(() => order?.bids?.find((bid) => bid.status === 'ACCEPTED'), [order]);
   const isFreelancer = acceptedBid?.freelancerId === me?.id;
+  const isClient = order?.clientId === me?.id;
   const hasChat = Boolean(order?.chatThread ?? order?.acceptedBidId);
+  const milestones = useMemo(() => [...(order?.milestones ?? [])].sort((a, b) => a.position - b.position), [order]);
+  const hasMilestones = milestones.length > 0;
+
+  async function createMilestone(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api(`/orders/${orderId}/milestones`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title: milestoneForm.title,
+          amount: Number(milestoneForm.amount),
+          position: milestones.length,
+          dueDate: milestoneForm.dueDate || undefined,
+        }),
+      });
+      setMilestoneForm({ title: '', amount: '', dueDate: '' });
+      await refreshOrder();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось создать этап');
+    }
+  }
+
+  function openDeliverForm(target: 'order' | string) {
+    setDeliverTarget(target);
+    setDeliverDescription('');
+    setDeliverNotes('');
+    setDeliverFiles([]);
+  }
+
+  async function submitDelivery(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!deliverTarget) return;
+    setError(null);
+    setBusyAction('deliver');
+    try {
+      const path =
+        deliverTarget === 'order' ? `/orders/${orderId}/deliver` : `/orders/${orderId}/milestones/${deliverTarget}/deliver`;
+      await api(path, {
+        method: 'POST',
+        body: JSON.stringify({
+          description: deliverDescription,
+          notes: deliverNotes || undefined,
+          fileIds: deliverFiles.map((f) => f.id),
+        }),
+      });
+      setDeliverTarget(null);
+      await refreshOrder();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось сдать работу');
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function approve(target: 'order' | string) {
+    setError(null);
+    setBusyAction(`approve-${target}`);
+    try {
+      const path = target === 'order' ? `/orders/${orderId}/approve` : `/orders/${orderId}/milestones/${target}/approve`;
+      await api(path, { method: 'POST' });
+      await refreshOrder();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось принять работу');
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function submitReview(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api(`/orders/${orderId}/reviews`, {
+        method: 'POST',
+        body: JSON.stringify({ rating: reviewRating, comment: reviewComment || undefined }),
+      });
+      setReviewSubmitted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось оставить отзыв');
+    }
+  }
 
   useEffect(() => {
     if (!hasChat) return;
@@ -137,6 +251,171 @@ export default function OrderPage() {
       </section>
 
       {hasChat && (
+        <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-xl font-semibold">Этапы и сдача работы</h2>
+
+          {hasMilestones ? (
+            <div className="space-y-3">
+              {milestones.map((milestone) => (
+                <div key={milestone.id} className="rounded-lg border border-slate-200 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium">{milestone.title}</p>
+                    <p className="font-semibold">{money(milestone.amount, order.currency)}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {MILESTONE_STATUS_LABEL[milestone.status] ?? milestone.status}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {isFreelancer && (milestone.status === 'FUNDED' || milestone.status === 'IN_PROGRESS') && (
+                      <button
+                        type="button"
+                        onClick={() => openDeliverForm(milestone.id)}
+                        className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-dark"
+                      >
+                        Сдать этап
+                      </button>
+                    )}
+                    {isClient && milestone.status === 'DELIVERED' && (
+                      <button
+                        type="button"
+                        onClick={() => approve(milestone.id)}
+                        disabled={busyAction === `approve-${milestone.id}`}
+                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {busyAction === `approve-${milestone.id}` ? 'Принимаем…' : 'Принять и отпустить оплату'}
+                      </button>
+                    )}
+                  </div>
+
+                  {deliverTarget === milestone.id && (
+                    <DeliveryForm
+                      description={deliverDescription}
+                      notes={deliverNotes}
+                      files={deliverFiles}
+                      busy={busyAction === 'deliver'}
+                      onDescriptionChange={setDeliverDescription}
+                      onNotesChange={setDeliverNotes}
+                      onFileUploaded={(f) => setDeliverFiles((current) => [...current, f])}
+                      onCancel={() => setDeliverTarget(null)}
+                      onSubmit={submitDelivery}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-slate-200 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-slate-600">Этапы не заведены — работа сдаётся заказом целиком.</p>
+                <div className="flex gap-2">
+                  {isFreelancer && order.status === 'IN_PROGRESS' && (
+                    <button
+                      type="button"
+                      onClick={() => openDeliverForm('order')}
+                      className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-dark"
+                    >
+                      Сдать работу
+                    </button>
+                  )}
+                  {isClient && order.status === 'IN_REVIEW' && (
+                    <button
+                      type="button"
+                      onClick={() => approve('order')}
+                      disabled={busyAction === 'approve-order'}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {busyAction === 'approve-order' ? 'Принимаем…' : 'Принять и отпустить оплату'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {deliverTarget === 'order' && (
+                <DeliveryForm
+                  description={deliverDescription}
+                  notes={deliverNotes}
+                  files={deliverFiles}
+                  busy={busyAction === 'deliver'}
+                  onDescriptionChange={setDeliverDescription}
+                  onNotesChange={setDeliverNotes}
+                  onFileUploaded={(f) => setDeliverFiles((current) => [...current, f])}
+                  onCancel={() => setDeliverTarget(null)}
+                  onSubmit={submitDelivery}
+                />
+              )}
+            </div>
+          )}
+
+          {isClient && (
+            <details className="mt-4">
+              <summary className="cursor-pointer text-sm font-medium text-slate-500 hover:text-slate-900">
+                + Добавить этап
+              </summary>
+              <form onSubmit={createMilestone} className="mt-3 flex flex-wrap items-end gap-3">
+                <input
+                  required
+                  placeholder="Название этапа"
+                  value={milestoneForm.title}
+                  onChange={(e) => setMilestoneForm((f) => ({ ...f, title: e.target.value }))}
+                  className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  placeholder="Сумма"
+                  value={milestoneForm.amount}
+                  onChange={(e) => setMilestoneForm((f) => ({ ...f, amount: e.target.value }))}
+                  className="w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+                <input
+                  type="date"
+                  value={milestoneForm.dueDate}
+                  onChange={(e) => setMilestoneForm((f) => ({ ...f, dueDate: e.target.value }))}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+                <button type="submit" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">
+                  Создать
+                </button>
+              </form>
+            </details>
+          )}
+
+          {order.status === 'COMPLETED' && !reviewSubmitted && (isClient || isFreelancer) && (
+            <div className="mt-6 rounded-lg border border-slate-200 p-4">
+              <h3 className="mb-3 font-semibold">Оставить отзыв</h3>
+              <form onSubmit={submitReview} className="space-y-3">
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setReviewRating(n)}
+                      className={n <= reviewRating ? 'text-amber-400' : 'text-slate-300'}
+                      aria-label={`${n} из 5`}
+                    >
+                      <StarIcon className="h-7 w-7" filled={n <= reviewRating} />
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  placeholder="Комментарий (необязательно)"
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  className="min-h-20 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+                <button type="submit" className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white">
+                  Отправить отзыв
+                </button>
+              </form>
+            </div>
+          )}
+          {reviewSubmitted && <p className="mt-6 text-sm text-emerald-600">Спасибо за отзыв!</p>}
+        </section>
+      )}
+
+      {hasChat && (
         <section className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-4 text-xl font-semibold">Чат заказа</h2>
@@ -200,5 +479,77 @@ export default function OrderPage() {
         </section>
       )}
     </main>
+  );
+}
+
+interface DeliveryFormProps {
+  description: string;
+  notes: string;
+  files: UploadedFile[];
+  busy: boolean;
+  onDescriptionChange: (value: string) => void;
+  onNotesChange: (value: string) => void;
+  onFileUploaded: (file: UploadedFile) => void;
+  onCancel: () => void;
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+}
+
+/** Форма сдачи работы — общая и для этапа, и для заказа целиком (см. deliverTarget в OrderPage). */
+function DeliveryForm({
+  description,
+  notes,
+  files,
+  busy,
+  onDescriptionChange,
+  onNotesChange,
+  onFileUploaded,
+  onCancel,
+  onSubmit,
+}: DeliveryFormProps) {
+  return (
+    <form onSubmit={onSubmit} className="mt-3 space-y-3 rounded-lg bg-slate-50 p-3">
+      <textarea
+        required
+        placeholder="Что сделано"
+        value={description}
+        onChange={(e) => onDescriptionChange(e.target.value)}
+        className="min-h-20 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+      />
+      <textarea
+        placeholder="Заметки (необязательно)"
+        value={notes}
+        onChange={(e) => onNotesChange(e.target.value)}
+        className="min-h-16 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+      />
+
+      <FileUpload multiple onUploaded={onFileUploaded} label="Прикрепить файлы сдачи" />
+      {files.length > 0 && (
+        <ul className="space-y-1">
+          {files.map((f) => (
+            <li key={f.id} className="flex items-center gap-1.5 text-xs text-slate-600">
+              <PaperclipIcon className="h-3.5 w-3.5 text-slate-400" />
+              {f.originalName}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        >
+          {busy ? 'Отправляем…' : 'Отправить на проверку'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-white"
+        >
+          Отмена
+        </button>
+      </div>
+    </form>
   );
 }
