@@ -23,18 +23,27 @@
   оркестратора" — так же, как это уже работало через
   `docs/MISSING_ENDPOINTS.md` между Claude и Codex.
 
+## Codex вышел из проекта
+
+Codex больше не участвует. Всё, что он успел сделать, закоммичено
+(включая `notifications-service`, `fraud-service` и последний фикс
+`onboarding` — он их не закоммитил сам, доделал за него оркестратор).
+Незакрытые им фронтенд-задачи (страницы `oauth/callback` — уже сделаны
+оркестратором, UI для milestones/delivery/reviews — ещё нет) переходят
+к оставшимся участникам. `docs/TZ_CODEX.md` и `docs/MISSING_ENDPOINTS.md`
+оставлены как есть — исторический контекст, не удаляем.
+
+С этого момента над проектом работают только **Claude (оркестратор)** и
+**Gemini**.
+
 ## Активные назначения
 
 | Агент | ТЗ | Статус/TODO | Зона ответственности |
 |---|---|---|---|
-| Codex | [`docs/TZ_CODEX.md`](../docs/TZ_CODEX.md) | [`docs/MISSING_ENDPOINTS.md`](../docs/MISSING_ENDPOINTS.md) | Frontend (`apps/web`): ещё не сделаны `oauth/callback`, UI для milestones/delivery/reviews. `notifications-service`/`fraud-service` — готово. |
 | Gemini (раунд 1, done) | [`TZ_GEMINI.md`](./TZ_GEMINI.md) | [`STATUS_GEMINI.md`](./STATUS_GEMINI.md) | Реферальная программа — сдано, в `main` |
-| Gemini (раунд 2) | [`TZ_GEMINI_2.md`](./TZ_GEMINI_2.md) | [`STATUS_GEMINI_2.md`](./STATUS_GEMINI_2.md) | Реальный ClamAV вместо заглушки в `scan.processor.ts` + тесты на `ReferralsService` |
-| Claude (я) | — | этот разговор | Ledger/Wallet-тесты — сделано. Дальше: обновляю по ходу. |
-
-(Файлы Codex остались в `docs/`, где их изначально завели — не переносим,
-чтобы не сбить агента, который их уже читает по этому пути. Новые
-назначения заводим в `orchestration/`.)
+| Gemini (раунд 2, done) | [`TZ_GEMINI_2.md`](./TZ_GEMINI_2.md) | [`STATUS_GEMINI_2.md`](./STATUS_GEMINI_2.md) | Реальный ClamAV + тесты на `ReferralsService` — сдано, в `main` |
+| Gemini (раунд 3) | [`TZ_GEMINI_3.md`](./TZ_GEMINI_3.md) | [`STATUS_GEMINI_3.md`](./STATUS_GEMINI_3.md) | Тесты на `OrdersService`/`AdminService` (споры) + реальная отправка email в `notifications-service` |
+| Claude (я) | — | этот разговор | OAuth-кнопки/callback — сделано. Дальше: milestones/delivery/reviews UI + файловый аплоад на фронте (наследие Codex) |
 
 ## Правила, чтобы не было конфликтов на диске
 
