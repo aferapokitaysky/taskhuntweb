@@ -12,7 +12,8 @@
     "@prisma/client": "^5.20.0",
     "@taskhunt/shared-types": "workspace:*",
     "bullmq": "^5.13.0",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "resend": "^3.5.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
