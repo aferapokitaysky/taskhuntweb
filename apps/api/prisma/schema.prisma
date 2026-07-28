@@ -211,6 +211,7 @@ model Order {
   chatThread   ChatThread?
   deliveries   Delivery[]
   disputes     Dispute[]
+  invoices     Invoice[]
 
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -711,6 +712,7 @@ model NotificationPreference {
 model ReferralCode {
   id        String        @id @default(uuid())
   ownerId   String        @unique
+  owner     User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   code      String        @unique
   createdAt DateTime      @default(now())
   uses      ReferralUse[]

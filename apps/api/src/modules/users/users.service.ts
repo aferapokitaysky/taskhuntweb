@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -42,10 +43,14 @@ export class UsersService {
   async submitOnboarding(userId: string, dto: OnboardingDto) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
+    // structuredAnswers — произвольный JSON квиза, Prisma требует явный
+    // тип Prisma.InputJsonValue вместо обычного Record<string, unknown>.
+    const structuredAnswers = dto.structuredAnswers as Prisma.InputJsonValue | undefined;
+
     const onboarding = await this.prisma.onboardingResponse.upsert({
       where: { userId },
-      create: { userId, role: user.primaryRole, ...dto },
-      update: { ...dto },
+      create: { userId, role: user.primaryRole, ...dto, structuredAnswers },
+      update: { ...dto, structuredAnswers },
     });
 
     await this.prisma.user.update({
