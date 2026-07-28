@@ -1,11 +1,21 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { AuthProvider, MarketplaceRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { DomainEventName } from '@taskhunt/shared-types';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+
+export interface OAuthProfile {
+  provider: Exclude<AuthProvider, 'LOCAL'>;
+  oauthId: string;
+  email: string;
+  displayName: string;
+  githubUrl?: string;
+  role: MarketplaceRole;
+}
 
 const BCRYPT_ROUNDS = 12;
 
@@ -67,6 +77,54 @@ export class AuthService {
 
     await this.prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
 
+    return this.issueTokens(user.id);
+  }
+
+  /**
+   * Единая точка входа для Google/Apple/GitHub. Матчим существующего
+   * пользователя по (authProvider, oauthId); если это первый вход с таким
+   * email через LOCAL — не мёржим автоматически (во избежание захвата
+   * чужого аккаунта через якобы тот же email), а создаём отдельный OAuth-аккаунт.
+   */
+  async handleOAuthLogin(profile: OAuthProfile) {
+    let user = await this.prisma.user.findFirst({
+      where: { authProvider: profile.provider, oauthId: profile.oauthId },
+    });
+
+    if (!user) {
+      user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            email: profile.email,
+            authProvider: profile.provider,
+            oauthId: profile.oauthId,
+            primaryRole: profile.role,
+            roles: [profile.role],
+            status: 'ACTIVE', // email уже подтверждён провайдером — верификация не нужна
+            profile: {
+              create: {
+                displayName: profile.displayName,
+                githubUrl: profile.githubUrl,
+              },
+            },
+            wallet: { create: {} },
+          },
+        });
+        return created;
+      });
+
+      await this.eventBus.publish(DomainEventName.UserRegistered, {
+        userId: user.id,
+        email: user.email,
+        role: profile.role,
+      });
+    }
+
+    if (user.status === 'BANNED' || user.status === 'SUSPENDED') {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
     return this.issueTokens(user.id);
   }
 

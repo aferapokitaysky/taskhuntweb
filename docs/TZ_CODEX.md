@@ -4,6 +4,21 @@
 которого родился проект, здесь есть всё, что нужно для работы. Прочитай
 целиком перед тем, как начать.
 
+> **Обновление:** на бэкенде уже реализован OAuth (Google/GitHub/Apple).
+> Если ещё не добавил кнопки "Войти через Google/GitHub/Apple" на
+> `register`/`login` — это просто ссылки (не fetch, обычный `<a href>`,
+> т.к. это full-page redirect):
+> `${API_URL}/auth/google?role=CLIENT` (или `FREELANCER`),
+> `${API_URL}/auth/github?role=...`, `${API_URL}/auth/apple?role=...`.
+> После успешного входа бэкенд редиректит на
+> `${WEB_URL}/oauth/callback?accessToken=...&refreshToken=...` — тебе
+> нужно завести страницу `src/app/oauth/callback/page.tsx`, которая
+> читает эти два query-параметра, сохраняет их через `saveTokens()` из
+> `src/lib/api.ts` и редиректит на `/dashboard` (если это первый вход —
+> отличить от повторного пока нельзя, поэтому веди на `/dashboard`, а не
+> `/onboarding`; если нужно доанкетировать OAuth-пользователей — это
+> отдельная задача, не блокирует MVP).
+
 ## 0. Что такое TaskHunt (коротко)
 
 Фриланс-биржа (как Kwork/Weblancer), но с крипто-эскроу: заказчик платит
