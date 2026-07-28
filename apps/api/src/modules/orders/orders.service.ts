@@ -49,7 +49,12 @@ export class OrdersService {
   async findOne(id: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: { category: true, bids: { include: { freelancer: { include: { profile: true } } } }, milestones: true },
+      include: {
+        category: true,
+        bids: { include: { freelancer: { include: { profile: true } } } },
+        milestones: true,
+        chatThread: true, // фронт использует наличие chatThread как признак "чат открыт" (см. docs/MISSING_ENDPOINTS.md)
+      },
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;

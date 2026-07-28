@@ -41,6 +41,7 @@ export class WalletService {
    */
   async lockEscrowForInvoice(params: {
     clientWalletId: string;
+    clientId: string;
     amount: number;
     invoiceId: string;
     orderId: string;
@@ -61,6 +62,7 @@ export class WalletService {
     await this.eventBus.publish(DomainEventName.EscrowLocked, {
       orderId: params.orderId,
       walletId: params.clientWalletId,
+      clientId: params.clientId,
       amount: params.amount,
     });
   }

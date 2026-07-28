@@ -81,12 +81,15 @@ export class InvoiceService {
     await this.eventBus.publish(DomainEventName.InvoicePaid, {
       invoiceId: invoice.id,
       orderId: invoice.orderId,
+      payerId: invoice.payerId,
+      freelancerId: invoice.issuedById,
       amount: Number(invoice.amount),
       currency: invoice.currency,
     });
 
     await this.wallet.lockEscrowForInvoice({
       clientWalletId: invoice.order.client.wallet.id,
+      clientId: invoice.order.clientId,
       amount: Number(invoice.amount),
       invoiceId: invoice.id,
       orderId: invoice.orderId,

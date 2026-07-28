@@ -52,12 +52,12 @@ export type InvoiceIssuedEvent = BaseDomainEvent<
 
 export type InvoicePaidEvent = BaseDomainEvent<
   DomainEventName.InvoicePaid,
-  { invoiceId: string; orderId: string; amount: number; currency: string }
+  { invoiceId: string; orderId: string; payerId: string; freelancerId: string; amount: number; currency: string }
 >;
 
 export type EscrowLockedEvent = BaseDomainEvent<
   DomainEventName.EscrowLocked,
-  { orderId: string; walletId: string; amount: number }
+  { orderId: string; walletId: string; clientId: string; amount: number }
 >;
 
 export type EscrowReleasedEvent = BaseDomainEvent<
@@ -67,7 +67,7 @@ export type EscrowReleasedEvent = BaseDomainEvent<
 
 export type WorkSubmittedEvent = BaseDomainEvent<
   DomainEventName.WorkSubmitted,
-  { orderId: string; deliveryId: string; submittedById: string }
+  { orderId: string; deliveryId: string; submittedById: string; clientId: string }
 >;
 
 export type DisputeOpenedEvent = BaseDomainEvent<
