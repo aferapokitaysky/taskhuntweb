@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    name: apps/api — test & build
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "postgresql://taskhunt:taskhunt@localhost:5432/taskhunt?schema=public"
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_SECRET: ci-only-secret-not-for-real-use
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm --filter @taskhunt/api prisma:generate
+
+      - name: Type check
+        run: pnpm --filter @taskhunt/api exec tsc --noEmit
+
+      - name: Test
+        run: pnpm --filter @taskhunt/api test
+
+      - name: Build
+        run: pnpm --filter @taskhunt/api build
+
+  web:
+    name: apps/web — build
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_API_URL: "http://localhost:3001"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm --filter @taskhunt/web exec tsc --noEmit
+
+      - name: Build
+        run: pnpm --filter @taskhunt/web build
+
+  microservices:
+    name: notifications-service & fraud-service — type check
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "postgresql://taskhunt:taskhunt@localhost:5432/taskhunt?schema=public"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate (notifications-service)
+        run: pnpm --filter notifications-service exec prisma generate
+
+      - name: Prisma generate (fraud-service)
+        run: pnpm --filter fraud-service exec prisma generate
+
+      - name: Type check notifications-service
+        run: pnpm --filter notifications-service exec tsc --noEmit
+
+      - name: Type check fraud-service
+        run: pnpm --filter fraud-service exec tsc --noEmit
