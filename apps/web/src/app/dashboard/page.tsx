@@ -107,6 +107,9 @@ export default function DashboardPage() {
               Admin
             </Link>
           )}
+          <Link href="/referrals" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
+            Реферальная программа
+          </Link>
           <Link href="/" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
             На главную
           </Link>
