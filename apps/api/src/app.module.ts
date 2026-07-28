@@ -16,6 +16,7 @@ import { SupportModule } from './modules/support/support.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { FilesModule } from './modules/files/files.module';
+import { ReferralsModule } from './modules/referrals/referrals.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { FilesModule } from './modules/files/files.module';
     AdminModule,
     CatalogModule,
     FilesModule,
+    ReferralsModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: HttpExceptionFilter }],
 })

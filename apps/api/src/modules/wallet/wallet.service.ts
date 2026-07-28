@@ -19,6 +19,11 @@ export class WalletService {
     return wallet;
   }
 
+  async getSystemWalletId(): Promise<string> {
+    const wallet = await this.getSystemWallet();
+    return wallet.id;
+  }
+
   private async getSystemWallet() {
     const systemUser = await this.prisma.user.findUniqueOrThrow({
       where: { email: SYSTEM_ACCOUNT_EMAIL },
