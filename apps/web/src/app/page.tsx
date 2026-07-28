@@ -16,6 +16,14 @@ export default function HomePage() {
           Войти
         </Link>
       </div>
+      <footer className="mt-10 flex gap-4 text-xs text-slate-400">
+        <Link href="/terms" className="hover:text-slate-600">
+          Условия использования
+        </Link>
+        <Link href="/privacy" className="hover:text-slate-600">
+          Конфиденциальность
+        </Link>
+      </footer>
     </main>
   );
 }
