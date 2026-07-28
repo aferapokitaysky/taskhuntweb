@@ -53,6 +53,14 @@ model User {
   status            UserStatus    @default(PENDING_VERIFICATION)
   isStaff           Boolean       @default(false)
 
+  // Единый активный токен на пользователя — новый запрос перетирает
+  // старый (предыдущая ссылка перестаёт работать), проще чем отдельная
+  // таблица токенов и достаточно для email-верификации/сброса пароля.
+  emailVerificationToken     String?   @unique
+  emailVerificationExpiresAt DateTime?
+  passwordResetToken         String?   @unique
+  passwordResetExpiresAt     DateTime?
+
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   lastSeenAt        DateTime?

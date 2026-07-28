@@ -58,6 +58,10 @@ export default function LoginPage() {
           className="rounded-lg border border-slate-300 px-4 py-3"
         />
 
+        <Link href="/forgot-password" className="text-right text-sm text-slate-500 hover:text-brand">
+          Забыли пароль?
+        </Link>
+
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         <button

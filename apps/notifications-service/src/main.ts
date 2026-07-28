@@ -6,6 +6,7 @@ import { ConsoleNotificationSender, NotificationSender } from './senders/console
 import { EmailNotificationSender } from './senders/email-sender';
 import type { HandlerContext } from './handlers/shared';
 import { handleUserRegistered } from './handlers/user-registered';
+import { handleEmailVerificationRequested, handlePasswordResetRequested } from './handlers/auth';
 import {
   handleBidAccepted,
   handleBidSubmitted,
@@ -64,6 +65,10 @@ async function route(event: DomainEvent) {
       return handleWorkSubmitted(event, context);
     case DomainEventName.DisputeOpened:
       return handleDisputeOpened(event, context);
+    case DomainEventName.EmailVerificationRequested:
+      return handleEmailVerificationRequested(event, context);
+    case DomainEventName.PasswordResetRequested:
+      return handlePasswordResetRequested(event, context);
   }
 }
 

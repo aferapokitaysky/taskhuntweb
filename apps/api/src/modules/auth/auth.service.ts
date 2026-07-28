@@ -1,12 +1,16 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { AuthProvider, MarketplaceRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { DomainEventName } from '@taskhunt/shared-types';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 часа
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 час — короче, т.к. чувствительнее
 
 export interface OAuthProfile {
   provider: Exclude<AuthProvider, 'LOCAL'>;
@@ -57,7 +61,92 @@ export class AuthService {
       role: dto.role,
     });
 
+    await this.sendVerificationEmail(user.id, user.email);
+
     return this.issueTokens(user.id);
+  }
+
+  /**
+   * Генерирует токен верификации и публикует событие — реальная отправка
+   * письма происходит в notifications-service (см. EmailVerificationRequestedEvent).
+   * Единый токен на пользователя: новый запрос молча инвалидирует старую ссылку.
+   */
+  async sendVerificationEmail(userId: string, email: string) {
+    const token = crypto.randomBytes(32).toString('hex');
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        emailVerificationToken: token,
+        emailVerificationExpiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
+      },
+    });
+
+    const verificationUrl = `${process.env.WEB_PUBLIC_URL}/verify-email?token=${token}`;
+    await this.eventBus.publish(DomainEventName.EmailVerificationRequested, {
+      userId,
+      email,
+      verificationUrl,
+    });
+  }
+
+  async verifyEmail(token: string) {
+    const user = await this.prisma.user.findUnique({ where: { emailVerificationToken: token } });
+    if (!user || !user.emailVerificationExpiresAt || user.emailVerificationExpiresAt < new Date()) {
+      throw new BadRequestException('Invalid or expired verification link');
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        status: user.status === 'PENDING_VERIFICATION' ? 'ACTIVE' : user.status,
+        emailVerificationToken: null,
+        emailVerificationExpiresAt: null,
+      },
+    });
+
+    return { verified: true };
+  }
+
+  /**
+   * Не раскрываем, существует ли email в системе (защита от enumeration) —
+   * контроллер всегда отвечает одинаковым сообщением независимо от результата.
+   */
+  async requestPasswordReset(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user || !user.passwordHash) {
+      return; // OAuth-аккаунт без пароля или email не найден — тихо ничего не делаем
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: token,
+        passwordResetExpiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+      },
+    });
+
+    const resetUrl = `${process.env.WEB_PUBLIC_URL}/reset-password?token=${token}`;
+    await this.eventBus.publish(DomainEventName.PasswordResetRequested, {
+      userId: user.id,
+      email: user.email,
+      resetUrl,
+    });
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { passwordResetToken: token } });
+    if (!user || !user.passwordResetExpiresAt || user.passwordResetExpiresAt < new Date()) {
+      throw new BadRequestException('Invalid or expired reset link');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash, passwordResetToken: null, passwordResetExpiresAt: null },
+    });
+
+    return { reset: true };
   }
 
   async login(dto: LoginDto) {

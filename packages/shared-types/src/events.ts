@@ -17,6 +17,8 @@ export enum DomainEventName {
   EscrowReleased = 'EscrowReleased',
   WorkSubmitted = 'WorkSubmitted',
   DisputeOpened = 'DisputeOpened',
+  EmailVerificationRequested = 'EmailVerificationRequested',
+  PasswordResetRequested = 'PasswordResetRequested',
 }
 
 export interface BaseDomainEvent<TName extends DomainEventName, TPayload> {
@@ -75,6 +77,16 @@ export type DisputeOpenedEvent = BaseDomainEvent<
   { disputeId: string; orderId: string; openedById: string; reason: string }
 >;
 
+export type EmailVerificationRequestedEvent = BaseDomainEvent<
+  DomainEventName.EmailVerificationRequested,
+  { userId: string; email: string; verificationUrl: string }
+>;
+
+export type PasswordResetRequestedEvent = BaseDomainEvent<
+  DomainEventName.PasswordResetRequested,
+  { userId: string; email: string; resetUrl: string }
+>;
+
 export type DomainEvent =
   | UserRegisteredEvent
   | OrderCreatedEvent
@@ -85,4 +97,6 @@ export type DomainEvent =
   | EscrowLockedEvent
   | EscrowReleasedEvent
   | WorkSubmittedEvent
-  | DisputeOpenedEvent;
+  | DisputeOpenedEvent
+  | EmailVerificationRequestedEvent
+  | PasswordResetRequestedEvent;
