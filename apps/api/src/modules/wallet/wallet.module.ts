@@ -18,6 +18,6 @@ import { PayoutProcessor, PAYOUT_QUEUE } from './payout.processor';
     NowPaymentsService,
     PayoutProcessor,
   ],
-  exports: [WalletService, LedgerService, InvoiceService],
+  exports: [WalletService, LedgerService, InvoiceService, NowPaymentsService],
 })
 export class WalletModule {}

@@ -21,6 +21,7 @@ import { FilesModule } from './modules/files/files.module';
 import { ReferralsModule } from './modules/referrals/referrals.module';
 import { HealthModule } from './modules/health/health.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { PromotionsModule } from './modules/promotions/promotions.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     ReferralsModule,
     HealthModule,
     SubscriptionsModule,
+    PromotionsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
