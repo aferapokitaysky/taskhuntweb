@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { BoostIcon } from '@/components/icons/BoostIcon';
+import { NotificationBell } from '@/components/NotificationBell';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { Category, Order, User, WalletBalance } from '@/lib/types';
@@ -144,7 +145,8 @@ export default function DashboardPage() {
           <p className="text-sm text-slate-500">TaskHunt</p>
           <h1 className="text-3xl font-bold">Dashboard</h1>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          <NotificationBell />
           {me?.isStaff && (
             <Link href="/admin" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
               Admin
