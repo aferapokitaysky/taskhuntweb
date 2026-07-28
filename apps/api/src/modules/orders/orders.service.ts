@@ -13,7 +13,62 @@ export class OrdersService {
     private readonly eventBus: EventBusService,
   ) {}
 
+  private getStartOfMonth(): Date {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+
+  private async checkOrderCreationLimit(clientId: string) {
+    const activeSub = await this.prisma.subscription.findFirst({
+      where: { userId: clientId, status: 'ACTIVE', expiresAt: { gt: new Date() } },
+      include: { tier: true },
+    });
+
+    let maxLimit: number | null = 5; // STARTER default
+    if (activeSub?.tier) {
+      maxLimit = activeSub.tier.maxActiveOrdersPerMonth;
+    }
+
+    if (maxLimit !== null) {
+      const count = await this.prisma.order.count({
+        where: {
+          clientId,
+          createdAt: { gte: this.getStartOfMonth() },
+        },
+      });
+      if (count >= maxLimit) {
+        throw new BadRequestException('Достигнут лимит создания заказов на вашем тарифе, оформите Pro');
+      }
+    }
+  }
+
+  private async checkBidSubmissionLimit(freelancerId: string) {
+    const activeSub = await this.prisma.subscription.findFirst({
+      where: { userId: freelancerId, status: 'ACTIVE', expiresAt: { gt: new Date() } },
+      include: { tier: true },
+    });
+
+    let maxLimit: number | null = 10; // STARTER default
+    if (activeSub?.tier) {
+      maxLimit = activeSub.tier.maxActiveBidsPerMonth;
+    }
+
+    if (maxLimit !== null) {
+      const count = await this.prisma.bid.count({
+        where: {
+          freelancerId,
+          createdAt: { gte: this.getStartOfMonth() },
+        },
+      });
+      if (count >= maxLimit) {
+        throw new BadRequestException('Достигнут лимит откликов на вашем тарифе, оформите Pro');
+      }
+    }
+  }
+
   async create(clientId: string, dto: CreateOrderDto) {
+    await this.checkOrderCreationLimit(clientId);
+
     const order = await this.prisma.$transaction(async (tx) => {
       const created = await tx.order.create({
         data: { ...dto, clientId, status: 'OPEN' },
@@ -36,7 +91,7 @@ export class OrdersService {
   }
 
   async findMany(filters: { categoryId?: string; status?: string }) {
-    return this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where: {
         categoryId: filters.categoryId,
         status: (filters.status as any) ?? { not: 'DRAFT' },
@@ -44,6 +99,30 @@ export class OrdersService {
       orderBy: { createdAt: 'desc' },
       include: { category: true, _count: { select: { bids: true } } },
     });
+
+    const now = new Date();
+    const activeOrderPromotions = await this.prisma.promotion.findMany({
+      where: {
+        entityType: 'ORDER',
+        expiresAt: { gt: now },
+        entityId: { in: orders.map((o) => o.id) },
+      },
+    });
+
+    const promotedOrderIds = new Set(activeOrderPromotions.map((p) => p.entityId));
+
+    const result = orders.map((order) => ({
+      ...order,
+      isPromoted: promotedOrderIds.has(order.id),
+    }));
+
+    result.sort((a, b) => {
+      if (a.isPromoted && !b.isPromoted) return -1;
+      if (!a.isPromoted && b.isPromoted) return 1;
+      return 0;
+    });
+
+    return result;
   }
 
   async findOne(id: string) {
@@ -53,14 +132,13 @@ export class OrdersService {
         category: true,
         bids: { include: { freelancer: { include: { profile: true } } } },
         milestones: true,
-        chatThread: true, // фронт использует наличие chatThread как признак "чат открыт" (см. docs/MISSING_ENDPOINTS.md)
+        chatThread: true,
       },
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;
   }
 
-  /** Изменение заказа — версионируем снапшот, чтобы был доступен diff. */
   async update(clientId: string, orderId: string, dto: UpdateOrderDto) {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Order not found');
@@ -96,6 +174,8 @@ export class OrdersService {
     if (order.status !== 'OPEN') throw new BadRequestException('Order is not accepting bids');
     if (order.clientId === freelancerId) throw new BadRequestException('Cannot bid on your own order');
 
+    await this.checkBidSubmissionLimit(freelancerId);
+
     const bid = await this.prisma.bid.create({
       data: { orderId, freelancerId, ...dto },
     });
@@ -110,11 +190,6 @@ export class OrdersService {
     return bid;
   }
 
-  /**
-   * Клиент принимает отклик: отклонённые заявки закрываются, заказ переходит
-   * в IN_PROGRESS, создаётся чат-тред заказа. Деньги тут ещё не двигаются —
-   * это происходит отдельно, когда фрилансер выставит invoice в чате.
-   */
   async acceptBid(clientId: string, orderId: string, bidId: string) {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Order not found');
@@ -149,7 +224,6 @@ export class OrdersService {
     return result;
   }
 
-  /** Открыть спор может любой участник сделки (клиент или принятый фрилансер). */
   async openDispute(userId: string, orderId: string, reason: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },

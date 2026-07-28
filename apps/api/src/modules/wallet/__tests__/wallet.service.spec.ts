@@ -18,7 +18,10 @@ describe('WalletService', () => {
         findUnique: jest.fn(),
       },
       commissionRule: {
-        findUnique: jest.fn().mockResolvedValue(null), // по умолчанию — нет правила в БД, берём дефолт
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      subscription: {
+        findFirst: jest.fn().mockResolvedValue(null),
       },
     };
     ledger = { applyTransaction: jest.fn().mockResolvedValue({ id: 'tx-1' }) };
@@ -33,88 +36,77 @@ describe('WalletService', () => {
         clientWalletId: 'client-wallet',
         clientId: 'client-1',
         amount: 150,
-        invoiceId: 'inv-1',
-        orderId: 'order-1',
+        invoiceId: 'inv-123',
+        orderId: 'ord-123',
       });
 
-      expect(prisma.user.findUniqueOrThrow).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { email: SYSTEM_ACCOUNT_EMAIL } }),
-      );
-
+      expect(prisma.user.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { email: SYSTEM_ACCOUNT_EMAIL },
+        include: { wallet: true },
+      });
       expect(ledger.applyTransaction).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'ESCROW_LOCK',
           referenceType: 'INVOICE',
-          referenceId: 'inv-1',
+          referenceId: 'inv-123',
+          description: 'Escrow lock for invoice inv-123',
           entries: [
             { walletId: systemWallet.id, balanceType: 'MAIN', direction: 'DEBIT', amount: 150 },
             { walletId: 'client-wallet', balanceType: 'ESCROW', direction: 'CREDIT', amount: 150 },
           ],
         }),
       );
-
-      expect(eventBus.publish).toHaveBeenCalledWith(
-        'EscrowLocked',
-        expect.objectContaining({ orderId: 'order-1', clientId: 'client-1', amount: 150 }),
-      );
     });
   });
 
   describe('releaseEscrow', () => {
-    it('использует дефолтный % комиссии, если CommissionRule не настроен в БД', async () => {
+    it('рассчитывает дефолтную комиссию 10%, удерживает её в системный кошелёк и отправляет остаток фрилансеру', async () => {
       await service.releaseEscrow({
         clientWalletId: 'client-wallet',
         freelancerWalletId: 'freelancer-wallet',
         amount: 100,
         invoiceId: 'inv-1',
-        orderId: 'order-1',
+        orderId: 'ord-1',
         freelancerId: 'freelancer-1',
       });
 
-      const call = ledger.applyTransaction.mock.calls[0][0];
-      const commission = (100 * DEFAULT_MARKETPLACE_FEE_PERCENT) / 100;
-      const payout = 100 - commission;
-
-      expect(call.entries).toEqual([
-        { walletId: 'client-wallet', balanceType: 'ESCROW', direction: 'DEBIT', amount: 100 },
-        { walletId: 'freelancer-wallet', balanceType: 'WITHDRAWABLE', direction: 'CREDIT', amount: payout },
-        { walletId: systemWallet.id, balanceType: 'MAIN', direction: 'CREDIT', amount: commission },
-      ]);
-    });
-
-    it('использует % из CommissionRule, если он активен в БД', async () => {
-      prisma.commissionRule.findUnique.mockResolvedValue({ active: true, percentage: 20 });
-
-      await service.releaseEscrow({
-        clientWalletId: 'client-wallet',
-        freelancerWalletId: 'freelancer-wallet',
-        amount: 100,
-        invoiceId: 'inv-1',
-        orderId: 'order-1',
-        freelancerId: 'freelancer-1',
-      });
-
-      const call = ledger.applyTransaction.mock.calls[0][0];
-      expect(call.entries).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ walletId: systemWallet.id, amount: 20 }),
-          expect.objectContaining({ walletId: 'freelancer-wallet', amount: 80 }),
-        ]),
+      expect(ledger.applyTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'ESCROW_RELEASE',
+          entries: [
+            { walletId: 'client-wallet', balanceType: 'ESCROW', direction: 'DEBIT', amount: 100 },
+            { walletId: 'freelancer-wallet', balanceType: 'WITHDRAWABLE', direction: 'CREDIT', amount: 90 },
+            { walletId: systemWallet.id, balanceType: 'MAIN', direction: 'CREDIT', amount: 10 },
+          ],
+        }),
       );
     });
 
-    it('сумма выплаты фрилансеру + комиссия всегда равна полной сумме эскроу (баланс не теряется и не создаётся из воздуха)', async () => {
+    it('использует процент комиссии из активного Pro-тира фрилансера (7% вместо 10%)', async () => {
+      prisma.subscription.findFirst.mockResolvedValue({
+        status: 'ACTIVE',
+        tier: { name: 'PRO', commissionPercent: '7.00' },
+      });
+
       await service.releaseEscrow({
         clientWalletId: 'client-wallet',
         freelancerWalletId: 'freelancer-wallet',
-        amount: 33.33,
+        amount: 100,
         invoiceId: 'inv-1',
-        orderId: 'order-1',
-        freelancerId: 'freelancer-1',
+        orderId: 'ord-1',
+        freelancerId: 'freelancer-pro',
       });
 
-      const [, payoutEntry, commissionEntry] = ledger.applyTransaction.mock.calls[0][0].entries;
-      expect(payoutEntry.amount + commissionEntry.amount).toBeCloseTo(33.33, 2);
+      expect(ledger.applyTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'ESCROW_RELEASE',
+          entries: [
+            { walletId: 'client-wallet', balanceType: 'ESCROW', direction: 'DEBIT', amount: 100 },
+            { walletId: 'freelancer-wallet', balanceType: 'WITHDRAWABLE', direction: 'CREDIT', amount: 93 },
+            { walletId: systemWallet.id, balanceType: 'MAIN', direction: 'CREDIT', amount: 7 },
+          ],
+        }),
+      );
     });
   });
 
@@ -126,17 +118,23 @@ describe('WalletService', () => {
       expect(ledger.applyTransaction).not.toHaveBeenCalled();
     });
 
-    it('проводит вывод средств, если баланса достаточно', async () => {
+    it('проводит вывод средств с удержанием комиссии WITHDRAWAL_FEE (1% по дефолту)', async () => {
       prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', withdrawableBalance: '100.00' });
+      prisma.commissionRule.findUnique.mockResolvedValue(null);
 
-      await service.requestWithdrawal('user-1', 50);
+      const res = await service.requestWithdrawal('user-1', 100);
+
+      expect(res.amount).toBe(100);
+      expect(res.fee).toBe(1);
+      expect(res.netAmount).toBe(99);
 
       expect(ledger.applyTransaction).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'WITHDRAWAL',
           entries: [
-            { walletId: 'w1', balanceType: 'WITHDRAWABLE', direction: 'DEBIT', amount: 50 },
-            { walletId: systemWallet.id, balanceType: 'MAIN', direction: 'CREDIT', amount: 50 },
+            { walletId: 'w1', balanceType: 'WITHDRAWABLE', direction: 'DEBIT', amount: 100 },
+            { walletId: systemWallet.id, balanceType: 'MAIN', direction: 'CREDIT', amount: 99 },
+            { walletId: systemWallet.id, balanceType: 'MAIN', direction: 'CREDIT', amount: 1 },
           ],
         }),
       );

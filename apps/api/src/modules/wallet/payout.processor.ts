@@ -12,6 +12,7 @@ export interface PayoutJobData {
   ledgerTransactionId: string;
   userId: string;
   amount: number;
+  netAmount?: number;
   payoutAddress: string;
 }
 
@@ -29,15 +30,17 @@ export class PayoutProcessor extends WorkerHost {
   }
 
   async process(job: Job<PayoutJobData>): Promise<void> {
-    const { ledgerTransactionId, userId, amount, payoutAddress } = job.data;
+    const { ledgerTransactionId, userId, amount, netAmount, payoutAddress } = job.data;
+    const payoutAmount = netAmount ?? amount;
+
     this.logger.log(
-      `Processing crypto payout for transaction ${ledgerTransactionId}, amount $${amount} to ${payoutAddress}`,
+      `Processing crypto payout for transaction ${ledgerTransactionId}, requested $${amount}, net payout $${payoutAmount} to ${payoutAddress}`,
     );
 
     try {
       const payoutResult = await this.nowPaymentsService.createPayout({
         address: payoutAddress,
-        amount,
+        amount: payoutAmount,
       });
 
       this.logger.log(
@@ -47,7 +50,7 @@ export class PayoutProcessor extends WorkerHost {
       this.logger.error(
         `NOWPayments payout failed for transaction ${ledgerTransactionId}: ${
           err instanceof Error ? err.message : String(err)
-        }. Initiating REFUND to user ${userId}.`,
+        }. Initiating REFUND of full amount $${amount} to user ${userId}.`,
       );
 
       const userWallet = await this.prisma.wallet.findUnique({ where: { userId } });

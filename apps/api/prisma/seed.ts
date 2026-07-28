@@ -97,6 +97,40 @@ async function main() {
     await prisma.featureFlag.upsert({ where: { key: flag.key }, update: {}, create: flag });
   }
 
+  // 6. Тиры подписки — цены/лимиты см. docs/MONETIZATION.md
+  const tiers = [
+    {
+      name: 'STARTER' as const,
+      priceUsd: 0,
+      commissionPercent: 10,
+      maxActiveBidsPerMonth: 10,
+      maxActiveOrdersPerMonth: 5,
+      freeBoostsPerMonth: 0,
+      supportPriority: 'NORMAL' as const,
+    },
+    {
+      name: 'PRO' as const,
+      priceUsd: 9.99,
+      commissionPercent: 7,
+      maxActiveBidsPerMonth: 50,
+      maxActiveOrdersPerMonth: 20,
+      freeBoostsPerMonth: 1,
+      supportPriority: 'HIGH' as const,
+    },
+    {
+      name: 'PREMIUM' as const,
+      priceUsd: 29.99,
+      commissionPercent: 5,
+      maxActiveBidsPerMonth: null,
+      maxActiveOrdersPerMonth: null,
+      freeBoostsPerMonth: 5,
+      supportPriority: 'URGENT' as const,
+    },
+  ];
+  for (const tier of tiers) {
+    await prisma.subscriptionTier.upsert({ where: { name: tier.name }, update: tier, create: tier });
+  }
+
   console.log('Seed completed.');
 }
 

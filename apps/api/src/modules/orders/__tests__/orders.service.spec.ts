@@ -14,6 +14,7 @@ describe('OrdersService', () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
       },
       orderVersion: {
         create: jest.fn(),
@@ -25,6 +26,13 @@ describe('OrdersService', () => {
         findFirst: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      subscription: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      promotion: {
+        findMany: jest.fn().mockResolvedValue([]),
       },
       chatThread: {
         create: jest.fn(),
@@ -40,6 +48,25 @@ describe('OrdersService', () => {
     };
 
     service = new OrdersService(prisma, eventBus as any);
+  });
+
+  describe('findMany', () => {
+    it('возвращает заказы с isPromoted: true на первых местах', async () => {
+      prisma.order.findMany.mockResolvedValue([
+        { id: 'order-normal', title: 'Normal Order', createdAt: new Date() },
+        { id: 'order-promoted', title: 'Promoted Order', createdAt: new Date() },
+      ]);
+      prisma.promotion.findMany.mockResolvedValue([
+        { entityId: 'order-promoted', entityType: 'ORDER', expiresAt: new Date(Date.now() + 86400000) },
+      ]);
+
+      const result = await service.findMany({});
+
+      expect(result[0].id).toBe('order-promoted');
+      expect(result[0].isPromoted).toBe(true);
+      expect(result[1].id).toBe('order-normal');
+      expect(result[1].isPromoted).toBe(false);
+    });
   });
 
   describe('update', () => {
@@ -129,6 +156,24 @@ describe('OrdersService', () => {
           message: 'Hi',
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('бросает BadRequestException, если достигнут лимит откликов на STARTER тире (10 откликов в месяц)', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 'order-1',
+        clientId: 'client-1',
+        status: 'OPEN',
+      });
+      prisma.subscription.findFirst.mockResolvedValue(null);
+      prisma.bid.count.mockResolvedValue(10);
+
+      await expect(
+        service.submitBid('freelancer-1', 'order-1', {
+          amount: 100,
+          deliveryDays: 3,
+          message: 'Hi',
+        }),
+      ).rejects.toThrow('Достигнут лимит откликов на вашем тарифе, оформите Pro');
     });
   });
 

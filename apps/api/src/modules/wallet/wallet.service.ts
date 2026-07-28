@@ -33,7 +33,21 @@ export class WalletService {
     return systemUser.wallet;
   }
 
-  private async getMarketplaceFeePercent(): Promise<number> {
+  private async getMarketplaceFeePercent(freelancerId?: string): Promise<number> {
+    if (freelancerId) {
+      const activeSub = await this.prisma.subscription.findFirst({
+        where: {
+          userId: freelancerId,
+          status: 'ACTIVE',
+          expiresAt: { gt: new Date() },
+        },
+        include: { tier: true },
+      });
+      if (activeSub?.tier?.commissionPercent != null) {
+        return Number(activeSub.tier.commissionPercent);
+      }
+    }
+
     const rule = await this.prisma.commissionRule.findUnique({ where: { type: 'MARKETPLACE_FEE' } });
     if (!rule || !rule.active || rule.percentage == null) return DEFAULT_MARKETPLACE_FEE_PERCENT;
     return Number(rule.percentage);
@@ -88,7 +102,7 @@ export class WalletService {
     freelancerId: string;
   }) {
     const system = await this.getSystemWallet();
-    const feePercent = await this.getMarketplaceFeePercent();
+    const feePercent = await this.getMarketplaceFeePercent(params.freelancerId);
     const commission = round2(params.amount * (feePercent / 100));
     const payout = round2(params.amount - commission);
 
@@ -128,11 +142,18 @@ export class WalletService {
     });
   }
 
+  private async getWithdrawalFeePercent(): Promise<number> {
+    const rule = await this.prisma.commissionRule.findUnique({ where: { type: 'WITHDRAWAL_FEE' } });
+    if (!rule || !rule.active || rule.percentage == null) return 1;
+    return Number(rule.percentage);
+  }
+
   /**
-   * Запрос на вывод средств. Списывает WITHDRAWABLE сразу (пессимистично),
+   * Запрос на вывод средств. Списывает WITHDRAWABLE сразу (пессимистично)
+   * с удержанием комиссии за вывод (WITHDRAWAL_FEE, дефолт 1%),
    * фактическая крипто-выплата — асинхронный процесс вне ledger (воркер,
-   * который дёргает NOWPayments payout API); если выплата не пройдёт,
-   * деньги возвращаются отдельной REFUND-транзакцией.
+   * который дёргает NOWPayments payout API на сумму netAmount); если выплата не пройдёт,
+   * полная сумма возвращается отдельной REFUND-транзакцией.
    */
   async requestWithdrawal(userId: string, amount: number) {
     const wallet = await this.getBalances(userId);
@@ -140,17 +161,24 @@ export class WalletService {
       throw new NotFoundException('Insufficient withdrawable balance');
     }
     const system = await this.getSystemWallet();
+    const feePercent = await this.getWithdrawalFeePercent();
+    const fee = round2(amount * (feePercent / 100));
+    const netAmount = round2(amount - fee);
 
-    return this.ledger.applyTransaction({
+    const transaction = await this.ledger.applyTransaction({
       type: 'WITHDRAWAL',
       referenceType: 'WALLET',
       referenceId: wallet.id,
       createdById: userId,
+      description: `Withdrawal request of $${amount} (fee ${feePercent}% = $${fee}, net payout = $${netAmount})`,
       entries: [
         { walletId: wallet.id, balanceType: 'WITHDRAWABLE', direction: 'DEBIT', amount },
-        { walletId: system.id, balanceType: 'MAIN', direction: 'CREDIT', amount },
+        { walletId: system.id, balanceType: 'MAIN', direction: 'CREDIT', amount: netAmount },
+        { walletId: system.id, balanceType: 'MAIN', direction: 'CREDIT', amount: fee },
       ],
     });
+
+    return { transaction, amount, fee, netAmount };
   }
 }
 

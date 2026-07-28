@@ -19,6 +19,7 @@ export enum DomainEventName {
   DisputeOpened = 'DisputeOpened',
   EmailVerificationRequested = 'EmailVerificationRequested',
   PasswordResetRequested = 'PasswordResetRequested',
+  SubscriptionExpiringSoon = 'SubscriptionExpiringSoon',
 }
 
 export interface BaseDomainEvent<TName extends DomainEventName, TPayload> {
@@ -87,6 +88,11 @@ export type PasswordResetRequestedEvent = BaseDomainEvent<
   { userId: string; email: string; resetUrl: string }
 >;
 
+export type SubscriptionExpiringSoonEvent = BaseDomainEvent<
+  DomainEventName.SubscriptionExpiringSoon,
+  { userId: string; tierName: string; expiresAt: string }
+>;
+
 export type DomainEvent =
   | UserRegisteredEvent
   | OrderCreatedEvent
@@ -99,4 +105,5 @@ export type DomainEvent =
   | WorkSubmittedEvent
   | DisputeOpenedEvent
   | EmailVerificationRequestedEvent
-  | PasswordResetRequestedEvent;
+  | PasswordResetRequestedEvent
+  | SubscriptionExpiringSoonEvent;

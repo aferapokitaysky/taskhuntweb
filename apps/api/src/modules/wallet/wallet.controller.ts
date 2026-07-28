@@ -9,7 +9,6 @@ import { WalletService } from './wallet.service';
 import { InvoiceService } from './invoice.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { PAYOUT_QUEUE, PayoutJobData } from './payout.processor';
-
 import { Throttle } from '@nestjs/throttler';
 
 export class WithdrawDto {
@@ -38,16 +37,20 @@ export class WalletController {
 
   @Post('withdraw')
   async withdraw(@CurrentUser() user: AuthenticatedUser, @Body() dto: WithdrawDto) {
-    const transaction = await this.walletService.requestWithdrawal(user.id, dto.amount);
+    const { transaction, amount, fee, netAmount } = await this.walletService.requestWithdrawal(
+      user.id,
+      dto.amount,
+    );
 
     await this.payoutQueue.add('payout', {
       ledgerTransactionId: transaction.id,
       userId: user.id,
-      amount: dto.amount,
+      amount,
+      netAmount,
       payoutAddress: dto.payoutAddress,
     });
 
-    return { transaction, payoutQueued: true };
+    return { transaction, fee, netAmount, payoutQueued: true };
   }
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })
