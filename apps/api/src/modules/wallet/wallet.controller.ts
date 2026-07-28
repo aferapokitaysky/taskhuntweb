@@ -1,16 +1,25 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { IsNumber, IsPositive } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsPositive, IsString } from 'class-validator';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { WalletService } from './wallet.service';
 import { InvoiceService } from './invoice.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { PAYOUT_QUEUE, PayoutJobData } from './payout.processor';
 
-class WithdrawDto {
+import { Throttle } from '@nestjs/throttler';
+
+export class WithdrawDto {
   @IsNumber()
   @IsPositive()
   amount!: number;
+
+  @IsString()
+  @IsNotEmpty()
+  payoutAddress!: string;
 }
 
 @UseGuards(JwtAuthGuard)
@@ -19,6 +28,7 @@ export class WalletController {
   constructor(
     private readonly walletService: WalletService,
     private readonly invoiceService: InvoiceService,
+    @InjectQueue(PAYOUT_QUEUE) private readonly payoutQueue: Queue<PayoutJobData>,
   ) {}
 
   @Get('balance')
@@ -27,10 +37,20 @@ export class WalletController {
   }
 
   @Post('withdraw')
-  withdraw(@CurrentUser() user: AuthenticatedUser, @Body() dto: WithdrawDto) {
-    return this.walletService.requestWithdrawal(user.id, dto.amount);
+  async withdraw(@CurrentUser() user: AuthenticatedUser, @Body() dto: WithdrawDto) {
+    const transaction = await this.walletService.requestWithdrawal(user.id, dto.amount);
+
+    await this.payoutQueue.add('payout', {
+      ledgerTransactionId: transaction.id,
+      userId: user.id,
+      amount: dto.amount,
+      payoutAddress: dto.payoutAddress,
+    });
+
+    return { transaction, payoutQueued: true };
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('invoices')
   issueInvoice(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateInvoiceDto) {
     return this.invoiceService.issueInvoice(user.id, dto);

@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { LoggerModule } from 'nestjs-pino';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { EventBusModule } from './common/events/event-bus.module';
@@ -17,10 +19,23 @@ import { AdminModule } from './modules/admin/admin.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { FilesModule } from './modules/files/files.module';
 import { ReferralsModule } from './modules/referrals/referrals.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    LoggerModule.forRoot({
+      pinoHttp: {
+        transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
+        autoLogging: true,
+      },
+    }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -43,7 +58,11 @@ import { ReferralsModule } from './modules/referrals/referrals.module';
     CatalogModule,
     FilesModule,
     ReferralsModule,
+    HealthModule,
   ],
-  providers: [{ provide: APP_FILTER, useClass: HttpExceptionFilter }],
+  providers: [
+    { provide: APP_FILTER, useClass: HttpExceptionFilter },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

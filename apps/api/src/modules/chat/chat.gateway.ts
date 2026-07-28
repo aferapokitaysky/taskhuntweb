@@ -20,7 +20,9 @@ interface AuthenticatedSocket extends Socket {
  * Live presence (online/typing/last seen) реализуется поверх этих же
  * комнат события `presence:*` — вынесено в Phase 2, тут заложен только гейтвей.
  */
-@WebSocketGateway({ namespace: '/chat', cors: { origin: '*' } })
+const corsOrigin = process.env.WEB_PUBLIC_URL ?? 'http://localhost:3000';
+
+@WebSocketGateway({ namespace: '/chat', cors: { origin: corsOrigin, credentials: true } })
 export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
   server!: Server;

@@ -57,6 +57,38 @@ export class NowPaymentsService {
     };
   }
 
+  async createPayout(params: {
+    address: string;
+    amount: number;
+    currency?: string;
+    ipnCallbackUrl?: string;
+  }): Promise<{ id: string; status: string }> {
+    const res = await fetch(`${this.baseUrl}/payout`, {
+      method: 'POST',
+      headers: { 'x-api-key': this.apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        withdrawals: [
+          {
+            address: params.address,
+            amount: params.amount,
+            currency: params.currency ?? 'usd',
+            ipn_callback_url: params.ipnCallbackUrl,
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`NOWPayments createPayout failed: ${res.status} ${await res.text()}`);
+    }
+
+    const data = await res.json();
+    return {
+      id: data.id ?? data.payout_id ?? 'payout-ok',
+      status: data.status ?? 'PROCESSING',
+    };
+  }
+
   /**
    * IPN-подпись NOWPayments: HMAC-SHA512 от JSON-тела с отсортированными
    * по алфавиту ключами (см. их доку "IPN — Instant Payment Notifications").
