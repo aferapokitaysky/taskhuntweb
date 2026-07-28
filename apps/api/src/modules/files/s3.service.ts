@@ -37,6 +37,16 @@ export class S3Service {
     );
   }
 
+  async downloadToBuffer(key: string): Promise<Buffer> {
+    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+    const response = await this.client.send(command);
+    if (!response.Body) {
+      throw new Error(`Empty body returned from S3 for key ${key}`);
+    }
+    const byteArray = await response.Body.transformToByteArray();
+    return Buffer.from(byteArray);
+  }
+
   /** Публичные файлы отдаём напрямую через CDN-домен бакета, приватные — через presigned URL. */
   async getSignedDownloadUrl(key: string, expiresInSeconds = 3600): Promise<string> {
     const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
