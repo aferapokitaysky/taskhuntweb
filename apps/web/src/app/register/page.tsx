@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, saveTokens } from '@/lib/api';
+import { OAuthButtons } from '@/components/OAuthButtons';
 
 type Role = 'CLIENT' | 'FREELANCER';
 
@@ -103,9 +104,9 @@ export default function RegisterPage() {
         </button>
       </form>
 
-      {/* TODO(oauth): кнопки "Войти через Google / Apple" — вызывают
-          /auth/google и /auth/apple на бэке, которые тоже принимают role
-          через query/state параметр перед редиректом на провайдера. */}
+      <div className="mt-6">
+        <OAuthButtons role={role} />
+      </div>
     </main>
   );
 }

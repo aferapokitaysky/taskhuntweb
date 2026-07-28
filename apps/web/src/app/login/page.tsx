@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api, saveTokens } from '@/lib/api';
 import type { AuthTokens } from '@/lib/types';
+import { OAuthButtons } from '@/components/OAuthButtons';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -67,6 +68,10 @@ export default function LoginPage() {
           {loading ? 'Входим...' : 'Войти'}
         </button>
       </form>
+
+      <div className="mt-6">
+        <OAuthButtons />
+      </div>
 
       <p className="mt-6 text-sm text-slate-500">
         Нет аккаунта?{' '}
