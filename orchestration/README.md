@@ -42,8 +42,12 @@ Codex больше не участвует. Всё, что он успел сд�
 |---|---|---|---|
 | Gemini (раунд 1, done) | [`TZ_GEMINI.md`](./TZ_GEMINI.md) | [`STATUS_GEMINI.md`](./STATUS_GEMINI.md) | Реферальная программа — сдано, в `main` |
 | Gemini (раунд 2, done) | [`TZ_GEMINI_2.md`](./TZ_GEMINI_2.md) | [`STATUS_GEMINI_2.md`](./STATUS_GEMINI_2.md) | Реальный ClamAV + тесты на `ReferralsService` — сдано, в `main` |
-| Gemini (раунд 3) | [`TZ_GEMINI_3.md`](./TZ_GEMINI_3.md) | [`STATUS_GEMINI_3.md`](./STATUS_GEMINI_3.md) | Тесты на `OrdersService`/`AdminService` (споры) + реальная отправка email в `notifications-service` |
-| Claude (я) | — | этот разговор | OAuth-кнопки/callback — сделано. Дальше: milestones/delivery/reviews UI + файловый аплоад на фронте (наследие Codex) |
+| Gemini (раунд 3, done) | [`TZ_GEMINI_3.md`](./TZ_GEMINI_3.md) | [`STATUS_GEMINI_3.md`](./STATUS_GEMINI_3.md) | Тесты на `OrdersService`/`AdminService` (споры) + реальная отправка email — сдано, в `main` |
+| Gemini (раунд 4) | [`TZ_GEMINI_4.md`](./TZ_GEMINI_4.md) | [`STATUS_GEMINI_4.md`](./STATUS_GEMINI_4.md) | Инфраструктурный P0: Prisma-миграции (все 3 сервиса), реальный payout-воркер, rate limiting, health-check, CORS, structured logging |
+| Claude (я) | — | этот разговор | Milestones/delivery/reviews UI + OAuth-кнопки — сделано. Раунд 4: email-верификация, password reset, вывод средств/профиль/поддержка на фронте, CI |
+
+Полный аудит и приоритеты (P0/P1/P2) для доведения до прода —
+[`docs/PRODUCTION_READINESS.md`](../docs/PRODUCTION_READINESS.md).
 
 ## Правила, чтобы не было конфликтов на диске
 
