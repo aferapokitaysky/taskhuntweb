@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { PermissionCode } from '@taskhunt/shared-types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
@@ -13,6 +13,14 @@ import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
+
+  // --- Metrics ---
+
+  @RequirePermissions(PermissionCode.FinanceViewReports)
+  @Get('metrics')
+  getMetrics() {
+    return this.adminService.getMetrics();
+  }
 
   // --- Users ---
 
@@ -94,5 +102,57 @@ export class AdminController {
     @Body('fixedAmount') fixedAmount?: number,
   ) {
     return this.adminService.updateCommissionRule(type, percentage, fixedAmount);
+  }
+
+  // --- Categories CRUD ---
+
+  @RequirePermissions(PermissionCode.CatalogManage)
+  @AuditLog('CATEGORY_CREATED', 'Category')
+  @Post('categories')
+  createCategory(@Body() body: { name: string; slug: string; description?: string }) {
+    return this.adminService.createCategory(body);
+  }
+
+  @RequirePermissions(PermissionCode.CatalogManage)
+  @AuditLog('CATEGORY_UPDATED', 'Category')
+  @Patch('categories/:id')
+  updateCategory(
+    @Param('id') id: string,
+    @Body() body: { name?: string; slug?: string; description?: string },
+  ) {
+    return this.adminService.updateCategory(id, body);
+  }
+
+  @RequirePermissions(PermissionCode.CatalogManage)
+  @AuditLog('CATEGORY_DELETED', 'Category')
+  @Delete('categories/:id')
+  deleteCategory(@Param('id') id: string) {
+    return this.adminService.deleteCategory(id);
+  }
+
+  // --- Skills CRUD ---
+
+  @RequirePermissions(PermissionCode.CatalogManage)
+  @AuditLog('SKILL_CREATED', 'Skill')
+  @Post('skills')
+  createSkill(@Body() body: { name: string; slug: string; categoryId?: string }) {
+    return this.adminService.createSkill(body);
+  }
+
+  @RequirePermissions(PermissionCode.CatalogManage)
+  @AuditLog('SKILL_UPDATED', 'Skill')
+  @Patch('skills/:id')
+  updateSkill(
+    @Param('id') id: string,
+    @Body() body: { name?: string; slug?: string; categoryId?: string },
+  ) {
+    return this.adminService.updateSkill(id, body);
+  }
+
+  @RequirePermissions(PermissionCode.CatalogManage)
+  @AuditLog('SKILL_DELETED', 'Skill')
+  @Delete('skills/:id')
+  deleteSkill(@Param('id') id: string) {
+    return this.adminService.deleteSkill(id);
   }
 }

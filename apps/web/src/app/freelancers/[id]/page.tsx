@@ -24,7 +24,7 @@ interface PublicProfile {
     avgResponseMins?: number | null;
     disputesCount: number;
     lateDeliveries: number;
-    skills: { skill: { id: string; name: string } }[];
+    skills: { id: string; name: string }[];
   };
   subscriptionTier: 'STARTER' | 'PRO' | 'PREMIUM';
   reviews: { rating: number; comment?: string | null; createdAt: string; author: { displayName: string } }[];
@@ -102,7 +102,7 @@ export default function PublicProfilePage() {
 
         {data.profile.skills.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
-            {data.profile.skills.map(({ skill }) => (
+            {data.profile.skills.map((skill) => (
               <span key={skill.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
                 {skill.name}
               </span>

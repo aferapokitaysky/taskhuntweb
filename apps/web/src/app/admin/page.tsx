@@ -5,6 +5,16 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { Category, CommissionRule, Dispute, FeatureFlag, Skill, User } from '@/lib/types';
 
+// Category.slug/Skill.slug обязательны и уникальны на бэке — генерируем
+// сами, чтобы не заставлять staff придумывать slug руками в форме.
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9а-яё]+/gi, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 type Tab = 'users' | 'disputes' | 'flags' | 'commissions' | 'catalog' | 'metrics';
 
 interface AdminMetrics {
@@ -297,7 +307,12 @@ export default function AdminPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                mutate(() => api('/admin/categories', { method: 'POST', body: JSON.stringify({ name: newCategoryName } ) }));
+                mutate(() =>
+                  api('/admin/categories', {
+                    method: 'POST',
+                    body: JSON.stringify({ name: newCategoryName, slug: slugify(newCategoryName) }),
+                  }),
+                );
                 setNewCategoryName('');
               }}
               className="mb-3 flex gap-2"
@@ -334,7 +349,12 @@ export default function AdminPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                mutate(() => api('/admin/skills', { method: 'POST', body: JSON.stringify({ name: newSkillName }) }));
+                mutate(() =>
+                  api('/admin/skills', {
+                    method: 'POST',
+                    body: JSON.stringify({ name: newSkillName, slug: slugify(newSkillName) }),
+                  }),
+                );
                 setNewSkillName('');
               }}
               className="mb-3 flex gap-2"

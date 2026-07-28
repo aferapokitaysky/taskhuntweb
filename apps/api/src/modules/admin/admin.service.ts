@@ -46,11 +46,6 @@ export class AdminService {
     });
   }
 
-  /**
-   * Разрешение спора двигает реальные деньги — ищем последний оплаченный
-   * инвойс по заказу и либо релизим эскроу фрилансеру, либо возвращаем
-   * заказчику. RESOLVED_SPLIT (частичный сплит) — Phase 2.
-   */
   async resolveDispute(disputeId: string, staffId: string, dto: ResolveDisputeDto) {
     const dispute = await this.prisma.dispute.findUnique({
       where: { id: disputeId },
@@ -99,10 +94,6 @@ export class AdminService {
     });
   }
 
-  // Открытие спора участником заказа — см. OrdersService.openDispute
-  // (это staff-модуль, а открывать спор может любой участник сделки,
-  // поэтому сама операция создания живёт в OrdersModule).
-
   // --- Feature flags ---
 
   async listFeatureFlags() {
@@ -124,5 +115,116 @@ export class AdminService {
       where: { type: type as any },
       data: { percentage, fixedAmount },
     });
+  }
+
+  // --- Categories CRUD ---
+
+  async createCategory(data: { name: string; slug: string; description?: string }) {
+    return this.prisma.category.create({ data });
+  }
+
+  async updateCategory(id: string, data: { name?: string; slug?: string; description?: string }) {
+    return this.prisma.category.update({ where: { id }, data });
+  }
+
+  async deleteCategory(id: string) {
+    return this.prisma.category.delete({ where: { id } });
+  }
+
+  // --- Skills CRUD ---
+
+  async createSkill(data: { name: string; slug: string; categoryId?: string }) {
+    return this.prisma.skill.create({ data });
+  }
+
+  async updateSkill(id: string, data: { name?: string; slug?: string; categoryId?: string }) {
+    return this.prisma.skill.update({ where: { id }, data });
+  }
+
+  async deleteSkill(id: string) {
+    return this.prisma.skill.delete({ where: { id } });
+  }
+
+  // --- Metrics ---
+
+  async getMetrics() {
+    const systemWalletId = await this.walletService.getSystemWalletId();
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const totalRevenueAgg = await this.prisma.ledgerEntry.aggregate({
+      where: {
+        walletId: systemWalletId,
+        direction: 'CREDIT',
+      },
+      _sum: { amount: true },
+    });
+
+    const monthRevenueAgg = await this.prisma.ledgerEntry.aggregate({
+      where: {
+        walletId: systemWalletId,
+        direction: 'CREDIT',
+        createdAt: { gte: startOfMonth },
+      },
+      _sum: { amount: true },
+    });
+
+    const activeDisputes = await this.prisma.dispute.count({
+      where: { status: { in: ['OPEN', 'UNDER_REVIEW'] } },
+    });
+
+    const ordersGrouped = await this.prisma.order.groupBy({
+      by: ['status'],
+      _count: { id: true },
+    });
+    const ordersByStatus: Record<string, number> = {
+      DRAFT: 0,
+      OPEN: 0,
+      IN_PROGRESS: 0,
+      IN_REVIEW: 0,
+      COMPLETED: 0,
+      CANCELLED: 0,
+      DISPUTED: 0,
+    };
+    for (const g of ordersGrouped) {
+      ordersByStatus[g.status] = g._count.id;
+    }
+
+    const newUsersThisWeek = await this.prisma.user.count({
+      where: { createdAt: { gte: sevenDaysAgo } },
+    });
+
+    const activeSubs = await this.prisma.subscription.findMany({
+      where: { status: 'ACTIVE', expiresAt: { gt: now } },
+      include: { tier: true },
+    });
+
+    const activeSubscriptionsByTier: Record<string, number> = {
+      STARTER: 0,
+      PRO: 0,
+      PREMIUM: 0,
+    };
+
+    for (const sub of activeSubs) {
+      if (sub.tier?.name) {
+        activeSubscriptionsByTier[sub.tier.name] = (activeSubscriptionsByTier[sub.tier.name] || 0) + 1;
+      }
+    }
+
+    const totalUsers = await this.prisma.user.count();
+    const activeSubUsersCount = activeSubs.length;
+    activeSubscriptionsByTier.STARTER = Math.max(0, totalUsers - activeSubUsersCount);
+
+    return {
+      revenue: {
+        total: Number(totalRevenueAgg._sum.amount ?? 0),
+        thisMonth: Number(monthRevenueAgg._sum.amount ?? 0),
+      },
+      activeDisputes,
+      ordersByStatus,
+      newUsersThisWeek,
+      activeSubscriptionsByTier,
+    };
   }
 }

@@ -23,8 +23,12 @@ export class OrdersController {
   ) {}
 
   @Get()
-  findMany(@Query('categoryId') categoryId?: string, @Query('status') status?: string) {
-    return this.ordersService.findMany({ categoryId, status });
+  findMany(
+    @Query('categoryId') categoryId?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.ordersService.findMany({ categoryId, status, search });
   }
 
   @Get(':id')

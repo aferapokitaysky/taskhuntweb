@@ -14,7 +14,7 @@ interface FreelancerListItem {
     country?: string | null;
     city?: string | null;
     successRate?: string | null;
-    skills: { skill: { id: string; name: string } }[];
+    skills: { id: string; name: string }[];
   };
   subscriptionTier: 'STARTER' | 'PRO' | 'PREMIUM';
 }
@@ -118,7 +118,7 @@ export default function FreelancersPage() {
               </p>
               {f.profile.bio && <p className="mt-2 line-clamp-2 text-sm text-slate-600">{f.profile.bio}</p>}
               <div className="mt-3 flex flex-wrap gap-1">
-                {f.profile.skills.slice(0, 4).map(({ skill }) => (
+                {f.profile.skills.slice(0, 4).map((skill) => (
                   <span key={skill.id} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                     {skill.name}
                   </span>

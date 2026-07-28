@@ -23,6 +23,7 @@ export enum PermissionCode {
 
   FeatureFlagToggle = 'feature_flag.toggle',
   StaffManageRoles = 'staff.manage_roles',
+  CatalogManage = 'catalog.manage',
 }
 
 export const DEFAULT_STAFF_ROLES: Record<string, PermissionCode[]> = {
@@ -35,7 +36,7 @@ export const DEFAULT_STAFF_ROLES: Record<string, PermissionCode[]> = {
     PermissionCode.WalletAdjust,
   ],
   SUPPORT: [PermissionCode.UserView, PermissionCode.DisputeView],
-  MODERATOR: [PermissionCode.OrderModerate, PermissionCode.ContentModerate, PermissionCode.UserView],
+  MODERATOR: [PermissionCode.OrderModerate, PermissionCode.ContentModerate, PermissionCode.UserView, PermissionCode.CatalogManage],
   ARBITRATOR: [PermissionCode.DisputeView, PermissionCode.DisputeAssign, PermissionCode.DisputeResolve],
   ANALYST: [PermissionCode.FinanceViewReports, PermissionCode.UserView],
 };

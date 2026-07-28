@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { DomainEventName } from '@taskhunt/shared-types';
@@ -90,12 +91,21 @@ export class OrdersService {
     return order;
   }
 
-  async findMany(filters: { categoryId?: string; status?: string }) {
+  async findMany(filters: { categoryId?: string; status?: string; search?: string }) {
+    const where: Prisma.OrderWhereInput = {
+      categoryId: filters.categoryId,
+      status: (filters.status as any) ?? { not: 'DRAFT' },
+    };
+
+    if (filters.search) {
+      where.OR = [
+        { title: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
     const orders = await this.prisma.order.findMany({
-      where: {
-        categoryId: filters.categoryId,
-        status: (filters.status as any) ?? { not: 'DRAFT' },
-      },
+      where,
       orderBy: { createdAt: 'desc' },
       include: { category: true, _count: { select: { bids: true } } },
     });

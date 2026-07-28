@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
+import { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -9,8 +10,37 @@ async function bootstrap() {
     throw new Error('WEB_PUBLIC_URL environment variable must be set in production');
   }
 
+  const bullBoardUser = process.env.BULL_BOARD_USER;
+  const bullBoardPassword = process.env.BULL_BOARD_PASSWORD;
+  if (!bullBoardUser || !bullBoardPassword) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('BULL_BOARD_USER/BULL_BOARD_PASSWORD must be set in production — /admin/queues would otherwise be public');
+    }
+  }
+
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
+  // Bull Board монтируется в обход Nest-гардов (это express middleware, не контроллер),
+  // поэтому /admin/queues защищаем отдельным Basic Auth — там видны и управляются очереди
+  // выплат/событий, публичный доступ недопустим.
+  app.use('/admin/queues', (req: Request, res: Response, next: NextFunction) => {
+    if (!bullBoardUser || !bullBoardPassword) {
+      res.status(503).send('Bull Board is disabled: BULL_BOARD_USER/BULL_BOARD_PASSWORD not configured');
+      return;
+    }
+    const header = req.headers.authorization ?? '';
+    const [scheme, encoded] = header.split(' ');
+    const decoded = scheme === 'Basic' && encoded ? Buffer.from(encoded, 'base64').toString('utf8') : '';
+    const [user, password] = decoded.split(':');
+    if (user === bullBoardUser && password === bullBoardPassword) {
+      next();
+      return;
+    }
+    res.setHeader('WWW-Authenticate', 'Basic realm="Bull Board"');
+    res.status(401).send('Authentication required');
+  });
+
+  app.enableShutdownHooks();
   app.useLogger(app.get(Logger));
 
   const corsOrigin = webPublicUrl ?? 'http://localhost:3000';
@@ -23,6 +53,12 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+
+  process.on('SIGTERM', async () => {
+    app.get(Logger).log('SIGTERM signal received. Closing Nest application gracefully...');
+    await app.close();
+    process.exit(0);
+  });
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);

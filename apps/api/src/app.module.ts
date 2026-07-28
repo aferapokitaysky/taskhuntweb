@@ -4,6 +4,9 @@ import { BullModule } from '@nestjs/bullmq';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
+import { BullBoardModule } from '@bull-board/nestjs';
+import { ExpressAdapter } from '@bull-board/express';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { EventBusModule } from './common/events/event-bus.module';
@@ -22,6 +25,11 @@ import { ReferralsModule } from './modules/referrals/referrals.module';
 import { HealthModule } from './modules/health/health.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { PAYOUT_QUEUE } from './modules/wallet/payout.processor';
+import { FILE_SCAN_QUEUE } from './modules/files/files.service';
+import { SUBSCRIPTION_EXPIRATION_QUEUE } from './modules/subscriptions/subscription-expiration.processor';
+import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
 
 @Module({
   imports: [
@@ -48,6 +56,26 @@ import { PromotionsModule } from './modules/promotions/promotions.module';
         },
       }),
     }),
+    BullBoardModule.forRoot({
+      route: '/admin/queues',
+      adapter: ExpressAdapter,
+    }),
+    BullBoardModule.forFeature({
+      name: PAYOUT_QUEUE,
+      adapter: BullMQAdapter as any,
+    }),
+    BullBoardModule.forFeature({
+      name: FILE_SCAN_QUEUE,
+      adapter: BullMQAdapter as any,
+    }),
+    BullBoardModule.forFeature({
+      name: SUBSCRIPTION_EXPIRATION_QUEUE,
+      adapter: BullMQAdapter as any,
+    }),
+    BullBoardModule.forFeature({
+      name: EVENT_QUEUE_NAME,
+      adapter: BullMQAdapter as any,
+    }),
     PrismaModule,
     EventBusModule,
     AuthModule,
@@ -63,6 +91,7 @@ import { PromotionsModule } from './modules/promotions/promotions.module';
     HealthModule,
     SubscriptionsModule,
     PromotionsModule,
+    NotificationsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
