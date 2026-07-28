@@ -9,3 +9,7 @@ dist/
 .DS_Store
 coverage/
 apps/api/generated/
+apps/notifications-service/generated/
+apps/fraud-service/generated/
+next-env.d.ts
+*.tsbuildinfo
