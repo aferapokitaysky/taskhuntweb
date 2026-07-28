@@ -30,6 +30,7 @@ export default function DashboardPage() {
     null,
   );
   const [withdrawing, setWithdrawing] = useState(false);
+  const [orderSearch, setOrderSearch] = useState('');
 
   useEffect(() => {
     Promise.all([api<User>('/users/me'), api<WalletBalance>('/wallet/balance'), api<Order[]>('/orders'), api<Category[]>('/categories')])
@@ -49,10 +50,22 @@ export default function DashboardPage() {
   const isFreelancer = me?.roles.includes('FREELANCER') ?? false;
   const flatCategories = categories.flatMap((category) => [category, ...(category.children ?? [])]);
 
-  async function refreshOrders() {
-    const nextOrders = await api<Order[]>('/orders');
+  async function refreshOrders(search?: string) {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    const nextOrders = await api<Order[]>(`/orders${params.toString() ? `?${params}` : ''}`);
     setOrders(nextOrders);
   }
+
+  // Дебаунс поиска — не дёргаем API на каждое нажатие клавиши
+  useEffect(() => {
+    if (loading) return; // не дублируем самый первый запрос из основного useEffect
+    const timeout = setTimeout(() => {
+      refreshOrders(orderSearch).catch((err) => setError(err instanceof Error ? err.message : 'Не удалось найти заказы'));
+    }, 300);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderSearch]);
 
   async function createOrder(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -146,6 +159,9 @@ export default function DashboardPage() {
           <Link href="/pricing" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
             Тарифы
           </Link>
+          <Link href="/freelancers" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
+            Фрилансеры
+          </Link>
           <Link href="/referrals" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
             Реферальная программа
           </Link>
@@ -227,6 +243,12 @@ export default function DashboardPage() {
             <h2 className="text-xl font-semibold">Заказы</h2>
             <span className="text-sm text-slate-500">{orders.length}</span>
           </div>
+          <input
+            placeholder="Поиск по названию или описанию"
+            value={orderSearch}
+            onChange={(e) => setOrderSearch(e.target.value)}
+            className="mb-4 w-full rounded-lg border border-slate-300 px-4 py-2 text-sm"
+          />
           <div className="space-y-3">
             {orders.map((order) => (
               <article key={order.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
