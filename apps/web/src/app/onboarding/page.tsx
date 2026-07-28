@@ -1,11 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { Category, MarketplaceRole } from '@/lib/types';
 
 export default function OnboardingPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto max-w-2xl px-4 py-12 text-slate-500">Загружаем анкету...</main>}>
+      <OnboardingForm />
+    </Suspense>
+  );
+}
+
+function OnboardingForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const role = useMemo<MarketplaceRole>(() => {
