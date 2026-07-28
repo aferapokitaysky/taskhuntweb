@@ -33,3 +33,37 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 
   return res.json();
 }
+
+export interface UploadedFileAsset {
+  id: string;
+  url: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind: 'IMAGE' | 'VIDEO' | 'ARCHIVE' | 'DOCUMENT' | 'EXECUTABLE' | 'OTHER';
+  scanStatus: 'PENDING' | 'CLEAN' | 'INFECTED';
+}
+
+/**
+ * Отдельная функция вместо api(): загрузка файла — multipart/form-data,
+ * а не JSON, поэтому нельзя переиспользовать общий хелпер с
+ * захардкоженным Content-Type: application/json (для FormData браузер
+ * сам проставляет корректный Content-Type с boundary).
+ */
+export async function uploadFile(file: File): Promise<UploadedFileAsset> {
+  const token = getAccessToken();
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API_URL}/files/upload`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Upload failed: ${res.status}`);
+  }
+
+  return res.json();
+}
