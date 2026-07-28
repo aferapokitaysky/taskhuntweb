@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { BoostIcon } from '@/components/icons/BoostIcon';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { Category, Order, User, WalletBalance } from '@/lib/types';
@@ -23,6 +24,12 @@ export default function DashboardPage() {
     deadline: '',
   });
   const [bidForm, setBidForm] = useState({ amount: '', deliveryDays: '3', message: '' });
+  const [showWithdrawForm, setShowWithdrawForm] = useState(false);
+  const [withdrawForm, setWithdrawForm] = useState({ amount: '', payoutAddress: '' });
+  const [withdrawResult, setWithdrawResult] = useState<{ fee: string | number; netAmount: string | number } | null>(
+    null,
+  );
+  const [withdrawing, setWithdrawing] = useState(false);
 
   useEffect(() => {
     Promise.all([api<User>('/users/me'), api<WalletBalance>('/wallet/balance'), api<Order[]>('/orders'), api<Category[]>('/categories')])
@@ -90,6 +97,29 @@ export default function DashboardPage() {
     }
   }
 
+  async function submitWithdraw(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setWithdrawing(true);
+    try {
+      const result = await api<{ fee: number; netAmount: number }>('/wallet/withdraw', {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: Number(withdrawForm.amount),
+          payoutAddress: withdrawForm.payoutAddress,
+        }),
+      });
+      setWithdrawResult(result);
+      setWithdrawForm({ amount: '', payoutAddress: '' });
+      const balance = await api<WalletBalance>('/wallet/balance');
+      setWallet(balance);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось запросить вывод');
+    } finally {
+      setWithdrawing(false);
+    }
+  }
+
   if (loading) {
     return <main className="mx-auto max-w-6xl px-4 py-10 text-slate-500">Загружаем dashboard...</main>;
   }
@@ -107,6 +137,15 @@ export default function DashboardPage() {
               Admin
             </Link>
           )}
+          <Link href="/profile" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
+            Профиль
+          </Link>
+          <Link href="/support" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
+            Поддержка
+          </Link>
+          <Link href="/pricing" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
+            Тарифы
+          </Link>
           <Link href="/referrals" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
             Реферальная программа
           </Link>
@@ -134,6 +173,54 @@ export default function DashboardPage() {
           ))}
       </section>
 
+      <section className="mb-8 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Вывод средств</h2>
+          <button
+            type="button"
+            onClick={() => setShowWithdrawForm((v) => !v)}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            {showWithdrawForm ? 'Скрыть' : 'Вывести средства'}
+          </button>
+        </div>
+
+        {showWithdrawForm && (
+          <form onSubmit={submitWithdraw} className="mt-4 flex flex-wrap items-end gap-3">
+            <input
+              required
+              type="number"
+              min="1"
+              placeholder="Сумма, USD"
+              value={withdrawForm.amount}
+              onChange={(e) => setWithdrawForm((f) => ({ ...f, amount: e.target.value }))}
+              className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+            <input
+              required
+              placeholder="Адрес кошелька для выплаты"
+              value={withdrawForm.payoutAddress}
+              onChange={(e) => setWithdrawForm((f) => ({ ...f, payoutAddress: e.target.value }))}
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+            <button
+              type="submit"
+              disabled={withdrawing}
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {withdrawing ? 'Отправляем…' : 'Запросить вывод'}
+            </button>
+          </form>
+        )}
+
+        {withdrawResult && (
+          <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            Заявка на вывод принята. Комиссия: {money(withdrawResult.fee, wallet?.currency)}, к выплате:{' '}
+            {money(withdrawResult.netAmount, wallet?.currency)}.
+          </p>
+        )}
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <section>
           <div className="mb-3 flex items-center justify-between">
@@ -145,9 +232,17 @@ export default function DashboardPage() {
               <article key={order.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <Link href={`/orders/${order.id}`} className="text-lg font-semibold hover:text-brand">
-                      {order.title}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link href={`/orders/${order.id}`} className="text-lg font-semibold hover:text-brand">
+                        {order.title}
+                      </Link>
+                      {order.isPromoted && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          <BoostIcon className="h-3 w-3" />
+                          Продвигается
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-1 line-clamp-2 text-sm text-slate-600">{order.description}</p>
                   </div>
                   <div className="text-right">

@@ -41,6 +41,18 @@ export class SupportService {
     return ticket;
   }
 
+  /** Тикет с полным треском сообщений — владельцу или staff. */
+  async getTicket(ticketId: string, userId: string, isStaff: boolean) {
+    await this.assertParticipant(ticketId, userId, isStaff);
+    return this.prisma.supportTicket.findUniqueOrThrow({
+      where: { id: ticketId },
+      include: {
+        messages: { orderBy: { createdAt: 'asc' }, include: { sender: { include: { profile: true } } } },
+        assignedTo: { include: { profile: true } },
+      },
+    });
+  }
+
   async addMessage(ticketId: string, senderId: string, isStaff: boolean, body: string, fileId?: string) {
     await this.assertParticipant(ticketId, senderId, isStaff);
     const message = await this.prisma.supportMessage.create({

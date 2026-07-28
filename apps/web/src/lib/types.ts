@@ -12,9 +12,20 @@ export interface Category {
   children?: Category[];
 }
 
+export interface Skill {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 export interface Profile {
   displayName: string;
   bio?: string | null;
+  country?: string | null;
+  city?: string | null;
+  githubUrl?: string | null;
+  websiteUrl?: string | null;
+  skills?: { skill: Skill }[];
 }
 
 export interface User {
@@ -92,6 +103,7 @@ export interface Order {
   milestones?: Milestone[];
   chatThread?: { id: string } | null;
   _count?: { bids: number };
+  isPromoted?: boolean;
 }
 
 export interface Dispute {

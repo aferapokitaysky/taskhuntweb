@@ -29,6 +29,11 @@ export class SupportController {
     return this.supportService.listMyTickets(user.id);
   }
 
+  @Get(':id')
+  getTicket(@CurrentUser() user: AuthenticatedUser, @Param('id') ticketId: string) {
+    return this.supportService.getTicket(ticketId, user.id, user.isStaff);
+  }
+
   @Post(':id/messages')
   addMessage(
     @CurrentUser() user: AuthenticatedUser,

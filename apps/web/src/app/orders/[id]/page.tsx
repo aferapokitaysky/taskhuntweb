@@ -10,6 +10,7 @@ import { money } from '@/lib/types';
 import { FileUpload, type UploadedFile } from '@/components/FileUpload';
 import { PaperclipIcon } from '@/components/icons/PaperclipIcon';
 import { StarIcon } from '@/components/icons/StarIcon';
+import { BoostIcon } from '@/components/icons/BoostIcon';
 
 const MILESTONE_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Не оплачен',
@@ -48,6 +49,27 @@ export default function OrderPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
+
+  // --- Продвижение заказа ---
+  const [boosting, setBoosting] = useState(false);
+  const [boostResult, setBoostResult] = useState<{ paidFromQuota: boolean; payAddress?: string } | null>(null);
+
+  async function boostOrder() {
+    setBoosting(true);
+    setError(null);
+    try {
+      const result = await api<{ paidFromQuota: boolean; payment?: { payAddress: string } }>('/promotions/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ entityType: 'ORDER', entityId: orderId }),
+      });
+      setBoostResult({ paidFromQuota: result.paidFromQuota, payAddress: result.payment?.payAddress });
+      if (result.paidFromQuota) await refreshOrder();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось оформить продвижение');
+    } finally {
+      setBoosting(false);
+    }
+  }
 
   async function refreshOrder() {
     const fresh = await api<Order>(`/orders/${orderId}`);
@@ -222,7 +244,15 @@ export default function OrderPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm text-slate-500">{order.category?.name}</p>
-            <h1 className="mt-1 text-3xl font-bold">{order.title}</h1>
+            <div className="mt-1 flex items-center gap-2">
+              <h1 className="text-3xl font-bold">{order.title}</h1>
+              {order.isPromoted && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  <BoostIcon className="h-3 w-3" />
+                  Продвигается
+                </span>
+              )}
+            </div>
           </div>
           <div className="text-right">
             <p className="text-xl font-semibold">{money(order.budgetMin, order.currency)}</p>
@@ -230,6 +260,27 @@ export default function OrderPage() {
           </div>
         </div>
         <p className="mt-4 whitespace-pre-wrap text-slate-700">{order.description}</p>
+
+        {isClient && order.status === 'OPEN' && !order.isPromoted && (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <button
+              type="button"
+              onClick={boostOrder}
+              disabled={boosting}
+              className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+            >
+              <BoostIcon className="h-4 w-4" />
+              {boosting ? 'Оформляем…' : 'Продвинуть заказ (7 дней)'}
+            </button>
+            {boostResult && (
+              <p className="mt-2 text-sm text-slate-600">
+                {boostResult.paidFromQuota
+                  ? 'Продвижение активировано из бесплатной квоты тарифа.'
+                  : `Оплатите буст: ${boostResult.payAddress}`}
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
