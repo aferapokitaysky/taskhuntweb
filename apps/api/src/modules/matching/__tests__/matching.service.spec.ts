@@ -10,6 +10,7 @@ describe('MatchingService', () => {
       bid: { findMany: jest.fn() },
       onboardingResponse: { findUnique: jest.fn() },
       order: { findMany: jest.fn(), findUniqueOrThrow: jest.fn() },
+      profile: { findUnique: jest.fn() },
     };
     service = new MatchingService(prisma);
   });
@@ -123,8 +124,9 @@ describe('MatchingService', () => {
     it('без принятых бидов возвращает заказы без категорийного скоринга (не пустая лента)', async () => {
       prisma.bid.findMany.mockResolvedValue([]);
       prisma.onboardingResponse.findUnique.mockResolvedValue(null);
+      prisma.profile.findUnique.mockResolvedValue(null);
       prisma.order.findMany.mockResolvedValue([
-        { id: 'order-1', createdAt: now, deadline: null, categoryId: 'cat-1', budgetMin: 100, budgetMax: 200 },
+        { id: 'order-1', createdAt: now, deadline: null, categoryId: 'cat-1', budgetMin: 100, budgetMax: 200, tags: [] },
       ]);
 
       const result = await service.recommendOrdersForFreelancer('freelancer-1');
@@ -139,9 +141,10 @@ describe('MatchingService', () => {
         { order: { categoryId: 'cat-known' } },
       ]);
       prisma.onboardingResponse.findUnique.mockResolvedValue(null);
+      prisma.profile.findUnique.mockResolvedValue(null);
       prisma.order.findMany.mockResolvedValue([
-        { id: 'unknown-cat', createdAt: now, deadline: null, categoryId: 'cat-unknown', budgetMin: 100, budgetMax: 200 },
-        { id: 'known-cat', createdAt: now, deadline: null, categoryId: 'cat-known', budgetMin: 100, budgetMax: 200 },
+        { id: 'unknown-cat', createdAt: now, deadline: null, categoryId: 'cat-unknown', budgetMin: 100, budgetMax: 200, tags: [] },
+        { id: 'known-cat', createdAt: now, deadline: null, categoryId: 'cat-known', budgetMin: 100, budgetMax: 200, tags: [] },
       ]);
 
       const result = await service.recommendOrdersForFreelancer('freelancer-1');

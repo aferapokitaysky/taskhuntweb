@@ -54,6 +54,7 @@ interface OrderRecommendInput {
   categoryId: string;
   budgetMin: unknown;
   budgetMax: unknown;
+  tags: string[];
 }
 
 @Injectable()
@@ -183,7 +184,7 @@ export class MatchingService {
     const w = ORDER_RECOMMEND_WEIGHTS;
     const now = new Date();
 
-    const [acceptedBids, onboarding, openOrders] = await Promise.all([
+    const [acceptedBids, onboarding, openOrders, profile] = await Promise.all([
       this.prisma.bid.findMany({
         where: { freelancerId, status: 'ACCEPTED' },
         include: { order: { select: { categoryId: true } } },
@@ -195,7 +196,13 @@ export class MatchingService {
         orderBy: { createdAt: 'desc' },
         take: 200, // скорим последние 200 открытых заказов, не всю таблицу целиком
       }),
+      this.prisma.profile.findUnique({
+        where: { userId: freelancerId },
+        include: { skills: { include: { skill: true } } },
+      }),
     ]);
+
+    const skillNames = profile?.skills?.map((s) => s.skill.name) ?? [];
 
     const categoryCounts = new Map<string, number>();
     for (const bid of acceptedBids) {
@@ -237,7 +244,12 @@ export class MatchingService {
         }
       }
 
-      return { ...order, matchScore: Math.round(score * 100) / 100, matchReasons: reasons };
+      return {
+        ...order,
+        matchScore: Math.round(score * 100) / 100,
+        matchReasons: reasons,
+        compatibilityPercent: compatibilityPercent(order.tags ?? [], skillNames),
+      };
     });
 
     scored.sort((a, b) => b.matchScore - a.matchScore);

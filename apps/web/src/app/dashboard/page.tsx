@@ -283,9 +283,12 @@ export default function DashboardPage() {
                     <button
                       type="button"
                       onClick={() => setSelectedOrder(order)}
-                      className="font-medium text-brand hover:text-brand-dark"
+                      className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-brand-dark hover:shadow-md active:translate-y-0"
                     >
                       Откликнуться
+                      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+                        <path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
                     </button>
                   )}
                 </div>
