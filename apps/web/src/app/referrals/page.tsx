@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
+import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
 
@@ -93,9 +94,7 @@ export default function ReferralsPage() {
     return (
       <main className="mx-auto max-w-4xl px-4 py-12">
         <AppHeader />
-        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-red-600">
-          {error}
-        </div>
+        <ErrorNotice message={error} className="mb-0" />
       </main>
     );
   }

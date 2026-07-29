@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { Toggle } from '@/components/Toggle';
 import { AppHeader } from '@/components/AppHeader';
+import { ErrorNotice } from '@/components/ErrorNotice';
 import type { Category, CommissionRule, Dispute, FeatureFlag, Skill, User } from '@/lib/types';
 
 // Category.slug/Skill.slug обязательны и уникальны на бэке — генерируем
@@ -119,7 +120,7 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {error && <p className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+      {error && <ErrorNotice message={error} />}
       {loading && <p className="text-stone-500">Загружаем...</p>}
 
       {tab === 'users' && (

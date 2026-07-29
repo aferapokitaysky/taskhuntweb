@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { BoostIcon } from '@/components/icons/BoostIcon';
 import { AppHeader } from '@/components/AppHeader';
+import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
 import { useEffect, useState } from 'react';
@@ -145,7 +146,7 @@ export default function DashboardPage() {
       <AppHeader />
       <h1 className="mb-8 font-serif text-3xl text-stone-900">Dashboard</h1>
 
-      {error && <p className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+      {error && <ErrorNotice message={error} />}
 
       <section className="mb-8 grid gap-3 md:grid-cols-5">
         {wallet &&

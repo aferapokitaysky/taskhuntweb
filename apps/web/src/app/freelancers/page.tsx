@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import type { Category, Skill } from '@/lib/types';
 import { TierBadge } from '@/components/TierBadge';
 import { AppHeader } from '@/components/AppHeader';
+import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { EmptySearchIcon } from '@/components/icons/illustrated/EmptySearchIcon';
 
@@ -98,7 +99,7 @@ export default function FreelancersPage() {
         </select>
       </div>
 
-      {error && <p className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+      {error && <ErrorNotice message={error} />}
 
       {loading ? (
         <p className="text-stone-500">Загружаем…</p>

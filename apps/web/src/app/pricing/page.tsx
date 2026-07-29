@@ -6,6 +6,7 @@ import { money } from '@/lib/types';
 import { CheckIcon } from '@/components/icons/CheckIcon';
 import { CrownIcon } from '@/components/icons/CrownIcon';
 import { AppHeader } from '@/components/AppHeader';
+import { ErrorNotice } from '@/components/ErrorNotice';
 
 const TIER_BG: Record<string, string> = { STARTER: 'bg-card-sand', PRO: 'bg-card-sage', PREMIUM: 'bg-white' };
 
@@ -78,7 +79,7 @@ export default function PricingPage() {
       <h1 className="mb-2 font-serif text-3xl text-stone-900">Тарифы</h1>
       <p className="mb-8 text-stone-500">Меньше комиссия, выше лимиты, приоритет в поддержке — по мере роста.</p>
 
-      {error && <p className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+      {error && <ErrorNotice message={error} />}
 
       <div className="grid gap-6 md:grid-cols-3">
         {tiers.map((tier) => {

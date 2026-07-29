@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { FaqIcon } from '@/components/icons/illustrated/FaqIcon';
 import { AppHeader } from '@/components/AppHeader';
+import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 
@@ -126,7 +127,7 @@ export default function SupportPage() {
 
       <section className="mb-8 rounded-3xl bg-card-sand p-5">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-stone-900">
-          <FaqIcon className="h-8 w-8" />
+          <FaqIcon className="h-8 w-8 animate-pulse-soft" />
           Частые вопросы
         </h2>
         <div className="divide-y divide-stone-900/10">
@@ -145,7 +146,7 @@ export default function SupportPage() {
         <p className="mt-4 text-xs text-stone-500">Не нашли ответ? Создайте обращение ниже — мы ответим лично.</p>
       </section>
 
-      {error && <p className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+      {error && <ErrorNotice message={error} />}
 
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <div>

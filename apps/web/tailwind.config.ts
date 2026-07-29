@@ -46,11 +46,16 @@ const config: Config = {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(300%)' },
         },
+        'pulse-soft': {
+          '0%, 100%': { transform: 'scale(1)', opacity: '1' },
+          '50%': { transform: 'scale(1.12)', opacity: '0.85' },
+        },
       },
       animation: {
         wiggle: 'wiggle 0.5s ease-in-out',
         float: 'float 3s ease-in-out infinite',
         'loading-bar': 'loading-bar 1.1s ease-in-out infinite',
+        'pulse-soft': 'pulse-soft 2.4s ease-in-out infinite',
       },
     },
   },
