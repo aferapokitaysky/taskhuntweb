@@ -11,8 +11,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     const status = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
+    // `getResponse()` для стандартных исключений Nest (UnauthorizedException,
+    // ForbiddenException, BadRequestException из class-validator и т.д.) — это
+    // объект `{ statusCode, message, error }`, а не голая строка. Раньше этот
+    // объект целиком клался в поле `message` ответа — фронт при рендере
+    // ошибки получал "[object Object]" вместо текста.
+    const exceptionResponse = exception instanceof HttpException ? exception.getResponse() : null;
     const message =
-      exception instanceof HttpException ? exception.getResponse() : 'Internal server error';
+      typeof exceptionResponse === 'string'
+        ? exceptionResponse
+        : ((exceptionResponse as { message?: string | string[] } | null)?.message ?? 'Internal server error');
 
     if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(exception instanceof Error ? exception.stack : exception);
