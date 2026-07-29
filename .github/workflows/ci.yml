@@ -98,3 +98,6 @@ jobs:
 
       - name: Type check fraud-service
         run: pnpm --filter fraud-service exec tsc --noEmit
+
+      - name: Test fraud-service
+        run: pnpm --filter fraud-service test
