@@ -14,6 +14,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
+import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 
 const MILESTONE_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Не оплачен',
@@ -267,7 +268,7 @@ export default function OrderPage() {
 
   if (!order) {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-10">
+      <main className="mx-auto max-w-6xl px-4 py-10">
         <AppHeader />
         <p className="text-stone-500">Загружаем заказ...</p>
       </main>
@@ -275,7 +276,7 @@ export default function OrderPage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
+    <main className="mx-auto max-w-6xl px-4 py-8">
       <AppHeader />
 
       {error && <ErrorNotice message={error} />}
@@ -542,7 +543,10 @@ export default function OrderPage() {
       {canChat && (
         <section className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 font-serif text-xl text-stone-900">Чат заказа</h2>
+            <h2 className="mb-4 flex items-center gap-2 font-serif text-xl text-stone-900">
+              <ChatIcon className="h-8 w-8" />
+              Чат заказа
+            </h2>
 
             {isClient && threads.length > 1 && (
               <div className="mb-4 flex flex-wrap gap-1.5 border-b border-stone-100 pb-4">
@@ -565,21 +569,36 @@ export default function OrderPage() {
               <p className="text-sm text-stone-500">Выберите отклик выше, чтобы начать переписку.</p>
             ) : (
               <>
-                <div className="mb-4 max-h-[480px] space-y-3 overflow-y-auto rounded-lg bg-stone-50 p-3">
-                  {messages.map((message) => (
-                    <div key={message.id} className="rounded-lg bg-white p-3 shadow-sm">
-                      <p className="text-xs text-stone-500">{message.sender?.profile?.displayName ?? message.sender?.email ?? message.senderId}</p>
-                      {message.type === 'INVOICE' && message.invoice ? (
-                        <div className="mt-2 rounded-lg border border-brand/20 bg-brand/10 p-3">
-                          <p className="font-semibold">Счёт на оплату {money(message.invoice.amount, message.invoice.currency)}</p>
-                          <p className="text-sm text-stone-600">{message.invoice.status}</p>
+                <div className="mb-4 max-h-[480px] space-y-3 overflow-y-auto rounded-2xl bg-stone-50 p-4">
+                  {messages.map((message) => {
+                    const isOwn = message.senderId === me?.id;
+                    const name = message.sender?.profile?.displayName ?? message.sender?.email ?? 'Участник';
+                    return (
+                      <div key={message.id} className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
+                        <div
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-serif text-xs text-stone-900 ${
+                            isOwn ? 'bg-card-sand' : 'bg-card-lavender'
+                          }`}
+                        >
+                          {name.charAt(0).toUpperCase()}
                         </div>
-                      ) : (
-                        <p className="mt-1 text-sm text-stone-800">{message.body}</p>
-                      )}
-                    </div>
-                  ))}
-                  {messages.length === 0 && <p className="text-sm text-stone-500">Сообщений пока нет.</p>}
+                        <div className={`max-w-[75%] rounded-2xl p-3 shadow-sm ${isOwn ? 'rounded-br-sm bg-brand text-white' : 'rounded-bl-sm bg-white text-stone-900'}`}>
+                          <p className={`text-xs ${isOwn ? 'text-white/70' : 'text-stone-500'}`}>{name}</p>
+                          {message.type === 'INVOICE' && message.invoice ? (
+                            <div className={`mt-2 rounded-lg border p-3 ${isOwn ? 'border-white/30 bg-white/10' : 'border-brand/20 bg-brand/10'}`}>
+                              <p className="font-semibold">Счёт на оплату {money(message.invoice.amount, message.invoice.currency)}</p>
+                              <p className={`text-sm ${isOwn ? 'text-white/80' : 'text-stone-600'}`}>{message.invoice.status}</p>
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-sm">{message.body}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {messages.length === 0 && (
+                    <EmptyState icon={<ChatIcon />} title="Сообщений пока нет" description="Напишите первым — это ни к чему не обязывает." />
+                  )}
                 </div>
                 <form onSubmit={sendMessage} className="flex gap-2">
                   <input

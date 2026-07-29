@@ -70,11 +70,11 @@ export default function PricingPage() {
   }
 
   if (loading) {
-    return <main className="mx-auto max-w-5xl px-4 py-10 text-stone-500">Загружаем тарифы…</main>;
+    return <main className="mx-auto max-w-6xl px-4 py-10 text-stone-500">Загружаем тарифы…</main>;
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-6xl px-4 py-10">
       <AppHeader />
       <h1 className="mb-2 font-serif text-3xl text-stone-900">Тарифы</h1>
       <p className="mb-8 text-stone-500">Меньше комиссия, выше лимиты, приоритет в поддержке — по мере роста.</p>

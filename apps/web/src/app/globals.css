@@ -4,4 +4,16 @@
 
 body {
   @apply bg-cream text-stone-900;
+  /* Мягкие цветные пятна по краям + едва заметная точечная текстура — на
+     широких мониторах (2K/FullHD+) контент в узком контейнере не выглядит
+     "островом в пустоте", периферия остаётся живой, но не отвлекает. */
+  background-image:
+    radial-gradient(ellipse 900px 700px at 100% 0%, rgba(204, 120, 92, 0.08), transparent 60%),
+    radial-gradient(ellipse 800px 600px at 0% 100%, rgba(139, 154, 114, 0.10), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, rgba(215, 213, 232, 0.12), transparent 55%),
+    radial-gradient(circle, rgba(26, 26, 26, 0.05) 1px, transparent 1px);
+  background-size: auto, auto, auto, 22px 22px;
+  background-attachment: fixed, fixed, fixed, fixed;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+  min-height: 100vh;
 }

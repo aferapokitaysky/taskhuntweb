@@ -117,11 +117,11 @@ export default function SupportPage() {
   }
 
   if (loading) {
-    return <main className="mx-auto max-w-5xl px-4 py-10 text-stone-500">Загружаем поддержку…</main>;
+    return <main className="mx-auto max-w-6xl px-4 py-10 text-stone-500">Загружаем поддержку…</main>;
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
+    <main className="mx-auto max-w-6xl px-4 py-8">
       <AppHeader />
       <h1 className="mb-6 font-serif text-2xl text-stone-900">Поддержка</h1>
 

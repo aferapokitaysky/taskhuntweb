@@ -152,11 +152,11 @@ export default function DashboardPage() {
   }
 
   if (loading) {
-    return <main className="mx-auto max-w-6xl px-4 py-10 text-stone-500">Загружаем dashboard...</main>;
+    return <main className="mx-auto max-w-7xl px-4 py-10 text-stone-500">Загружаем dashboard...</main>;
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
+    <main className="mx-auto max-w-7xl px-4 py-8">
       <AppHeader />
       <h1 className="mb-8 font-serif text-3xl text-stone-900">Dashboard</h1>
 

@@ -99,7 +99,7 @@ export default function AdminPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
+    <main className="mx-auto max-w-7xl px-4 py-8">
       <AppHeader />
       <h1 className="mb-6 font-serif text-3xl text-stone-900">Admin</h1>
 
