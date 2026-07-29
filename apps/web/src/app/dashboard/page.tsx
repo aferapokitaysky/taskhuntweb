@@ -39,6 +39,9 @@ export default function DashboardPage() {
   );
   const [withdrawing, setWithdrawing] = useState(false);
   const [orderSearch, setOrderSearch] = useState('');
+  const [savedOrderIds, setSavedOrderIds] = useState<Set<string>>(new Set());
+  const [savedOrders, setSavedOrders] = useState<Order[]>([]);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
 
   useEffect(() => {
     Promise.all([api<User>('/users/me'), api<WalletBalance>('/wallet/balance'), api<Order[]>('/orders'), api<Category[]>('/categories')])
@@ -52,7 +55,38 @@ export default function DashboardPage() {
       })
       .catch(() => undefined) // сбой начальной загрузки — просто пустой dashboard с иллюстрациями, без тревожного баннера
       .finally(() => setLoading(false));
+
+    api<Order[]>('/orders/saved/mine')
+      .then((list) => {
+        setSavedOrders(list);
+        setSavedOrderIds(new Set(list.map((o) => o.id)));
+      })
+      .catch(() => undefined);
   }, []);
+
+  async function toggleSaved(order: Order) {
+    const isSaved = savedOrderIds.has(order.id);
+    setSavedOrderIds((current) => {
+      const next = new Set(current);
+      if (isSaved) next.delete(order.id);
+      else next.add(order.id);
+      return next;
+    });
+    setSavedOrders((current) => (isSaved ? current.filter((o) => o.id !== order.id) : [order, ...current]));
+    try {
+      if (isSaved) await api(`/orders/${order.id}/favorite`, { method: 'DELETE' });
+      else await api(`/orders/${order.id}/favorite`, { method: 'POST' });
+    } catch {
+      // на ошибке откатываем оптимистичное обновление
+      setSavedOrderIds((current) => {
+        const next = new Set(current);
+        if (isSaved) next.add(order.id);
+        else next.delete(order.id);
+        return next;
+      });
+      setSavedOrders((current) => (isSaved ? [order, ...current] : current.filter((o) => o.id !== order.id)));
+    }
+  }
 
   const isClient = me?.roles.includes('CLIENT') ?? false;
   const isFreelancer = me?.roles.includes('FREELANCER') ?? false;
@@ -225,20 +259,42 @@ export default function DashboardPage() {
 
       <div className={`grid gap-6 ${hasAside ? 'lg:grid-cols-[1fr_360px]' : ''}`}>
         <section>
-          <div className="mb-3 flex items-center gap-2.5">
+          <div className="mb-3 flex flex-wrap items-center gap-2.5">
             <h2 className="font-serif text-xl text-stone-900">Заказы</h2>
             <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-brand px-2 text-xs font-semibold text-white">
               {orders.length}
             </span>
+            <div className="ml-auto flex items-center gap-1 rounded-full bg-stone-100 p-1 text-sm">
+              <button
+                type="button"
+                onClick={() => setShowSavedOnly(false)}
+                className={`rounded-full px-3 py-1 font-medium transition ${
+                  !showSavedOnly ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+                }`}
+              >
+                Все
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSavedOnly(true)}
+                className={`rounded-full px-3 py-1 font-medium transition ${
+                  showSavedOnly ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+                }`}
+              >
+                Избранное {savedOrders.length > 0 && `(${savedOrders.length})`}
+              </button>
+            </div>
           </div>
-          <input
-            placeholder="Поиск по названию или описанию"
-            value={orderSearch}
-            onChange={(e) => setOrderSearch(e.target.value)}
-            className="mb-4 w-full rounded-lg border border-stone-300 px-4 py-2 text-sm"
-          />
+          {!showSavedOnly && (
+            <input
+              placeholder="Поиск по названию или описанию"
+              value={orderSearch}
+              onChange={(e) => setOrderSearch(e.target.value)}
+              className="mb-4 w-full rounded-lg border border-stone-300 px-4 py-2 text-sm"
+            />
+          )}
           <div className="space-y-3">
-            {orders.map((order) => (
+            {(showSavedOnly ? savedOrders : orders).map((order) => (
               <article
                 key={order.id}
                 className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
@@ -267,9 +323,29 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{money(order.budgetMin, order.currency)}</p>
-                    <p className="text-xs text-stone-500">{order.status}</p>
+                  <div className="flex items-start gap-2">
+                    <div className="text-right">
+                      <p className="font-semibold">{money(order.budgetMin, order.currency)}</p>
+                      <p className="text-xs text-stone-500">{order.status}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => toggleSaved(order)}
+                      title={savedOrderIds.has(order.id) ? 'Убрать из избранного' : 'В избранное'}
+                      className="shrink-0 rounded-full p-1 text-stone-300 transition hover:scale-110 hover:text-amber-500"
+                    >
+                      <svg
+                        viewBox="0 0 20 20"
+                        className={`h-5 w-5 ${savedOrderIds.has(order.id) ? 'fill-amber-400 text-amber-500' : 'fill-none text-stone-300'}`}
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      >
+                        <path
+                          d="M10 3l2.2 4.46 4.92.72-3.56 3.47.84 4.9L10 14.14l-4.4 2.31.84-4.9-3.56-3.47 4.92-.72L10 3z"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
@@ -295,7 +371,14 @@ export default function DashboardPage() {
                 </div>
               </article>
             ))}
-            {orders.length === 0 && (
+            {showSavedOnly && savedOrders.length === 0 && (
+              <EmptyState
+                icon={<BuildIcon />}
+                title="В избранном пока пусто"
+                description="Нажмите на звёздочку у заказа, чтобы вернуться к нему позже."
+              />
+            )}
+            {!showSavedOnly && orders.length === 0 && (
               <EmptyState
                 icon={<BuildIcon />}
                 title="Заказов пока нет"

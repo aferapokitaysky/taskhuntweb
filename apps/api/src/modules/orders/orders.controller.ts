@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -34,6 +34,27 @@ export class OrdersController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.ordersService.findOne(id);
+  }
+
+  // Регистрируем ДО ':id', чтобы 'saved' не перехватился параметром — хотя
+  // Nest и матчит ':id' только по одному сегменту пути, порядок здесь для
+  // ясности (см. аналогичный комментарий в FreelancersController).
+  @UseGuards(JwtAuthGuard)
+  @Get('saved/mine')
+  listSaved(@CurrentUser() user: AuthenticatedUser) {
+    return this.ordersService.listSavedOrders(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/favorite')
+  saveOrder(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.ordersService.saveOrder(user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/favorite')
+  unsaveOrder(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.ordersService.unsaveOrder(user.id, id);
   }
 
   // Ранжированные отклики ("Best Match") — видит только заказчик этого заказа,

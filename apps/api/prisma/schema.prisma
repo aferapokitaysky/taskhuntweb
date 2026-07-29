@@ -95,6 +95,7 @@ model User {
   notifications     Notification[]
   files             FileAsset[]
   payoutAddresses   SavedPayoutAddress[]
+  savedOrders       SavedOrder[]
 
   fraudFlags         FraudFlag[] @relation("FraudFlagSubject")
   fraudFlagsReviewed FraudFlag[] @relation("FraudFlagReviewer")
@@ -232,6 +233,7 @@ model Order {
   disputes     Dispute[]
   invoices     Invoice[]
   fraudFlags   FraudFlag[]
+  savedBy      SavedOrder[]
 
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -239,6 +241,20 @@ model Order {
   @@index([status])
   @@index([categoryId])
   @@map("orders")
+}
+
+// "Избранное" — фрилансер откладывает заказ, чтобы вернуться к нему позже
+// (аналог сохранённых вакансий на job-бордах), без привязки к отклику.
+model SavedOrder {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, orderId])
+  @@map("saved_orders")
 }
 
 // Хранит снапшот заказа при каждом значимом изменении — можно строить diff

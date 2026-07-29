@@ -44,6 +44,11 @@ describe('OrdersService', () => {
       review: {
         groupBy: jest.fn().mockResolvedValue([]),
       },
+      savedOrder: {
+        upsert: jest.fn(),
+        deleteMany: jest.fn(),
+        findMany: jest.fn(),
+      },
       $transaction: jest.fn(async (cb: any) => cb(prisma)),
     };
 
@@ -320,6 +325,53 @@ describe('OrdersService', () => {
 
       expect(res.bids[0].freelancer.avgRating).toBe(4.8);
       expect(res.bids[0].freelancer.reviewsCount).toBe(5);
+    });
+  });
+
+  describe('saveOrder', () => {
+    it('бросает NotFoundException для несуществующего заказа', async () => {
+      prisma.order.findUnique.mockResolvedValue(null);
+      await expect(service.saveOrder('user-1', 'missing-order')).rejects.toThrow(NotFoundException);
+      expect(prisma.savedOrder.upsert).not.toHaveBeenCalled();
+    });
+
+    it('идемпотентно добавляет заказ в избранное через upsert', async () => {
+      prisma.order.findUnique.mockResolvedValue({ id: 'order-1' });
+      const result = await service.saveOrder('user-1', 'order-1');
+
+      expect(prisma.savedOrder.upsert).toHaveBeenCalledWith({
+        where: { userId_orderId: { userId: 'user-1', orderId: 'order-1' } },
+        create: { userId: 'user-1', orderId: 'order-1' },
+        update: {},
+      });
+      expect(result).toEqual({ saved: true });
+    });
+  });
+
+  describe('unsaveOrder', () => {
+    it('удаляет запись избранного', async () => {
+      const result = await service.unsaveOrder('user-1', 'order-1');
+      expect(prisma.savedOrder.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1', orderId: 'order-1' } });
+      expect(result).toEqual({ saved: false });
+    });
+  });
+
+  describe('listSavedOrders', () => {
+    it('возвращает заказы из сохранённых записей, самые новые первыми', async () => {
+      prisma.savedOrder.findMany.mockResolvedValue([
+        { order: { id: 'order-2', title: 'Second' } },
+        { order: { id: 'order-1', title: 'First' } },
+      ]);
+
+      const result = await service.listSavedOrders('user-1');
+
+      expect(prisma.savedOrder.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 'user-1' }, orderBy: { createdAt: 'desc' } }),
+      );
+      expect(result).toEqual([
+        { id: 'order-2', title: 'Second' },
+        { id: 'order-1', title: 'First' },
+      ]);
     });
   });
 });

@@ -310,4 +310,30 @@ export class OrdersService {
 
     return dispute;
   }
+
+  async saveOrder(userId: string, orderId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId }, select: { id: true } });
+    if (!order) throw new NotFoundException('Order not found');
+
+    await this.prisma.savedOrder.upsert({
+      where: { userId_orderId: { userId, orderId } },
+      create: { userId, orderId },
+      update: {},
+    });
+    return { saved: true };
+  }
+
+  async unsaveOrder(userId: string, orderId: string) {
+    await this.prisma.savedOrder.deleteMany({ where: { userId, orderId } });
+    return { saved: false };
+  }
+
+  async listSavedOrders(userId: string) {
+    const saved = await this.prisma.savedOrder.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: { order: { include: { category: true, _count: { select: { bids: true } } } } },
+    });
+    return saved.map((s) => s.order);
+  }
 }
