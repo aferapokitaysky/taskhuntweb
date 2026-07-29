@@ -5,6 +5,9 @@ import { api } from '@/lib/api';
 import { money } from '@/lib/types';
 import { CheckIcon } from '@/components/icons/CheckIcon';
 import { CrownIcon } from '@/components/icons/CrownIcon';
+import { SeedlingIcon } from '@/components/icons/illustrated/SeedlingIcon';
+import { RocketIcon } from '@/components/icons/illustrated/RocketIcon';
+import { CrownIllustratedIcon } from '@/components/icons/illustrated/CrownIllustratedIcon';
 import { AppHeader } from '@/components/AppHeader';
 import { ErrorNotice } from '@/components/ErrorNotice';
 
@@ -99,6 +102,11 @@ export default function PricingPage() {
                   Лучший выбор
                 </span>
               )}
+              <div className="mb-2 h-12 w-12">
+                {tier.name === 'STARTER' && <SeedlingIcon className="h-12 w-12" />}
+                {tier.name === 'PRO' && <RocketIcon className="h-12 w-12" />}
+                {tier.name === 'PREMIUM' && <CrownIllustratedIcon className="h-12 w-12" />}
+              </div>
               <h2 className="font-serif text-xl text-stone-900">{TIER_TITLE[tier.name]}</h2>
               <p className="mt-2 text-3xl font-bold text-stone-900">
                 {isFree ? 'Бесплатно' : money(tier.priceUsd, 'USD')}
