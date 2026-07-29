@@ -1,8 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { Toggle } from '@/components/Toggle';
+import { AppHeader } from '@/components/AppHeader';
 import type { Category, CommissionRule, Dispute, FeatureFlag, Skill, User } from '@/lib/types';
 
 // Category.slug/Skill.slug обязательны и уникальны на бэке — генерируем
@@ -82,12 +83,10 @@ export default function AdminPage() {
   if (me && !me.isStaff) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-10">
-        <Link href="/dashboard" className="text-sm font-medium text-slate-500 hover:text-slate-900">
-          Dashboard
-        </Link>
-        <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h1 className="text-2xl font-bold">Admin</h1>
-          <p className="mt-2 text-slate-600">Для этого раздела нужен staff-доступ.</p>
+        <AppHeader />
+        <section className="mt-6 rounded-2xl border border-stone-100 bg-white p-6 shadow-sm">
+          <h1 className="font-serif text-2xl text-stone-900">Admin</h1>
+          <p className="mt-2 text-stone-600">Для этого раздела нужен staff-доступ.</p>
         </section>
       </main>
     );
@@ -95,15 +94,8 @@ export default function AdminPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm text-slate-500">TaskHunt</p>
-          <h1 className="text-3xl font-bold">Admin</h1>
-        </div>
-        <Link href="/dashboard" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
-          Dashboard
-        </Link>
-      </header>
+      <AppHeader />
+      <h1 className="mb-6 font-serif text-3xl text-stone-900">Admin</h1>
 
       <div className="mb-6 flex flex-wrap gap-2">
         {[
@@ -118,8 +110,8 @@ export default function AdminPage() {
             key={key}
             type="button"
             onClick={() => setTab(key as Tab)}
-            className={`rounded-lg border px-4 py-2 text-sm font-medium ${
-              tab === key ? 'border-brand bg-indigo-50 text-brand' : 'border-slate-300 bg-white'
+            className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+              tab === key ? 'border-brand bg-brand/10 text-brand' : 'border-stone-300 bg-white hover:bg-stone-50'
             }`}
           >
             {label}
@@ -128,21 +120,21 @@ export default function AdminPage() {
       </div>
 
       {error && <p className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-      {loading && <p className="text-slate-500">Загружаем...</p>}
+      {loading && <p className="text-stone-500">Загружаем...</p>}
 
       {tab === 'users' && (
         <section className="space-y-3">
           {users.map((user) => (
-            <article key={user.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <article key={user.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
               <div>
                 <p className="font-semibold">{user.profile?.displayName ?? user.email}</p>
-                <p className="text-sm text-slate-500">{user.email}</p>
+                <p className="text-sm text-stone-500">{user.email}</p>
               </div>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => mutate(() => api(`/admin/users/${user.id}/suspend`, { method: 'POST' }))}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
+                  className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium"
                 >
                   Suspend
                 </button>
@@ -162,25 +154,25 @@ export default function AdminPage() {
       {tab === 'disputes' && (
         <section className="space-y-3">
           {disputes.map((dispute) => (
-            <article key={dispute.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <article key={dispute.id} className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
               <div className="flex flex-wrap justify-between gap-3">
                 <div>
                   <p className="font-semibold">Order {dispute.orderId}</p>
-                  <p className="text-sm text-slate-600">{dispute.reason}</p>
+                  <p className="text-sm text-stone-600">{dispute.reason}</p>
                 </div>
-                <span className="text-sm text-slate-500">{dispute.status}</span>
+                <span className="text-sm text-stone-500">{dispute.status}</span>
               </div>
               <textarea
                 placeholder="Resolution notes"
                 value={notesByDispute[dispute.id] ?? ''}
                 onChange={(e) => setNotesByDispute({ ...notesByDispute, [dispute.id]: e.target.value })}
-                className="mt-4 min-h-20 w-full rounded-lg border border-slate-300 px-3 py-2"
+                className="mt-4 min-h-20 w-full rounded-lg border border-stone-300 px-3 py-2"
               />
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => mutate(() => api(`/admin/disputes/${dispute.id}/assign`, { method: 'PATCH' }))}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
+                  className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium"
                 >
                   Assign to me
                 </button>
@@ -194,7 +186,7 @@ export default function AdminPage() {
                       }),
                     )
                   }
-                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+                  className="rounded-lg bg-stone-900 px-3 py-2 text-sm font-medium text-white"
                 >
                   Client wins
                 </button>
@@ -221,26 +213,25 @@ export default function AdminPage() {
       {tab === 'flags' && (
         <section className="space-y-3">
           {flags.map((flag) => (
-            <article key={flag.key} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <article key={flag.key} className="flex items-center justify-between gap-3 rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
               <div>
                 <p className="font-semibold">{flag.key}</p>
-                <p className="text-sm text-slate-500">Rollout {flag.rolloutPercent}%</p>
+                <p className="text-sm text-stone-500">Rollout {flag.rolloutPercent}%</p>
               </div>
-              <label className="flex items-center gap-2 text-sm font-medium">
-                <input
-                  type="checkbox"
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <span>Enabled</span>
+                <Toggle
                   checked={flag.enabled}
-                  onChange={(e) =>
+                  onChange={(enabled) =>
                     mutate(() =>
                       api(`/admin/feature-flags/${flag.key}`, {
                         method: 'PATCH',
-                        body: JSON.stringify({ enabled: e.target.checked }),
+                        body: JSON.stringify({ enabled }),
                       }),
                     )
                   }
                 />
-                Enabled
-              </label>
+              </div>
             </article>
           ))}
         </section>
@@ -260,37 +251,39 @@ export default function AdminPage() {
       {tab === 'metrics' && metrics && (
         <section className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-            {[
-              ['Выручка всего', `$${metrics.revenue.total}`],
-              ['Выручка в этом месяце', `$${metrics.revenue.thisMonth}`],
-              ['Активных споров', metrics.activeDisputes],
-              ['Новых юзеров за неделю', metrics.newUsersThisWeek],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="text-xs uppercase text-slate-500">{label}</p>
-                <p className="mt-1 text-xl font-semibold">{value}</p>
+            {(
+              [
+                ['Выручка всего', `$${metrics.revenue.total}`, 'bg-card-sand'],
+                ['Выручка в этом месяце', `$${metrics.revenue.thisMonth}`, 'bg-card-sage'],
+                ['Активных споров', metrics.activeDisputes, 'bg-card-rose'],
+                ['Новых юзеров за неделю', metrics.newUsersThisWeek, 'bg-card-lavender'],
+              ] as const
+            ).map(([label, value, colorClass]) => (
+              <div key={label} className={`rounded-2xl ${colorClass} p-4`}>
+                <p className="text-xs uppercase text-stone-600">{label}</p>
+                <p className="mt-1 font-serif text-xl text-stone-900">{value}</p>
               </div>
             ))}
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
               <h3 className="mb-3 font-semibold">Заказы по статусам</h3>
               <div className="space-y-1 text-sm">
                 {Object.entries(metrics.ordersByStatus).map(([status, count]) => (
                   <div key={status} className="flex justify-between">
-                    <span className="text-slate-600">{status}</span>
+                    <span className="text-stone-600">{status}</span>
                     <span className="font-medium">{count}</span>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
               <h3 className="mb-3 font-semibold">Активные подписки по тирам</h3>
               <div className="space-y-1 text-sm">
                 {Object.entries(metrics.activeSubscriptionsByTier).map(([tier, count]) => (
                   <div key={tier} className="flex justify-between">
-                    <span className="text-slate-600">{tier}</span>
+                    <span className="text-stone-600">{tier}</span>
                     <span className="font-medium">{count}</span>
                   </div>
                 ))}
@@ -322,7 +315,7 @@ export default function AdminPage() {
                 placeholder="Новая категория"
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
               />
               <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white">
                 Добавить
@@ -330,7 +323,7 @@ export default function AdminPage() {
             </form>
             <div className="space-y-2">
               {categories.map((c) => (
-                <div key={c.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                <div key={c.id} className="flex items-center justify-between rounded-xl border border-stone-100 bg-white p-3 text-sm">
                   <span>{c.name}</span>
                   <button
                     type="button"
@@ -364,7 +357,7 @@ export default function AdminPage() {
                 placeholder="Новый навык"
                 value={newSkillName}
                 onChange={(e) => setNewSkillName(e.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
               />
               <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white">
                 Добавить
@@ -372,7 +365,7 @@ export default function AdminPage() {
             </form>
             <div className="space-y-2">
               {skills.map((s) => (
-                <div key={s.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                <div key={s.id} className="flex items-center justify-between rounded-xl border border-stone-100 bg-white p-3 text-sm">
                   <span>{s.name}</span>
                   <button
                     type="button"
@@ -395,10 +388,10 @@ function CommissionEditor({ rule, onSave }: { rule: CommissionRule; onSave: (per
   const [percentage, setPercentage] = useState(String(rule.percentage ?? ''));
 
   return (
-    <article className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <article className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
       <div>
         <p className="font-semibold">{rule.type}</p>
-        <p className="text-sm text-slate-500">Current: {rule.percentage ?? '0'}%</p>
+        <p className="text-sm text-stone-500">Current: {rule.percentage ?? '0'}%</p>
       </div>
       <div className="flex gap-2">
         <input
@@ -407,7 +400,7 @@ function CommissionEditor({ rule, onSave }: { rule: CommissionRule; onSave: (per
           step="0.1"
           value={percentage}
           onChange={(e) => setPercentage(e.target.value)}
-          className="w-28 rounded-lg border border-slate-300 px-3 py-2"
+          className="w-28 rounded-lg border border-stone-300 px-3 py-2"
         />
         <button type="button" onClick={() => onSave(Number(percentage))} className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white">
           Save

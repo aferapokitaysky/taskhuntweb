@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { BoostIcon } from '@/components/icons/BoostIcon';
-import { NotificationBell } from '@/components/NotificationBell';
+import { AppHeader } from '@/components/AppHeader';
+import { EmptyState } from '@/components/EmptyState';
+import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { Category, Order, User, WalletBalance } from '@/lib/types';
@@ -135,69 +137,41 @@ export default function DashboardPage() {
   }
 
   if (loading) {
-    return <main className="mx-auto max-w-6xl px-4 py-10 text-slate-500">Загружаем dashboard...</main>;
+    return <main className="mx-auto max-w-6xl px-4 py-10 text-stone-500">Загружаем dashboard...</main>;
   }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm text-slate-500">TaskHunt</p>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <NotificationBell />
-          {me?.isStaff && (
-            <Link href="/admin" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
-              Admin
-            </Link>
-          )}
-          <Link href="/profile" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
-            Профиль
-          </Link>
-          <Link href="/support" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
-            Поддержка
-          </Link>
-          <Link href="/pricing" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
-            Тарифы
-          </Link>
-          <Link href="/freelancers" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
-            Фрилансеры
-          </Link>
-          <Link href="/referrals" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
-            Реферальная программа
-          </Link>
-          <Link href="/" className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-white">
-            На главную
-          </Link>
-        </div>
-      </header>
+      <AppHeader />
+      <h1 className="mb-8 font-serif text-3xl text-stone-900">Dashboard</h1>
 
       {error && <p className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
       <section className="mb-8 grid gap-3 md:grid-cols-5">
         {wallet &&
-          [
-            ['Main', wallet.mainBalance],
-            ['Escrow', wallet.escrowBalance],
-            ['Locked', wallet.lockedBalance],
-            ['Withdrawable', wallet.withdrawableBalance],
-            ['Pending', wallet.pendingBalance],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs uppercase text-slate-500">{label}</p>
-              <p className="mt-1 text-lg font-semibold">{money(value, wallet.currency)}</p>
+          (
+            [
+              ['Main', wallet.mainBalance, 'bg-card-sand'],
+              ['Escrow', wallet.escrowBalance, 'bg-card-sage'],
+              ['Locked', wallet.lockedBalance, 'bg-card-rose'],
+              ['Withdrawable', wallet.withdrawableBalance, 'bg-card-lavender'],
+              ['Pending', wallet.pendingBalance, 'bg-cream-200'],
+            ] as const
+          ).map(([label, value, colorClass]) => (
+            <div key={label} className={`rounded-2xl ${colorClass} p-4`}>
+              <p className="text-xs uppercase text-stone-600">{label}</p>
+              <p className="mt-1 font-serif text-lg text-stone-900">{money(value, wallet.currency)}</p>
             </div>
           ))}
       </section>
 
-      <section className="mb-8 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="mb-8 rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Вывод средств</h2>
           <button
             type="button"
             onClick={() => setShowWithdrawForm((v) => !v)}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
           >
             {showWithdrawForm ? 'Скрыть' : 'Вывести средства'}
           </button>
@@ -212,14 +186,14 @@ export default function DashboardPage() {
               placeholder="Сумма, USD"
               value={withdrawForm.amount}
               onChange={(e) => setWithdrawForm((f) => ({ ...f, amount: e.target.value }))}
-              className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm"
             />
             <input
               required
               placeholder="Адрес кошелька для выплаты"
               value={withdrawForm.payoutAddress}
               onChange={(e) => setWithdrawForm((f) => ({ ...f, payoutAddress: e.target.value }))}
-              className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
             />
             <button
               type="submit"
@@ -242,18 +216,21 @@ export default function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Заказы</h2>
-            <span className="text-sm text-slate-500">{orders.length}</span>
+            <h2 className="font-serif text-xl text-stone-900">Заказы</h2>
+            <span className="text-sm text-stone-500">{orders.length}</span>
           </div>
           <input
             placeholder="Поиск по названию или описанию"
             value={orderSearch}
             onChange={(e) => setOrderSearch(e.target.value)}
-            className="mb-4 w-full rounded-lg border border-slate-300 px-4 py-2 text-sm"
+            className="mb-4 w-full rounded-lg border border-stone-300 px-4 py-2 text-sm"
           />
           <div className="space-y-3">
             {orders.map((order) => (
-              <article key={order.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <article
+                key={order.id}
+                className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
@@ -267,16 +244,16 @@ export default function DashboardPage() {
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 line-clamp-2 text-sm text-slate-600">{order.description}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-stone-600">{order.description}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold">{money(order.budgetMin, order.currency)}</p>
-                    <p className="text-xs text-slate-500">{order.status}</p>
+                    <p className="text-xs text-stone-500">{order.status}</p>
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                  <span className="rounded-full bg-slate-100 px-3 py-1">{order.category?.name ?? 'Категория'}</span>
-                  <span className="text-slate-500">Откликов: {order._count?.bids ?? order.bids?.length ?? 0}</span>
+                  <span className="rounded-full bg-stone-100 px-3 py-1">{order.category?.name ?? 'Категория'}</span>
+                  <span className="text-stone-500">Откликов: {order._count?.bids ?? order.bids?.length ?? 0}</span>
                   {order.acceptedBidId && (
                     <Link href={`/orders/${order.id}`} className="font-medium text-brand hover:text-brand-dark">
                       Открыть чат
@@ -294,18 +271,25 @@ export default function DashboardPage() {
                 </div>
               </article>
             ))}
+            {orders.length === 0 && (
+              <EmptyState
+                icon={<BuildIcon />}
+                title="Заказов пока нет"
+                description={isClient ? 'Разместите первый заказ справа — отклики начнут приходить сразу.' : 'Загляните позже или сбросьте поиск.'}
+              />
+            )}
           </div>
         </section>
 
         <aside className="space-y-6">
           {isClient && (
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <section className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold">Создать заказ</h2>
               <form onSubmit={createOrder} className="space-y-3">
                 <select
                   value={orderForm.categoryId}
                   onChange={(e) => setOrderForm({ ...orderForm, categoryId: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
                 >
                   {flatCategories.map((category) => (
                     <option key={category.id} value={category.id}>
@@ -319,7 +303,7 @@ export default function DashboardPage() {
                   placeholder="Название"
                   value={orderForm.title}
                   onChange={(e) => setOrderForm({ ...orderForm, title: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
                 />
                 <textarea
                   required
@@ -327,7 +311,7 @@ export default function DashboardPage() {
                   placeholder="Описание задачи"
                   value={orderForm.description}
                   onChange={(e) => setOrderForm({ ...orderForm, description: e.target.value })}
-                  className="min-h-28 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  className="min-h-28 w-full rounded-lg border border-stone-300 px-3 py-2"
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <input
@@ -337,7 +321,7 @@ export default function DashboardPage() {
                     placeholder="Бюджет от"
                     value={orderForm.budgetMin}
                     onChange={(e) => setOrderForm({ ...orderForm, budgetMin: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2"
                   />
                   <input
                     type="number"
@@ -345,14 +329,14 @@ export default function DashboardPage() {
                     placeholder="До"
                     value={orderForm.budgetMax}
                     onChange={(e) => setOrderForm({ ...orderForm, budgetMax: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2"
                   />
                 </div>
                 <input
                   type="date"
                   value={orderForm.deadline}
                   onChange={(e) => setOrderForm({ ...orderForm, deadline: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
                 />
                 <button type="submit" className="w-full rounded-lg bg-brand px-4 py-3 font-medium text-white">
                   Опубликовать
@@ -362,9 +346,9 @@ export default function DashboardPage() {
           )}
 
           {selectedOrder && (
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <section className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
               <h2 className="mb-1 text-lg font-semibold">Отклик</h2>
-              <p className="mb-4 text-sm text-slate-500">{selectedOrder.title}</p>
+              <p className="mb-4 text-sm text-stone-500">{selectedOrder.title}</p>
               <form onSubmit={submitBid} className="space-y-3">
                 <input
                   required
@@ -373,7 +357,7 @@ export default function DashboardPage() {
                   placeholder="Сумма, USD"
                   value={bidForm.amount}
                   onChange={(e) => setBidForm({ ...bidForm, amount: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
                 />
                 <input
                   required
@@ -382,14 +366,14 @@ export default function DashboardPage() {
                   placeholder="Дней на выполнение"
                   value={bidForm.deliveryDays}
                   onChange={(e) => setBidForm({ ...bidForm, deliveryDays: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
                 />
                 <textarea
                   required
                   placeholder="Сообщение заказчику"
                   value={bidForm.message}
                   onChange={(e) => setBidForm({ ...bidForm, message: e.target.value })}
-                  className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  className="min-h-24 w-full rounded-lg border border-stone-300 px-3 py-2"
                 />
                 <button type="submit" className="w-full rounded-lg bg-brand px-4 py-3 font-medium text-white">
                   Отправить отклик

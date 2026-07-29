@@ -1,10 +1,13 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { money } from '@/lib/types';
 import { CheckIcon } from '@/components/icons/CheckIcon';
+import { CrownIcon } from '@/components/icons/CrownIcon';
+import { AppHeader } from '@/components/AppHeader';
+
+const TIER_BG: Record<string, string> = { STARTER: 'bg-card-sand', PRO: 'bg-card-sage', PREMIUM: 'bg-white' };
 
 interface SubscriptionTier {
   id: string;
@@ -66,16 +69,14 @@ export default function PricingPage() {
   }
 
   if (loading) {
-    return <main className="mx-auto max-w-5xl px-4 py-10 text-slate-500">Загружаем тарифы…</main>;
+    return <main className="mx-auto max-w-5xl px-4 py-10 text-stone-500">Загружаем тарифы…</main>;
   }
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
-      <Link href="/dashboard" className="mb-6 inline-block text-sm font-medium text-slate-500 hover:text-slate-900">
-        ← Назад в dashboard
-      </Link>
-      <h1 className="mb-2 text-3xl font-bold">Тарифы</h1>
-      <p className="mb-8 text-slate-500">Меньше комиссия, выше лимиты, приоритет в поддержке — по мере роста.</p>
+      <AppHeader />
+      <h1 className="mb-2 font-serif text-3xl text-stone-900">Тарифы</h1>
+      <p className="mb-8 text-stone-500">Меньше комиссия, выше лимиты, приоритет в поддержке — по мере роста.</p>
 
       {error && <p className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
@@ -83,22 +84,29 @@ export default function PricingPage() {
         {tiers.map((tier) => {
           const isCurrent = mySubscription?.tier.name === tier.name;
           const isFree = tier.name === 'STARTER';
+          const isPremium = tier.name === 'PREMIUM';
           return (
             <div
               key={tier.id}
-              className={`rounded-xl border p-6 shadow-sm ${
-                tier.name === 'PREMIUM' ? 'border-brand ring-2 ring-brand' : 'border-slate-200 bg-white'
+              className={`relative rounded-3xl p-6 shadow-sm transition-transform duration-200 hover:-translate-y-1 ${TIER_BG[tier.name] ?? 'bg-white'} ${
+                isPremium ? 'ring-2 ring-brand' : ''
               }`}
             >
-              <h2 className="text-xl font-bold">{TIER_TITLE[tier.name]}</h2>
-              <p className="mt-2 text-3xl font-bold">
+              {isPremium && (
+                <span className="absolute -top-3 right-6 flex items-center gap-1 rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white">
+                  <CrownIcon className="h-3.5 w-3.5" />
+                  Лучший выбор
+                </span>
+              )}
+              <h2 className="font-serif text-xl text-stone-900">{TIER_TITLE[tier.name]}</h2>
+              <p className="mt-2 text-3xl font-bold text-stone-900">
                 {isFree ? 'Бесплатно' : money(tier.priceUsd, 'USD')}
-                {!isFree && <span className="text-sm font-normal text-slate-500">/мес</span>}
+                {!isFree && <span className="text-sm font-normal text-stone-500">/мес</span>}
               </p>
 
               <ul className="mt-6 space-y-2">
                 {tierFeatures(tier).map((feature) => (
-                  <li key={feature} className="flex items-center gap-2 text-sm text-slate-600">
+                  <li key={feature} className="flex items-center gap-2 text-sm text-stone-600">
                     <CheckIcon className="h-4 w-4 shrink-0 text-emerald-500" />
                     {feature}
                   </li>
@@ -111,7 +119,7 @@ export default function PricingPage() {
                     Ваш текущий тариф
                   </p>
                 ) : isFree ? (
-                  <p className="rounded-lg border border-slate-200 px-4 py-2 text-center text-sm text-slate-500">
+                  <p className="rounded-lg border border-stone-200 px-4 py-2 text-center text-sm text-stone-500">
                     Тариф по умолчанию
                   </p>
                 ) : (
@@ -126,7 +134,7 @@ export default function PricingPage() {
               </div>
 
               {checkoutTier === tier.name && payment && (
-                <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+                <div className="mt-4 rounded-lg bg-stone-50 p-3 text-xs text-stone-600">
                   <p className="mb-1 font-medium">Оплатите {payment.payAmount} {payment.payCurrency}:</p>
                   <p className="break-all">{payment.payAddress}</p>
                 </div>

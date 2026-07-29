@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { Skill, User } from '@/lib/types';
+import { AppHeader } from '@/components/AppHeader';
 
 export default function ProfilePage() {
   const [form, setForm] = useState({
@@ -72,79 +72,77 @@ export default function ProfilePage() {
   }
 
   if (loading) {
-    return <main className="mx-auto max-w-2xl px-4 py-10 text-slate-500">Загружаем профиль…</main>;
+    return <main className="mx-auto max-w-2xl px-4 py-10 text-stone-500">Загружаем профиль…</main>;
   }
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <Link href="/dashboard" className="mb-6 inline-block text-sm font-medium text-slate-500 hover:text-slate-900">
-        ← Назад в dashboard
-      </Link>
-      <h1 className="mb-6 text-2xl font-bold">Профиль</h1>
+      <AppHeader />
+      <h1 className="mb-6 font-serif text-2xl text-stone-900">Профиль</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4 rounded-3xl bg-white p-6 shadow-sm">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Имя</label>
+          <label className="mb-1 block text-sm font-medium text-stone-600">Имя</label>
           <input
             required
             value={form.displayName}
             onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-            className="w-full rounded-lg border border-slate-300 px-4 py-3"
+            className="w-full rounded-lg border border-stone-300 px-4 py-3"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">О себе</label>
+          <label className="mb-1 block text-sm font-medium text-stone-600">О себе</label>
           <textarea
             value={form.bio}
             onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
-            className="min-h-28 w-full rounded-lg border border-slate-300 px-4 py-3"
+            className="min-h-28 w-full rounded-lg border border-stone-300 px-4 py-3"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Страна</label>
+            <label className="mb-1 block text-sm font-medium text-stone-600">Страна</label>
             <input
               value={form.country}
               onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-4 py-3"
+              className="w-full rounded-lg border border-stone-300 px-4 py-3"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Город</label>
+            <label className="mb-1 block text-sm font-medium text-stone-600">Город</label>
             <input
               value={form.city}
               onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-4 py-3"
+              className="w-full rounded-lg border border-stone-300 px-4 py-3"
             />
           </div>
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">GitHub</label>
+          <label className="mb-1 block text-sm font-medium text-stone-600">GitHub</label>
           <input
             type="url"
             placeholder="https://github.com/username"
             value={form.githubUrl}
             onChange={(e) => setForm((f) => ({ ...f, githubUrl: e.target.value }))}
-            className="w-full rounded-lg border border-slate-300 px-4 py-3"
+            className="w-full rounded-lg border border-stone-300 px-4 py-3"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Сайт/портфолио</label>
+          <label className="mb-1 block text-sm font-medium text-stone-600">Сайт/портфолио</label>
           <input
             type="url"
             placeholder="https://..."
             value={form.websiteUrl}
             onChange={(e) => setForm((f) => ({ ...f, websiteUrl: e.target.value }))}
-            className="w-full rounded-lg border border-slate-300 px-4 py-3"
+            className="w-full rounded-lg border border-stone-300 px-4 py-3"
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-600">Навыки</label>
+          <label className="mb-2 block text-sm font-medium text-stone-600">Навыки</label>
           <div className="flex flex-wrap gap-2">
             {allSkills.map((skill) => {
               const selected = selectedSkillIds.includes(skill.id);
@@ -154,7 +152,7 @@ export default function ProfilePage() {
                   type="button"
                   onClick={() => toggleSkill(skill.id)}
                   className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
-                    selected ? 'border-brand bg-indigo-50 text-brand' : 'border-slate-300 text-slate-600 hover:border-slate-400'
+                    selected ? 'border-brand bg-brand/10 text-brand' : 'border-stone-300 text-stone-600 hover:border-stone-400'
                   }`}
                 >
                   {skill.name}

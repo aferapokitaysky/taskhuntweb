@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
@@ -11,6 +10,7 @@ import { FileUpload, type UploadedFile } from '@/components/FileUpload';
 import { PaperclipIcon } from '@/components/icons/PaperclipIcon';
 import { StarIcon } from '@/components/icons/StarIcon';
 import { BoostIcon } from '@/components/icons/BoostIcon';
+import { AppHeader } from '@/components/AppHeader';
 
 const MILESTONE_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Не оплачен',
@@ -229,23 +229,26 @@ export default function OrderPage() {
   }
 
   if (!order) {
-    return <main className="mx-auto max-w-5xl px-4 py-10 text-slate-500">Загружаем заказ...</main>;
+    return (
+      <main className="mx-auto max-w-5xl px-4 py-10">
+        <AppHeader />
+        <p className="text-stone-500">Загружаем заказ...</p>
+      </main>
+    );
   }
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
-      <Link href="/dashboard" className="mb-6 inline-block text-sm font-medium text-slate-500 hover:text-slate-900">
-        Назад в dashboard
-      </Link>
+      <AppHeader />
 
       {error && <p className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
-      <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="mb-6 rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm text-slate-500">{order.category?.name}</p>
+            <p className="text-sm text-stone-500">{order.category?.name}</p>
             <div className="mt-1 flex items-center gap-2">
-              <h1 className="text-3xl font-bold">{order.title}</h1>
+              <h1 className="font-serif text-3xl text-stone-900">{order.title}</h1>
               {order.isPromoted && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
                   <BoostIcon className="h-3 w-3" />
@@ -256,13 +259,13 @@ export default function OrderPage() {
           </div>
           <div className="text-right">
             <p className="text-xl font-semibold">{money(order.budgetMin, order.currency)}</p>
-            <p className="text-sm text-slate-500">{order.status}</p>
+            <p className="text-sm text-stone-500">{order.status}</p>
           </div>
         </div>
-        <p className="mt-4 whitespace-pre-wrap text-slate-700">{order.description}</p>
+        <p className="mt-4 whitespace-pre-wrap text-stone-700">{order.description}</p>
 
         {isClient && order.status === 'OPEN' && !order.isPromoted && (
-          <div className="mt-4 border-t border-slate-100 pt-4">
+          <div className="mt-4 border-t border-stone-100 pt-4">
             <button
               type="button"
               onClick={boostOrder}
@@ -273,7 +276,7 @@ export default function OrderPage() {
               {boosting ? 'Оформляем…' : 'Продвинуть заказ (7 дней)'}
             </button>
             {boostResult && (
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-sm text-stone-600">
                 {boostResult.paidFromQuota
                   ? 'Продвижение активировано из бесплатной квоты тарифа.'
                   : `Оплатите буст: ${boostResult.payAddress}`}
@@ -283,17 +286,17 @@ export default function OrderPage() {
         )}
       </section>
 
-      <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-4 text-xl font-semibold">Отклики</h2>
+      <section className="mb-6 rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 font-serif text-xl text-stone-900">Отклики</h2>
         <div className="space-y-3">
           {(order.bids ?? []).map((bid) => (
-            <div key={bid.id} className="rounded-lg border border-slate-200 p-3">
+            <div key={bid.id} className="rounded-lg border border-stone-200 p-3">
               <div className="flex justify-between gap-3">
                 <p className="font-medium">{bid.freelancer?.profile?.displayName ?? bid.freelancer?.email ?? 'Фрилансер'}</p>
                 <p className="font-semibold">{money(bid.amount, order.currency)}</p>
               </div>
-              <p className="mt-1 text-sm text-slate-600">{bid.message}</p>
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-1 text-sm text-stone-600">{bid.message}</p>
+              <p className="mt-2 text-xs text-stone-500">
                 {bid.deliveryDays} дн. · {bid.status}
               </p>
             </div>
@@ -302,18 +305,18 @@ export default function OrderPage() {
       </section>
 
       {hasChat && (
-        <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold">Этапы и сдача работы</h2>
+        <section className="mb-6 rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 font-serif text-xl text-stone-900">Этапы и сдача работы</h2>
 
           {hasMilestones ? (
             <div className="space-y-3">
               {milestones.map((milestone) => (
-                <div key={milestone.id} className="rounded-lg border border-slate-200 p-4">
+                <div key={milestone.id} className="rounded-lg border border-stone-200 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium">{milestone.title}</p>
                     <p className="font-semibold">{money(milestone.amount, order.currency)}</p>
                   </div>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-stone-500">
                     {MILESTONE_STATUS_LABEL[milestone.status] ?? milestone.status}
                   </p>
 
@@ -356,9 +359,9 @@ export default function OrderPage() {
               ))}
             </div>
           ) : (
-            <div className="rounded-lg border border-slate-200 p-4">
+            <div className="rounded-lg border border-stone-200 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-slate-600">Этапы не заведены — работа сдаётся заказом целиком.</p>
+                <p className="text-sm text-stone-600">Этапы не заведены — работа сдаётся заказом целиком.</p>
                 <div className="flex gap-2">
                   {isFreelancer && order.status === 'IN_PROGRESS' && (
                     <button
@@ -400,7 +403,7 @@ export default function OrderPage() {
 
           {isClient && (
             <details className="mt-4">
-              <summary className="cursor-pointer text-sm font-medium text-slate-500 hover:text-slate-900">
+              <summary className="cursor-pointer text-sm font-medium text-stone-500 hover:text-stone-900">
                 + Добавить этап
               </summary>
               <form onSubmit={createMilestone} className="mt-3 flex flex-wrap items-end gap-3">
@@ -409,7 +412,7 @@ export default function OrderPage() {
                   placeholder="Название этапа"
                   value={milestoneForm.title}
                   onChange={(e) => setMilestoneForm((f) => ({ ...f, title: e.target.value }))}
-                  className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 />
                 <input
                   required
@@ -418,15 +421,15 @@ export default function OrderPage() {
                   placeholder="Сумма"
                   value={milestoneForm.amount}
                   onChange={(e) => setMilestoneForm((f) => ({ ...f, amount: e.target.value }))}
-                  className="w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-28 rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 />
                 <input
                   type="date"
                   value={milestoneForm.dueDate}
                   onChange={(e) => setMilestoneForm((f) => ({ ...f, dueDate: e.target.value }))}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 />
-                <button type="submit" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">
+                <button type="submit" className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium hover:bg-stone-50">
                   Создать
                 </button>
               </form>
@@ -434,7 +437,7 @@ export default function OrderPage() {
           )}
 
           {order.status === 'COMPLETED' && !reviewSubmitted && (isClient || isFreelancer) && (
-            <div className="mt-6 rounded-lg border border-slate-200 p-4">
+            <div className="mt-6 rounded-lg border border-stone-200 p-4">
               <h3 className="mb-3 font-semibold">Оставить отзыв</h3>
               <form onSubmit={submitReview} className="space-y-3">
                 <div className="flex gap-1">
@@ -443,7 +446,7 @@ export default function OrderPage() {
                       key={n}
                       type="button"
                       onClick={() => setReviewRating(n)}
-                      className={n <= reviewRating ? 'text-amber-400' : 'text-slate-300'}
+                      className={n <= reviewRating ? 'text-amber-400' : 'text-stone-300'}
                       aria-label={`${n} из 5`}
                     >
                       <StarIcon className="h-7 w-7" filled={n <= reviewRating} />
@@ -454,7 +457,7 @@ export default function OrderPage() {
                   placeholder="Комментарий (необязательно)"
                   value={reviewComment}
                   onChange={(e) => setReviewComment(e.target.value)}
-                  className="min-h-20 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="min-h-20 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 />
                 <button type="submit" className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white">
                   Отправить отзыв
@@ -468,30 +471,30 @@ export default function OrderPage() {
 
       {hasChat && (
         <section className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-xl font-semibold">Чат заказа</h2>
-            <div className="mb-4 max-h-[480px] space-y-3 overflow-y-auto rounded-lg bg-slate-50 p-3">
+          <div className="rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
+            <h2 className="mb-4 font-serif text-xl text-stone-900">Чат заказа</h2>
+            <div className="mb-4 max-h-[480px] space-y-3 overflow-y-auto rounded-lg bg-stone-50 p-3">
               {messages.map((message) => (
                 <div key={message.id} className="rounded-lg bg-white p-3 shadow-sm">
-                  <p className="text-xs text-slate-500">{message.sender?.profile?.displayName ?? message.sender?.email ?? message.senderId}</p>
+                  <p className="text-xs text-stone-500">{message.sender?.profile?.displayName ?? message.sender?.email ?? message.senderId}</p>
                   {message.type === 'INVOICE' && message.invoice ? (
-                    <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 p-3">
+                    <div className="mt-2 rounded-lg border border-brand/20 bg-brand/10 p-3">
                       <p className="font-semibold">Счёт на оплату {money(message.invoice.amount, message.invoice.currency)}</p>
-                      <p className="text-sm text-slate-600">{message.invoice.status}</p>
+                      <p className="text-sm text-stone-600">{message.invoice.status}</p>
                     </div>
                   ) : (
-                    <p className="mt-1 text-sm text-slate-800">{message.body}</p>
+                    <p className="mt-1 text-sm text-stone-800">{message.body}</p>
                   )}
                 </div>
               ))}
-              {messages.length === 0 && <p className="text-sm text-slate-500">Сообщений пока нет.</p>}
+              {messages.length === 0 && <p className="text-sm text-stone-500">Сообщений пока нет.</p>}
             </div>
             <form onSubmit={sendMessage} className="flex gap-2">
               <input
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder="Сообщение"
-                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2"
+                className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2"
               />
               <button type="submit" className="rounded-lg bg-brand px-4 py-2 font-medium text-white">
                 Отправить
@@ -500,8 +503,8 @@ export default function OrderPage() {
           </div>
 
           {isFreelancer && (
-            <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-4 text-lg font-semibold">Выставить счёт</h2>
+            <aside className="rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
+              <h2 className="mb-4 font-serif text-lg text-stone-900">Выставить счёт</h2>
               <form onSubmit={issueInvoice} className="space-y-3">
                 <input
                   required
@@ -510,20 +513,20 @@ export default function OrderPage() {
                   placeholder="Сумма"
                   value={invoiceAmount}
                   onChange={(e) => setInvoiceAmount(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
                 />
                 <textarea
                   placeholder="Описание"
                   value={invoiceDescription}
                   onChange={(e) => setInvoiceDescription(e.target.value)}
-                  className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  className="min-h-24 w-full rounded-lg border border-stone-300 px-3 py-2"
                 />
                 <button type="submit" className="w-full rounded-lg bg-brand px-4 py-3 font-medium text-white">
                   Выставить
                 </button>
               </form>
               {paymentAddress && (
-                <p className="mt-4 break-all rounded-lg bg-slate-50 p-3 text-xs text-slate-600">Pay address: {paymentAddress}</p>
+                <p className="mt-4 break-all rounded-lg bg-stone-50 p-3 text-xs text-stone-600">Pay address: {paymentAddress}</p>
               )}
             </aside>
           )}
@@ -558,27 +561,27 @@ function DeliveryForm({
   onSubmit,
 }: DeliveryFormProps) {
   return (
-    <form onSubmit={onSubmit} className="mt-3 space-y-3 rounded-lg bg-slate-50 p-3">
+    <form onSubmit={onSubmit} className="mt-3 space-y-3 rounded-lg bg-stone-50 p-3">
       <textarea
         required
         placeholder="Что сделано"
         value={description}
         onChange={(e) => onDescriptionChange(e.target.value)}
-        className="min-h-20 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        className="min-h-20 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
       />
       <textarea
         placeholder="Заметки (необязательно)"
         value={notes}
         onChange={(e) => onNotesChange(e.target.value)}
-        className="min-h-16 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        className="min-h-16 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
       />
 
       <FileUpload multiple onUploaded={onFileUploaded} label="Прикрепить файлы сдачи" />
       {files.length > 0 && (
         <ul className="space-y-1">
           {files.map((f) => (
-            <li key={f.id} className="flex items-center gap-1.5 text-xs text-slate-600">
-              <PaperclipIcon className="h-3.5 w-3.5 text-slate-400" />
+            <li key={f.id} className="flex items-center gap-1.5 text-xs text-stone-600">
+              <PaperclipIcon className="h-3.5 w-3.5 text-stone-400" />
               {f.originalName}
             </li>
           ))}
@@ -596,7 +599,7 @@ function DeliveryForm({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-white"
+          className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-white"
         >
           Отмена
         </button>

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Logo } from '@/components/Logo';
 
 export const metadata = {
   title: 'Политика конфиденциальности — TaskHunt',
@@ -8,17 +9,17 @@ export const metadata = {
 export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
-      <Link href="/" className="mb-8 inline-block text-sm font-medium text-slate-500 hover:text-slate-900">
-        ← TaskHunt
+      <Link href="/" className="mb-8 inline-flex w-fit transition-transform hover:scale-105">
+        <Logo className="h-9" />
       </Link>
-      <h1 className="mb-2 text-3xl font-bold">Политика конфиденциальности</h1>
-      <p className="mb-8 text-sm text-slate-500">
+      <h1 className="mb-2 font-serif text-3xl text-stone-900">Политика конфиденциальности</h1>
+      <p className="mb-8 text-sm text-stone-500">
         Черновик для MVP-стадии, требует проверки юристом перед реальным запуском.
       </p>
 
-      <div className="space-y-6 text-sm leading-relaxed text-slate-700">
+      <div className="space-y-6 text-sm leading-relaxed text-stone-700">
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">1. Какие данные мы собираем</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">1. Какие данные мы собираем</h2>
           <ul className="list-disc space-y-1 pl-5">
             <li>Данные регистрации: email, хэш пароля (либо идентификатор от Google/GitHub/Apple при входе через них)</li>
             <li>Данные профиля: имя, биография, страна/город, ссылки на GitHub/сайт, навыки</li>
@@ -29,7 +30,7 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">2. Для чего используются данные</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">2. Для чего используются данные</h2>
           <p>
             Для предоставления сервиса (регистрация, заказы, эскроу, чат), связи с вами
             (уведомления, подтверждение email, восстановление пароля), обеспечения
@@ -39,7 +40,7 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">3. Кому передаются данные</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">3. Кому передаются данные</h2>
           <p>Данные могут передаваться следующим сторонним сервисам, необходимым для работы Платформы:</p>
           <ul className="list-disc space-y-1 pl-5">
             <li>NOWPayments — обработка криптоплатежей</li>
@@ -51,7 +52,7 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">4. Cookies</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">4. Cookies</h2>
           <p>
             Платформа использует технически необходимые данные в браузере (токены
             авторизации в localStorage) для поддержания сессии. При первом визите вы
@@ -60,7 +61,7 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">5. Хранение данных</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">5. Хранение данных</h2>
           <p>
             Данные хранятся до тех пор, пока аккаунт активен, и удаляются или
             анонимизируются по запросу пользователя, за исключением данных, которые
@@ -70,7 +71,7 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">6. Ваши права</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">6. Ваши права</h2>
           <p>
             Вы можете запросить просмотр, исправление или удаление своих персональных
             данных через раздел «Поддержка» в приложении.
@@ -78,7 +79,7 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">7. Безопасность</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">7. Безопасность</h2>
           <p>
             Пароли хранятся в виде хэша (bcrypt), не в открытом виде. Доступ к
             административным функциям ограничен ролевой моделью (RBAC). Загружаемые файлы
@@ -87,7 +88,7 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">8. Контакты</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">8. Контакты</h2>
           <p>По вопросам обработки персональных данных обращайтесь через раздел «Поддержка» в приложении.</p>
         </section>
       </div>

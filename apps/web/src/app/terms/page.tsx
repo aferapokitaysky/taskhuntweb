@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Logo } from '@/components/Logo';
 
 export const metadata = {
   title: 'Условия использования — TaskHunt',
@@ -8,18 +9,18 @@ export const metadata = {
 export default function TermsPage() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
-      <Link href="/" className="mb-8 inline-block text-sm font-medium text-slate-500 hover:text-slate-900">
-        ← TaskHunt
+      <Link href="/" className="mb-8 inline-flex w-fit transition-transform hover:scale-105">
+        <Logo className="h-9" />
       </Link>
-      <h1 className="mb-2 text-3xl font-bold">Условия использования</h1>
-      <p className="mb-8 text-sm text-slate-500">
+      <h1 className="mb-2 font-serif text-3xl text-stone-900">Условия использования</h1>
+      <p className="mb-8 text-sm text-stone-500">
         Черновик для MVP-стадии, требует проверки юристом перед реальным запуском —
         не является окончательной юридически выверенной редакцией.
       </p>
 
-      <div className="space-y-6 text-sm leading-relaxed text-slate-700">
+      <div className="space-y-6 text-sm leading-relaxed text-stone-700">
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">1. Общие положения</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">1. Общие положения</h2>
           <p>
             TaskHunt — платформа-посредник, соединяющая заказчиков и исполнителей услуг
             (далее — «Платформа»). Используя Платформу, вы соглашаетесь с настоящими
@@ -28,7 +29,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">2. Регистрация и аккаунт</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">2. Регистрация и аккаунт</h2>
           <p>
             Вы обязаны предоставить достоверные данные при регистрации и подтвердить
             владение указанным email. Вы несёте ответственность за сохранность учётных
@@ -37,7 +38,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">3. Эскроу и платежи</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">3. Эскроу и платежи</h2>
           <p>
             Оплата по заказам проходит через встроенный эскроу-механизм: средства
             заказчика замораживаются на Платформе в момент оплаты счёта и переводятся
@@ -53,7 +54,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">4. Споры</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">4. Споры</h2>
           <p>
             В случае разногласий между заказчиком и исполнителем любая из сторон может
             открыть спор. Решение по спору принимает модератор/арбитр Платформы на основе
@@ -63,7 +64,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">5. Запрещённое использование</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">5. Запрещённое использование</h2>
           <p>
             Запрещается: размещение заведомо ложных заказов, попытки обойти эскроу-механизм
             и договориться об оплате вне Платформы, накрутка отзывов и рейтинга,
@@ -73,7 +74,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">6. Ограничение ответственности</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">6. Ограничение ответственности</h2>
           <p>
             Платформа выступает посредником и не гарантирует качество услуг, оказываемых
             исполнителями, и не несёт ответственности за содержание размещаемых заказов.
@@ -84,7 +85,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">7. Блокировка аккаунта</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">7. Блокировка аккаунта</h2>
           <p>
             Платформа оставляет за собой право приостановить или заблокировать аккаунт при
             нарушении настоящих условий, подозрении на мошенничество или по требованию
@@ -93,7 +94,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">8. Изменения условий</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">8. Изменения условий</h2>
           <p>
             Платформа может изменять настоящие условия. Существенные изменения будут
             анонсированы через уведомления в приложении или по email.
@@ -101,7 +102,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold text-slate-900">9. Контакты</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-900">9. Контакты</h2>
           <p>По вопросам, связанным с условиями использования, обращайтесь через раздел «Поддержка» в приложении.</p>
         </section>
       </div>
