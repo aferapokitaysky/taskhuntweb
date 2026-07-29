@@ -6,7 +6,6 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { UseGuards } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ChatService } from './chat.service';
@@ -15,8 +14,14 @@ interface AuthenticatedSocket extends Socket {
   data: { userId: string };
 }
 
+function roomName(orderId: string, freelancerId: string) {
+  return `order:${orderId}:freelancer:${freelancerId}`;
+}
+
 /**
- * WebSocket-чат по заказу. Комнаты именуются `order:<orderId>`.
+ * WebSocket-чат по заказу. Комнаты именуются `order:<orderId>:freelancer:<freelancerId>`
+ * — один тред на пару (заказ, фрилансер), не на заказ целиком, чтобы
+ * переписка заказчика с разными откликнувшимися не пересекалась.
  * Live presence (online/typing/last seen) реализуется поверх этих же
  * комнат события `presence:*` — вынесено в Phase 2, тут заложен только гейтвей.
  */
@@ -43,29 +48,38 @@ export class ChatGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('joinOrder')
-  async joinOrder(@ConnectedSocket() socket: AuthenticatedSocket, @MessageBody() orderId: string) {
-    // list бросит ForbiddenException, если пользователь не участник — тем самым не даём подключиться к чужому чату
-    await this.chatService.listMessages(orderId, socket.data.userId);
-    socket.join(`order:${orderId}`);
+  async joinOrder(
+    @ConnectedSocket() socket: AuthenticatedSocket,
+    @MessageBody() data: { orderId: string; freelancerId?: string },
+  ) {
+    const freelancerId = data.freelancerId ?? socket.data.userId;
+    // list бросит ForbiddenException, если пользователь не участник этого треда — тем самым не даём подключиться к чужому
+    await this.chatService.listMessages(data.orderId, freelancerId, socket.data.userId);
+    socket.join(roomName(data.orderId, freelancerId));
   }
 
   @SubscribeMessage('sendMessage')
   async sendMessage(
     @ConnectedSocket() socket: AuthenticatedSocket,
-    @MessageBody() data: { orderId: string; body: string },
+    @MessageBody() data: { orderId: string; freelancerId?: string; body: string },
   ) {
-    const message = await this.chatService.sendTextMessage(data.orderId, socket.data.userId, data.body);
-    this.server.to(`order:${data.orderId}`).emit('newMessage', message);
+    const freelancerId = data.freelancerId ?? socket.data.userId;
+    const message = await this.chatService.sendTextMessage(data.orderId, freelancerId, socket.data.userId, data.body);
+    this.server.to(roomName(data.orderId, freelancerId)).emit('newMessage', message);
     return message;
   }
 
   @SubscribeMessage('typing')
-  handleTyping(@ConnectedSocket() socket: AuthenticatedSocket, @MessageBody() orderId: string) {
-    socket.to(`order:${orderId}`).emit('typing', { userId: socket.data.userId });
+  handleTyping(
+    @ConnectedSocket() socket: AuthenticatedSocket,
+    @MessageBody() data: { orderId: string; freelancerId?: string },
+  ) {
+    const freelancerId = data.freelancerId ?? socket.data.userId;
+    socket.to(roomName(data.orderId, freelancerId)).emit('typing', { userId: socket.data.userId });
   }
 
   /** Вызывается ChatEventsListener, чтобы разослать invoice-карточку в реальном времени. */
-  broadcastToOrder(orderId: string, event: string, payload: unknown) {
-    this.server.to(`order:${orderId}`).emit(event, payload);
+  broadcastToOrder(orderId: string, freelancerId: string, event: string, payload: unknown) {
+    this.server.to(roomName(orderId, freelancerId)).emit(event, payload);
   }
 }

@@ -14,6 +14,18 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/**
+ * % совпадения тэгов/стека заказа с навыками фрилансера — только
+ * отображаемая метрика для пользователя, в сам `matchScore` не входит
+ * (ранжирование по-прежнему только по откалиброванным весам ниже).
+ */
+function compatibilityPercent(orderTags: string[], freelancerSkillNames: string[]): number | null {
+  if (orderTags.length === 0) return null;
+  const skillSet = new Set(freelancerSkillNames.map((s) => s.trim().toLowerCase()));
+  const matched = orderTags.filter((t) => skillSet.has(t.trim().toLowerCase())).length;
+  return Math.round((matched / orderTags.length) * 100);
+}
+
 interface FeedOrderInput {
   id: string;
   createdAt: Date;
@@ -245,7 +257,14 @@ export class MatchingService {
 
     const bids = await this.prisma.bid.findMany({
       where: { orderId, status: 'PENDING' },
-      include: { freelancer: { include: { profile: true, subscription: { include: { tier: true } } } } },
+      include: {
+        freelancer: {
+          include: {
+            profile: { include: { skills: { include: { skill: true } } } },
+            subscription: { include: { tier: true } },
+          },
+        },
+      },
     });
 
     const now = new Date();
@@ -272,11 +291,13 @@ export class MatchingService {
     const candidates = bids.map((bid) => {
       const activeSub = bid.freelancer.subscription;
       const isActiveSub = activeSub?.status === 'ACTIVE' && activeSub.expiresAt > now;
+      const skillNames = bid.freelancer.profile?.skills?.map((s) => s.skill.name) ?? [];
       return {
         id: bid.freelancerId,
         bidId: bid.id,
         bidAmount: Number(bid.amount),
         deliveryDays: bid.deliveryDays,
+        compatibilityPercent: compatibilityPercent(order.tags ?? [], skillNames),
         profile: bid.freelancer.profile
           ? {
               successRate: bid.freelancer.profile.successRate,

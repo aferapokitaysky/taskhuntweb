@@ -29,6 +29,6 @@ export class ChatEventsListener {
       invoice.id,
     );
 
-    this.chatGateway.broadcastToOrder(event.payload.orderId, 'newMessage', message);
+    this.chatGateway.broadcastToOrder(event.payload.orderId, invoice.issuedById, 'newMessage', message);
   }
 }

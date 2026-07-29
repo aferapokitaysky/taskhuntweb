@@ -36,7 +36,7 @@ describe('OrdersService', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       chatThread: {
-        create: jest.fn(),
+        upsert: jest.fn(),
       },
       dispute: {
         create: jest.fn(),
@@ -240,8 +240,10 @@ describe('OrdersService', () => {
         where: { orderId: 'order-1', id: { not: 'bid-1' }, status: 'PENDING' },
         data: { status: 'REJECTED' },
       });
-      expect(prisma.chatThread.create).toHaveBeenCalledWith({
-        data: { orderId: 'order-1' },
+      expect(prisma.chatThread.upsert).toHaveBeenCalledWith({
+        where: { orderId_freelancerId: { orderId: 'order-1', freelancerId: 'freelancer-1' } },
+        create: { orderId: 'order-1', freelancerId: 'freelancer-1' },
+        update: {},
       });
       expect(eventBus.publish).toHaveBeenCalledWith(
         DomainEventName.BidAccepted,

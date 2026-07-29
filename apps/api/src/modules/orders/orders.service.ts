@@ -146,7 +146,7 @@ export class OrdersService {
         category: true,
         bids: { include: { freelancer: { include: { profile: true } } } },
         milestones: true,
-        chatThread: true,
+        chatThreads: true,
       },
     });
     if (!order) throw new NotFoundException('Order not found');
@@ -260,7 +260,12 @@ export class OrdersService {
         where: { id: orderId },
         data: { status: 'IN_PROGRESS', acceptedBidId: bidId },
       });
-      await tx.chatThread.create({ data: { orderId } });
+      // Тред с этим фрилансером мог уже существовать из переписки до принятия отклика.
+      await tx.chatThread.upsert({
+        where: { orderId_freelancerId: { orderId, freelancerId: bid.freelancerId } },
+        create: { orderId, freelancerId: bid.freelancerId },
+        update: {},
+      });
       return updatedOrder;
     });
 

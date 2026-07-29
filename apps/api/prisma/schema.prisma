@@ -75,6 +75,7 @@ model User {
   reviewsReceived   Review[]        @relation("ReviewTarget")
 
   sentChatMessages  ChatMessage[]   @relation("ChatSender")
+  chatThreadsAsFreelancer ChatThread[] @relation("ChatThreadFreelancer")
   supportTickets    SupportTicket[] @relation("TicketOwner")
   assignedTickets   SupportTicket[] @relation("TicketAssignee")
   supportMessages   SupportMessage[]
@@ -223,7 +224,7 @@ model Order {
   bids         Bid[]
   milestones   Milestone[]
   versions     OrderVersion[]
-  chatThread   ChatThread?
+  chatThreads  ChatThread[]
   deliveries   Delivery[]
   disputes     Dispute[]
   invoices     Invoice[]
@@ -448,13 +449,19 @@ model Invoice {
 // CHAT (по заказу) + SUPPORT CHAT
 // ============================================================================
 
+// Тред переписки конкретного заказчика с конкретным фрилансером по
+// заказу — не один на заказ, а один на пару (order, freelancer), чтобы
+// заказчик мог писать любому откликнувшемуся ещё до принятия отклика.
 model ChatThread {
-  id        String        @id @default(uuid())
-  orderId   String        @unique
-  order     Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  messages  ChatMessage[]
-  createdAt DateTime      @default(now())
+  id           String        @id @default(uuid())
+  orderId      String
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  freelancerId String
+  freelancer   User          @relation("ChatThreadFreelancer", fields: [freelancerId], references: [id])
+  messages     ChatMessage[]
+  createdAt    DateTime      @default(now())
 
+  @@unique([orderId, freelancerId])
   @@map("chat_threads")
 }
 

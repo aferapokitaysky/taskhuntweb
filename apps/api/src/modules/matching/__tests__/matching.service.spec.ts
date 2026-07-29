@@ -182,5 +182,66 @@ describe('MatchingService', () => {
       expect(result[0].id).toBe('freelancer-cheap');
       expect(result[0].matchReasons).toContain('Цена в рамках бюджета');
     });
+
+    it('считает % совпадения тэгов заказа с навыками фрилансера', async () => {
+      prisma.order.findUniqueOrThrow.mockResolvedValue({
+        id: 'order-1',
+        categoryId: 'cat-1',
+        budgetMin: 100,
+        budgetMax: 200,
+        tags: ['React', 'Node.js'],
+      });
+      prisma.bid.findMany
+        .mockResolvedValueOnce([
+          {
+            id: 'bid-1',
+            freelancerId: 'freelancer-1',
+            amount: 150,
+            deliveryDays: 5,
+            freelancer: {
+              profile: {
+                displayName: 'Dev',
+                successRate: null,
+                completionRate: null,
+                avgResponseMins: null,
+                disputesCount: 0,
+                lateDeliveries: 0,
+                skills: [{ skill: { name: 'React' } }, { skill: { name: 'Vue' } }],
+              },
+              subscription: null,
+            },
+          },
+        ])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.rankBidsForOrder('order-1');
+
+      expect(result[0].compatibilityPercent).toBe(50);
+    });
+
+    it('возвращает null для compatibilityPercent, если у заказа нет тэгов', async () => {
+      prisma.order.findUniqueOrThrow.mockResolvedValue({
+        id: 'order-1',
+        categoryId: 'cat-1',
+        budgetMin: 100,
+        budgetMax: 200,
+        tags: [],
+      });
+      prisma.bid.findMany
+        .mockResolvedValueOnce([
+          {
+            id: 'bid-1',
+            freelancerId: 'freelancer-1',
+            amount: 150,
+            deliveryDays: 5,
+            freelancer: { profile: null, subscription: null },
+          },
+        ])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.rankBidsForOrder('order-1');
+
+      expect(result[0].compatibilityPercent).toBeNull();
+    });
   });
 });

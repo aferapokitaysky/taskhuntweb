@@ -7,7 +7,12 @@ describe('ChatService', () => {
 
   beforeEach(() => {
     prisma = {
+      order: {
+        findUnique: jest.fn(),
+      },
       chatThread: {
+        upsert: jest.fn(),
+        findMany: jest.fn(),
         findUnique: jest.fn(),
       },
       chatMessage: {
@@ -21,39 +26,56 @@ describe('ChatService', () => {
     service = new ChatService(prisma);
   });
 
-  describe('listMessages', () => {
-    it('бросает NotFoundException, если тред не найден', async () => {
-      prisma.chatThread.findUnique.mockResolvedValue(null);
+  describe('listMessages (создаёт/находит тред лениво)', () => {
+    it('бросает NotFoundException, если заказ не найден', async () => {
+      prisma.order.findUnique.mockResolvedValue(null);
 
-      await expect(service.listMessages('order-1', 'user-1')).rejects.toThrow(NotFoundException);
+      await expect(service.listMessages('order-1', 'freelancer-1', 'user-1')).rejects.toThrow(NotFoundException);
     });
 
-    it('бросает ForbiddenException, если пользователь не является участником заказа', async () => {
-      prisma.chatThread.findUnique.mockResolvedValue({
-        id: 'thread-1',
-        order: {
-          clientId: 'client-1',
-          bids: [{ freelancerId: 'freelancer-1' }],
-        },
+    it('бросает ForbiddenException, если пользователь не клиент заказа и не сам фрилансер', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        clientId: 'client-1',
+        bids: [{ status: 'PENDING', freelancerId: 'freelancer-1' }],
       });
 
-      await expect(service.listMessages('order-1', 'stranger')).rejects.toThrow(ForbiddenException);
+      await expect(service.listMessages('order-1', 'freelancer-1', 'stranger')).rejects.toThrow(ForbiddenException);
     });
 
-    it('возвращает сообщения для участника заказа', async () => {
-      prisma.chatThread.findUnique.mockResolvedValue({
-        id: 'thread-1',
-        order: {
-          clientId: 'client-1',
-          bids: [{ freelancerId: 'freelancer-1' }],
-        },
+    it('бросает ForbiddenException, если у фрилансера нет активного отклика на заказ', async () => {
+      prisma.order.findUnique.mockResolvedValue({ clientId: 'client-1', bids: [] });
+
+      await expect(service.listMessages('order-1', 'freelancer-1', 'client-1')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('заказчик может открыть тред с откликнувшимся ещё до принятия (PENDING)', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        clientId: 'client-1',
+        bids: [{ status: 'PENDING', freelancerId: 'freelancer-1' }],
       });
+      prisma.chatThread.upsert.mockResolvedValue({ id: 'thread-1' });
       prisma.chatMessage.findMany.mockResolvedValue([{ id: 'msg-1', body: 'Hello' }]);
 
-      const msgs = await service.listMessages('order-1', 'client-1');
+      const msgs = await service.listMessages('order-1', 'freelancer-1', 'client-1');
 
       expect(msgs).toHaveLength(1);
-      expect(msgs[0].body).toBe('Hello');
+      expect(prisma.chatThread.upsert).toHaveBeenCalledWith({
+        where: { orderId_freelancerId: { orderId: 'order-1', freelancerId: 'freelancer-1' } },
+        create: { orderId: 'order-1', freelancerId: 'freelancer-1' },
+        update: {},
+      });
+    });
+
+    it('фрилансер видит только свой тред', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        clientId: 'client-1',
+        bids: [{ status: 'ACCEPTED', freelancerId: 'freelancer-1' }],
+      });
+      prisma.chatThread.upsert.mockResolvedValue({ id: 'thread-1' });
+      prisma.chatMessage.findMany.mockResolvedValue([]);
+
+      await service.listMessages('order-1', 'freelancer-1', 'freelancer-1');
+      expect(prisma.chatThread.upsert).toHaveBeenCalled();
     });
   });
 

@@ -74,6 +74,18 @@ export class PayoutAddressesService {
     });
   }
 
+  /** Используется при выводе средств: проверяет владение и отмечает `lastUsedAt`. */
+  async useForWithdrawal(userId: string, id: string) {
+    const item = await this.prisma.savedPayoutAddress.findFirst({ where: { id, userId } });
+    if (!item) {
+      throw new NotFoundException('Address not found');
+    }
+    return this.prisma.savedPayoutAddress.update({
+      where: { id },
+      data: { lastUsedAt: new Date() },
+    });
+  }
+
   async delete(userId: string, id: string) {
     const item = await this.prisma.savedPayoutAddress.findFirst({ where: { id, userId } });
     if (!item) {
