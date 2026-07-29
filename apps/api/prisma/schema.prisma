@@ -7,7 +7,8 @@
 // ============================================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["omitApi"]
 }
 
 datasource db {
@@ -110,6 +111,8 @@ model Profile {
 
   displayName     String
   avatarUrl       String?
+  avatarData      Bytes?
+  avatarMimeType  String?
   bio             String?
   country         String?
   city            String?

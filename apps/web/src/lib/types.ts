@@ -20,6 +20,7 @@ export interface Skill {
 
 export interface Profile {
   displayName: string;
+  avatarUrl?: string | null;
   bio?: string | null;
   country?: string | null;
   city?: string | null;

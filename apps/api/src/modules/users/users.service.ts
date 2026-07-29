@@ -1,9 +1,27 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MatchingService } from '../matching/matching.service';
 import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+
+const MAX_SKILLS_PER_PROFILE = 25;
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2MB — этого достаточно для фото профиля
+const ALLOWED_AVATAR_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+// Сверяем реальные magic bytes, а не только Content-Type из запроса —
+// иначе можно было бы залить произвольный файл с подделанным заголовком
+// и получить его назад с Content-Type: image/... на публичном /avatar.
+function sniffImageMimeType(buffer: Buffer): string | null {
+  if (buffer.length < 4) return null;
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return 'image/png';
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) return 'image/gif';
+  if (buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
+    return 'image/webp';
+  }
+  return null;
+}
 
 @Injectable()
 export class UsersService {
@@ -242,6 +260,10 @@ export class UsersService {
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     const { skillIds, ...profileFields } = dto;
 
+    if (skillIds && skillIds.length > MAX_SKILLS_PER_PROFILE) {
+      throw new BadRequestException(`Можно указать не больше ${MAX_SKILLS_PER_PROFILE} навыков`);
+    }
+
     return this.prisma.profile.update({
       where: { userId },
       data: {
@@ -249,12 +271,45 @@ export class UsersService {
         ...(skillIds && {
           skills: {
             deleteMany: {},
-            create: skillIds.map((skillId) => ({ skillId })),
+            create: [...new Set(skillIds)].map((skillId) => ({ skillId })),
           },
         }),
       },
       include: { skills: { include: { skill: true } } },
     });
+  }
+
+  async uploadAvatar(userId: string, file: Express.Multer.File | undefined) {
+    if (!file) throw new BadRequestException('No file provided');
+    if (file.size > MAX_AVATAR_BYTES) {
+      throw new BadRequestException(`Файл больше ${MAX_AVATAR_BYTES / 1024 / 1024}MB`);
+    }
+    const sniffed = sniffImageMimeType(file.buffer);
+    if (!sniffed || !ALLOWED_AVATAR_MIME_TYPES.has(sniffed)) {
+      throw new BadRequestException('Поддерживаются только изображения JPEG, PNG, GIF, WEBP');
+    }
+
+    const profile = await this.prisma.profile.update({
+      where: { userId },
+      data: {
+        avatarData: file.buffer,
+        avatarMimeType: sniffed,
+        avatarUrl: `/users/${userId}/avatar`,
+      },
+    });
+
+    return { avatarUrl: profile.avatarUrl };
+  }
+
+  async getAvatar(userId: string): Promise<{ data: Buffer; mimeType: string }> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { userId },
+      select: { avatarData: true, avatarMimeType: true },
+    });
+    if (!profile?.avatarData || !profile.avatarMimeType) {
+      throw new NotFoundException('Avatar not found');
+    }
+    return { data: profile.avatarData, mimeType: profile.avatarMimeType };
   }
 
   async submitOnboarding(userId: string, dto: OnboardingDto) {

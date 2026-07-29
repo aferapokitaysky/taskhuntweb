@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { api, API_URL, createSkill, uploadAvatar } from '@/lib/api';
 import type { Skill, User } from '@/lib/types';
 import { AppHeader } from '@/components/AppHeader';
+
+const MAX_SKILLS = 25;
 
 export default function ProfilePage() {
   const [form, setForm] = useState({
@@ -14,8 +16,17 @@ export default function ProfilePage() {
     githubUrl: '',
     websiteUrl: '',
   });
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [allSkills, setAllSkills] = useState<Skill[]>([]);
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  const [skillInput, setSkillInput] = useState('');
+  const [skillCreating, setSkillCreating] = useState(false);
+  const [skillError, setSkillError] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -33,11 +44,70 @@ export default function ProfilePage() {
           githubUrl: user.profile?.githubUrl ?? '',
           websiteUrl: user.profile?.websiteUrl ?? '',
         });
+        setAvatarUrl(user.profile?.avatarUrl ?? null);
         setSelectedSkillIds((user.profile?.skills ?? []).map((s) => s.skill.id));
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Не удалось загрузить профиль'))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Нужен файл изображения (JPEG, PNG, GIF, WEBP)');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarError('Файл больше 2MB');
+      return;
+    }
+
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      const result = await uploadAvatar(file);
+      setAvatarUrl(`${result.avatarUrl}?t=${Date.now()}`);
+    } catch (err) {
+      setAvatarError(err instanceof Error ? err.message : 'Не удалось загрузить фото');
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
+  async function addSkillByName(rawName: string) {
+    const name = rawName.trim();
+    if (!name) return;
+    if (selectedSkillIds.length >= MAX_SKILLS) {
+      setSkillError(`Максимум ${MAX_SKILLS} навыков`);
+      return;
+    }
+
+    const existingByName = allSkills.find((s) => s.name.toLowerCase() === name.toLowerCase());
+    if (existingByName) {
+      setSkillInput('');
+      setSkillError(null);
+      if (!selectedSkillIds.includes(existingByName.id)) {
+        setSelectedSkillIds((ids) => [...ids, existingByName.id]);
+      }
+      return;
+    }
+
+    setSkillCreating(true);
+    setSkillError(null);
+    try {
+      const skill = await createSkill(name);
+      setAllSkills((current) => (current.some((s) => s.id === skill.id) ? current : [...current, skill]));
+      setSelectedSkillIds((ids) => (ids.includes(skill.id) ? ids : [...ids, skill.id]));
+      setSkillInput('');
+    } catch (err) {
+      setSkillError(err instanceof Error ? err.message : 'Не удалось добавить навык');
+    } finally {
+      setSkillCreating(false);
+    }
+  }
 
   function toggleSkill(skillId: string) {
     setSelectedSkillIds((current) =>
@@ -81,12 +151,34 @@ export default function ProfilePage() {
       <h1 className="mb-6 font-serif text-2xl text-stone-900">Профиль</h1>
 
       <div className="mb-6 flex items-center gap-4">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-card-sand font-serif text-2xl text-stone-900">
-          {form.displayName ? form.displayName.charAt(0).toUpperCase() : '?'}
-        </div>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={avatarUploading}
+          className="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-card-sand font-serif text-2xl text-stone-900 transition hover:opacity-90 disabled:opacity-60"
+          title="Загрузить фото"
+        >
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={`${API_URL}${avatarUrl}`} alt="Аватар" className="h-full w-full object-cover" />
+          ) : (
+            form.displayName.charAt(0).toUpperCase() || '?'
+          )}
+          <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100">
+            {avatarUploading ? '…' : 'Изменить'}
+          </span>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          onChange={handleAvatarChange}
+          className="hidden"
+        />
         <div>
           <p className="font-serif text-lg text-stone-900">{form.displayName || 'Без имени'}</p>
           <p className="text-sm text-stone-500">{[form.city, form.country].filter(Boolean).join(', ') || 'Локация не указана'}</p>
+          {avatarError && <p className="mt-1 text-xs text-red-600">{avatarError}</p>}
         </div>
       </div>
 
@@ -152,7 +244,12 @@ export default function ProfilePage() {
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-stone-600">Навыки</label>
+          <div className="mb-2 flex items-center justify-between">
+            <label className="block text-sm font-medium text-stone-600">Навыки</label>
+            <span className="text-xs text-stone-400">
+              {selectedSkillIds.length}/{MAX_SKILLS}
+            </span>
+          </div>
           <div className="flex flex-wrap gap-2">
             {allSkills.map((skill) => {
               const selected = selectedSkillIds.includes(skill.id);
@@ -169,6 +266,22 @@ export default function ProfilePage() {
                 </button>
               );
             })}
+          </div>
+
+          <div className="mt-3">
+            <input
+              placeholder="Своего навыка нет в списке? Впишите и нажмите Enter"
+              value={skillInput}
+              disabled={skillCreating}
+              onChange={(e) => setSkillInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                addSkillByName(skillInput);
+              }}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm disabled:opacity-60"
+            />
+            {skillError && <p className="mt-1 text-xs text-red-600">{skillError}</p>}
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 function getAccessToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -66,4 +66,28 @@ export async function uploadFile(file: File): Promise<UploadedFileAsset> {
   }
 
   return res.json();
+}
+
+export async function uploadAvatar(file: File): Promise<{ avatarUrl: string }> {
+  const token = getAccessToken();
+  const formData = new FormData();
+  formData.append('avatar', file);
+
+  const res = await fetch(`${API_URL}/users/me/avatar`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Upload failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/** Возвращает id/name — сохранённый или только что созданный (find-or-create на бэке). */
+export async function createSkill(name: string): Promise<{ id: string; name: string; slug: string }> {
+  return api('/skills', { method: 'POST', body: JSON.stringify({ name }) });
 }

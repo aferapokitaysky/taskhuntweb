@@ -1,5 +1,19 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { UsersService } from '../users.service';
+
+function fakeFile(buffer: Buffer, overrides: Partial<Express.Multer.File> = {}): Express.Multer.File {
+  return {
+    buffer,
+    size: buffer.length,
+    mimetype: 'image/png',
+    originalname: 'avatar.png',
+    fieldname: 'avatar',
+    encoding: '7bit',
+    ...overrides,
+  } as Express.Multer.File;
+}
+
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -15,10 +29,56 @@ describe('UsersService', () => {
       subscription: {
         findFirst: jest.fn(),
       },
+      profile: {
+        update: jest.fn(),
+        findUnique: jest.fn(),
+      },
     };
     matching = {};
 
     service = new UsersService(prisma, matching);
+  });
+
+  describe('uploadAvatar', () => {
+    it('бросает BadRequestException если файл не передан', async () => {
+      await expect(service.uploadAvatar('user-1', undefined)).rejects.toThrow(BadRequestException);
+    });
+
+    it('бросает BadRequestException для файла, замаскированного под изображение (несовпадающие magic bytes)', async () => {
+      const fakeImage = fakeFile(Buffer.from('<script>alert(1)</script>'));
+      await expect(service.uploadAvatar('user-1', fakeImage)).rejects.toThrow(BadRequestException);
+      expect(prisma.profile.update).not.toHaveBeenCalled();
+    });
+
+    it('бросает BadRequestException для файла больше 2MB', async () => {
+      const bigFile = fakeFile(PNG_MAGIC, { size: 3 * 1024 * 1024 });
+      await expect(service.uploadAvatar('user-1', bigFile)).rejects.toThrow(BadRequestException);
+    });
+
+    it('сохраняет валидный PNG и возвращает стабильный avatarUrl', async () => {
+      prisma.profile.update.mockResolvedValue({ avatarUrl: '/users/user-1/avatar' });
+
+      const result = await service.uploadAvatar('user-1', fakeFile(PNG_MAGIC));
+
+      expect(prisma.profile.update).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+        data: { avatarData: PNG_MAGIC, avatarMimeType: 'image/png', avatarUrl: '/users/user-1/avatar' },
+      });
+      expect(result).toEqual({ avatarUrl: '/users/user-1/avatar' });
+    });
+  });
+
+  describe('getAvatar', () => {
+    it('бросает NotFoundException если у профиля нет аватара', async () => {
+      prisma.profile.findUnique.mockResolvedValue({ avatarData: null, avatarMimeType: null });
+      await expect(service.getAvatar('user-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('возвращает байты и mime-type сохранённого аватара', async () => {
+      prisma.profile.findUnique.mockResolvedValue({ avatarData: PNG_MAGIC, avatarMimeType: 'image/png' });
+      const result = await service.getAvatar('user-1');
+      expect(result).toEqual({ data: PNG_MAGIC, mimeType: 'image/png' });
+    });
   });
 
   describe('getMe', () => {
