@@ -155,11 +155,13 @@ export class UsersService {
           avgResponseMins: user.profile.avgResponseMins,
           disputesCount: user.profile.disputesCount,
           lateDeliveries: user.profile.lateDeliveries,
+          viewsCount: user.profile.viewsCount,
           skills: user.profile.skills.map((s) => ({
             id: s.skill.id,
             name: s.skill.name,
             slug: s.skill.slug,
           })),
+          portfolioItems: user.profile.portfolioItems,
         }
       : null;
 
@@ -244,6 +246,7 @@ export class UsersService {
               bio: user.profile.bio,
               country: user.profile.country,
               city: user.profile.city,
+              availableForWork: user.profile.availableForWork,
               skills: user.profile.skills.map((s) => ({
                 id: s.skill.id,
                 name: s.skill.name,
@@ -397,5 +400,84 @@ export class UsersService {
 
     await this.prisma.portfolioItem.delete({ where: { id: itemId } });
     return { success: true };
+  }
+
+  async saveFreelancer(userId: string, freelancerId: string) {
+    const target = await this.prisma.user.findUnique({ where: { id: freelancerId } });
+    if (!target || !target.roles.includes('FREELANCER')) {
+      throw new BadRequestException('Пользователь не является фрилансером');
+    }
+
+    return this.prisma.savedFreelancer.upsert({
+      where: { userId_freelancerId: { userId, freelancerId } },
+      create: { userId, freelancerId },
+      update: {},
+    });
+  }
+
+  async unsaveFreelancer(userId: string, freelancerId: string) {
+    await this.prisma.savedFreelancer.deleteMany({
+      where: { userId, freelancerId },
+    });
+    return { success: true };
+  }
+
+  async listSavedFreelancers(userId: string) {
+    const items = await this.prisma.savedFreelancer.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        freelancer: {
+          include: {
+            profile: {
+              include: {
+                skills: {
+                  include: { skill: true },
+                },
+              },
+            },
+            subscription: {
+              include: { tier: true },
+            },
+          },
+        },
+      },
+    });
+
+    const now = new Date();
+
+    return items.map((item) => {
+      const user = item.freelancer;
+      const isActiveSub = user.subscription?.status === 'ACTIVE' && user.subscription.expiresAt > now;
+      const tierName = isActiveSub ? user.subscription!.tier.name : 'STARTER';
+
+      return {
+        id: user.id,
+        primaryRole: user.primaryRole,
+        roles: user.roles,
+        profile: user.profile
+          ? {
+              displayName: user.profile.displayName,
+              avatarUrl: user.profile.avatarUrl,
+              bio: user.profile.bio,
+              country: user.profile.country,
+              city: user.profile.city,
+              availableForWork: user.profile.availableForWork,
+              skills: user.profile.skills.map((s) => ({
+                id: s.skill.id,
+                name: s.skill.name,
+                slug: s.skill.slug,
+              })),
+              successRate: user.profile.successRate,
+              completionRate: user.profile.completionRate,
+              avgResponseMins: user.profile.avgResponseMins,
+              disputesCount: user.profile.disputesCount,
+              lateDeliveries: user.profile.lateDeliveries,
+            }
+          : null,
+        subscriptionTier: tierName,
+        isPremium: tierName === 'PREMIUM',
+      };
+    });
   }
 }

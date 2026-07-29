@@ -63,6 +63,24 @@ export class UsersController {
     return this.usersService.deletePortfolioItem(user.id, id);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('saved/freelancers')
+  listSavedFreelancers(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.listSavedFreelancers(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/favorite')
+  saveFreelancer(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.usersService.saveFreelancer(user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/favorite')
+  unsaveFreelancer(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.usersService.unsaveFreelancer(user.id, id);
+  }
+
   @Get(':id/avatar')
   async getAvatar(@Param('id') id: string, @Res() res: Response) {
     const avatar = await this.usersService.getAvatar(id);

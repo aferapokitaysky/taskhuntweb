@@ -11,8 +11,21 @@ import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import type { Category, Order, SavedSearch, User, WalletBalance } from '@/lib/types';
+import type { Category, LedgerEntryItem, Order, SavedSearch, User, WalletBalance } from '@/lib/types';
 import { money } from '@/lib/types';
+
+const TRANSACTION_TYPE_LABELS: Record<LedgerEntryItem['type'], string> = {
+  DEPOSIT: 'Пополнение',
+  WITHDRAWAL: 'Вывод средств',
+  ESCROW_LOCK: 'Заморозка в эскроу',
+  ESCROW_RELEASE: 'Выплата из эскроу',
+  REFUND: 'Возврат',
+  COMMISSION: 'Комиссия',
+  BONUS: 'Бонус',
+  REFERRAL: 'Реферальное вознаграждение',
+  PROMO: 'Продвижение',
+  CHARGEBACK: 'Чарджбэк',
+};
 
 export default function DashboardPage() {
   return (
@@ -49,6 +62,11 @@ function DashboardContent() {
     null,
   );
   const [withdrawing, setWithdrawing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyItems, setHistoryItems] = useState<LedgerEntryItem[]>([]);
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [orderSearch, setOrderSearch] = useState('');
   const [savedOrderIds, setSavedOrderIds] = useState<Set<string>>(new Set());
   const [savedOrders, setSavedOrders] = useState<Order[]>([]);
@@ -250,6 +268,26 @@ function DashboardContent() {
     }
   }
 
+  async function loadHistory(cursor?: string | null) {
+    setHistoryLoading(true);
+    try {
+      const params = cursor ? `?cursor=${cursor}` : '';
+      const result = await api<{ items: LedgerEntryItem[]; nextCursor: string | null }>(`/wallet/transactions${params}`);
+      setHistoryItems((current) => (cursor ? [...current, ...result.items] : result.items));
+      setHistoryCursor(result.nextCursor);
+      setHistoryLoaded(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить историю операций');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  function toggleHistory() {
+    setShowHistory((v) => !v);
+    if (!historyLoaded) loadHistory();
+  }
+
   if (loading) {
     return <main className="mx-auto max-w-7xl px-4 py-10 text-stone-500">Загружаем dashboard...</main>;
   }
@@ -318,6 +356,60 @@ function DashboardContent() {
             Заявка на вывод принята. Комиссия: {money(withdrawResult.fee, wallet?.currency)}, к выплате:{' '}
             {money(withdrawResult.netAmount, wallet?.currency)}.
           </p>
+        )}
+      </section>
+
+      <section className="mb-8 rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">История операций</h2>
+          <button
+            type="button"
+            onClick={toggleHistory}
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
+          >
+            {showHistory ? 'Скрыть' : 'Показать'}
+          </button>
+        </div>
+
+        {showHistory && (
+          <div className="mt-4">
+            {historyLoading && historyItems.length === 0 && <p className="text-sm text-stone-500">Загружаем…</p>}
+            {!historyLoading && historyItems.length === 0 && (
+              <p className="text-sm text-stone-400">Операций пока не было.</p>
+            )}
+            <div className="divide-y divide-stone-100">
+              {historyItems.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="flex items-center gap-3">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-stone-400" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      {item.direction === 'CREDIT' ? <path d="M12 19V5M5 12l7-7 7 7" /> : <path d="M12 5v14M5 12l7 7 7-7" />}
+                    </svg>
+                    <div>
+                      <p className="text-sm font-medium text-stone-900">{TRANSACTION_TYPE_LABELS[item.type] ?? item.type}</p>
+                      <p className="text-xs text-stone-500">
+                        {item.balanceType} · {new Date(item.createdAt).toLocaleString('ru-RU')}
+                        {item.description ? ` · ${item.description}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <p className={`shrink-0 font-medium ${item.direction === 'CREDIT' ? 'text-emerald-600' : 'text-stone-700'}`}>
+                    {item.direction === 'CREDIT' ? '+' : '−'}
+                    {money(item.amount, item.currency)}
+                  </p>
+                </div>
+              ))}
+            </div>
+            {historyCursor && (
+              <button
+                type="button"
+                onClick={() => loadHistory(historyCursor)}
+                disabled={historyLoading}
+                className="mt-3 w-full rounded-lg border border-stone-300 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 disabled:opacity-50"
+              >
+                {historyLoading ? 'Загружаем…' : 'Показать ещё'}
+              </button>
+            )}
+          </div>
         )}
       </section>
 

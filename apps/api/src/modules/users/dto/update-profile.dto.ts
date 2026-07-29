@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString, IsUrl } from 'class-validator';
+import { IsArray, IsBoolean, IsOptional, IsString, IsUrl } from 'class-validator';
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -19,7 +19,7 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @IsUrl()
-  githubUrl?: string; // подключение GitHub-профиля, отображается на карточке
+  githubUrl?: string;
 
   @IsOptional()
   @IsUrl()
@@ -29,4 +29,8 @@ export class UpdateProfileDto {
   @IsArray()
   @IsString({ each: true })
   skillIds?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  availableForWork?: boolean;
 }

@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, API_URL } from '@/lib/api';
+import type { PortfolioItem } from '@/lib/types';
 import { TierBadge } from '@/components/TierBadge';
 import { StarIcon } from '@/components/icons/StarIcon';
 import { AppHeader } from '@/components/AppHeader';
+import { GithubRepos, extractGithubUsername } from '@/components/GithubRepos';
 
 interface PublicProfile {
   id: string;
@@ -25,7 +27,9 @@ interface PublicProfile {
     avgResponseMins?: number | null;
     disputesCount: number;
     lateDeliveries: number;
+    viewsCount?: number;
     skills: { id: string; name: string }[];
+    portfolioItems?: PortfolioItem[];
   };
   subscriptionTier: 'STARTER' | 'PRO' | 'PREMIUM';
   reviews: { rating: number; comment?: string | null; createdAt: string; author: { displayName: string } }[];
@@ -70,8 +74,13 @@ export default function PublicProfilePage() {
       <section className="rounded-3xl border border-stone-100 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-card-sand font-serif text-2xl text-stone-900">
-              {data.profile.displayName.charAt(0).toUpperCase()}
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-card-sand font-serif text-2xl text-stone-900">
+              {data.profile.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`${API_URL}${data.profile.avatarUrl}`} alt="" className="h-full w-full object-cover" />
+              ) : (
+                data.profile.displayName.charAt(0).toUpperCase()
+              )}
             </div>
             <div>
             <div className="flex items-center gap-2">
@@ -80,6 +89,9 @@ export default function PublicProfilePage() {
             </div>
             <p className="mt-1 text-sm text-stone-500">
               {[data.profile.city, data.profile.country].filter(Boolean).join(', ') || 'Локация не указана'}
+              {typeof data.profile.viewsCount === 'number' && (
+                <span className="ml-2 text-stone-400">· {data.profile.viewsCount} просмотров профиля</span>
+              )}
             </p>
             </div>
           </div>
@@ -133,6 +145,47 @@ export default function PublicProfilePage() {
           </div>
         ))}
       </section>
+
+      {data.profile.portfolioItems && data.profile.portfolioItems.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-3 font-serif text-lg text-stone-900">Портфолио</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {data.profile.portfolioItems.map((item) => (
+              <div key={item.id} className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+                {item.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.imageUrl} alt={item.title} className="mb-3 h-32 w-full rounded-lg object-cover" />
+                )}
+                <p className="font-medium text-stone-900">{item.title}</p>
+                {item.description && <p className="mt-1 line-clamp-2 text-sm text-stone-600">{item.description}</p>}
+                {item.tags.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {item.tags.map((tag) => (
+                      <span key={tag} className="rounded-full bg-card-sand px-2 py-0.5 text-xs text-stone-700">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {item.projectUrl && (
+                  <a
+                    href={item.projectUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-block text-sm font-medium text-brand hover:text-brand-dark"
+                  >
+                    Смотреть проект →
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {extractGithubUsername(data.profile.githubUrl) && (
+        <GithubRepos username={extractGithubUsername(data.profile.githubUrl)!} />
+      )}
 
       <section className="mt-6">
         <h2 className="mb-3 font-serif text-lg text-stone-900">Отзывы</h2>

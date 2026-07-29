@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { IsBoolean, IsIn, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -61,6 +61,11 @@ export class WalletController {
   @Get('withdrawal-fee-info')
   getWithdrawalFeeInfo() {
     return this.walletService.getWithdrawalFeeInfo();
+  }
+
+  @Get('transactions')
+  getTransactions(@CurrentUser() user: AuthenticatedUser, @Query('cursor') cursor?: string) {
+    return this.walletService.getTransactionHistory(user.id, cursor);
   }
 
   @Post('withdraw')

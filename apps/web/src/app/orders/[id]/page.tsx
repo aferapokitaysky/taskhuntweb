@@ -61,6 +61,28 @@ export default function OrderPage() {
   const [boosting, setBoosting] = useState(false);
   const [boostResult, setBoostResult] = useState<{ paidFromQuota: boolean; payAddress?: string } | null>(null);
 
+  // --- Спор ---
+  const [showDisputeForm, setShowDisputeForm] = useState(false);
+  const [disputeReason, setDisputeReason] = useState('');
+  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+  const [disputeError, setDisputeError] = useState<string | null>(null);
+
+  async function openDispute(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setDisputeSubmitting(true);
+    setDisputeError(null);
+    try {
+      await api(`/orders/${orderId}/disputes`, { method: 'POST', body: JSON.stringify({ reason: disputeReason }) });
+      setShowDisputeForm(false);
+      setDisputeReason('');
+      await refreshOrder();
+    } catch (err) {
+      setDisputeError(err instanceof Error ? err.message : 'Не удалось открыть спор');
+    } finally {
+      setDisputeSubmitting(false);
+    }
+  }
+
   async function boostOrder() {
     setBoosting(true);
     setError(null);
@@ -319,6 +341,64 @@ export default function OrderPage() {
                   ? 'Продвижение активировано из бесплатной квоты тарифа.'
                   : `Оплатите буст: ${boostResult.payAddress}`}
               </p>
+            )}
+          </div>
+        )}
+
+        {(isClient || isFreelancer) && (
+          <div className="mt-4 border-t border-stone-100 pt-4">
+            {order.disputes && order.disputes.length > 0 ? (
+              <div
+                className={`rounded-lg px-4 py-3 text-sm ${
+                  order.disputes[0].status === 'RESOLVED' ? 'bg-card-sage/50 text-stone-700' : 'bg-card-sand text-stone-700'
+                }`}
+              >
+                <p className="font-medium">
+                  {order.disputes[0].status === 'RESOLVED' ? 'Спор разрешён' : 'Спор открыт, ожидает рассмотрения'}
+                </p>
+                <p className="mt-1 text-stone-600">Причина: {order.disputes[0].reason}</p>
+                {order.disputes[0].status === 'RESOLVED' && order.disputes[0].resolutionNotes && (
+                  <p className="mt-1 text-stone-600">Решение: {order.disputes[0].resolutionNotes}</p>
+                )}
+              </div>
+            ) : (order.status === 'IN_PROGRESS' || order.status === 'IN_REVIEW') && !showDisputeForm ? (
+              <button
+                type="button"
+                onClick={() => setShowDisputeForm(true)}
+                className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
+              >
+                Открыть спор
+              </button>
+            ) : null}
+
+            {showDisputeForm && (
+              <form onSubmit={openDispute} className="mt-2 space-y-2">
+                <textarea
+                  required
+                  minLength={10}
+                  placeholder="Опишите причину спора (минимум 10 символов)"
+                  value={disputeReason}
+                  onChange={(e) => setDisputeReason(e.target.value)}
+                  className="min-h-20 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                />
+                {disputeError && <p className="text-sm text-red-600">{disputeError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={disputeSubmitting}
+                    className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    {disputeSubmitting ? 'Отправляем…' : 'Отправить'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDisputeForm(false)}
+                    className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </form>
             )}
           </div>
         )}

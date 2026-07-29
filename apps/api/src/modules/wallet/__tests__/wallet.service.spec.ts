@@ -23,6 +23,9 @@ describe('WalletService', () => {
       subscription: {
         findFirst: jest.fn().mockResolvedValue(null),
       },
+      ledgerEntry: {
+        findMany: jest.fn(),
+      },
     };
     ledger = { applyTransaction: jest.fn().mockResolvedValue({ id: 'tx-1' }) };
     eventBus = { publish: jest.fn().mockResolvedValue(undefined) };
@@ -168,6 +171,53 @@ describe('WalletService', () => {
           ],
         }),
       );
+    });
+  });
+
+  describe('getTransactionHistory', () => {
+    it('бросает NotFoundException, если у юзера нет кошелька', async () => {
+      prisma.wallet.findUnique.mockResolvedValue(null);
+      await expect(service.getTransactionHistory('user-1')).rejects.toThrow('Wallet not found');
+    });
+
+    it('возвращает nextCursor: null, когда записей меньше лимита', async () => {
+      prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1' });
+      prisma.ledgerEntry.findMany.mockResolvedValue([
+        {
+          id: 'entry-1',
+          direction: 'CREDIT',
+          balanceType: 'MAIN',
+          amount: 100,
+          currency: 'USD',
+          createdAt: new Date('2026-01-01'),
+          transaction: { type: 'DEPOSIT', description: 'Пополнение', referenceType: 'DEPOSIT' },
+        },
+      ]);
+
+      const result = await service.getTransactionHistory('user-1', undefined, 20);
+
+      expect(result.nextCursor).toBeNull();
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toMatchObject({ id: 'entry-1', type: 'DEPOSIT', direction: 'CREDIT', amount: 100 });
+    });
+
+    it('обрезает лишнюю запись и возвращает nextCursor, когда записей больше лимита', async () => {
+      prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1' });
+      const makeEntry = (id: string) => ({
+        id,
+        direction: 'DEBIT',
+        balanceType: 'ESCROW',
+        amount: 10,
+        currency: 'USD',
+        createdAt: new Date(),
+        transaction: { type: 'ESCROW_LOCK', description: null, referenceType: 'INVOICE' },
+      });
+      prisma.ledgerEntry.findMany.mockResolvedValue([makeEntry('e1'), makeEntry('e2'), makeEntry('e3')]);
+
+      const result = await service.getTransactionHistory('user-1', undefined, 2);
+
+      expect(result.items).toHaveLength(2);
+      expect(result.nextCursor).toBe('e3');
     });
   });
 });

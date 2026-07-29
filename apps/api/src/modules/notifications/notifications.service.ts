@@ -47,4 +47,19 @@ export class NotificationsService {
   async createForUser(data: { userId: string; title: string; message: string; eventName: string }) {
     return this.prisma.notification.create({ data });
   }
+
+  async getPreferences(userId: string) {
+    const rows = await this.prisma.notificationPreference.findMany({ where: { userId } });
+    const byChannel = new Map(rows.map((r) => [r.channel, r.enabled]));
+    const CHANNELS = ['PUSH', 'EMAIL', 'TELEGRAM', 'IN_APP', 'SMS'] as const;
+    return CHANNELS.map((channel) => ({ channel, enabled: byChannel.get(channel as any) ?? true }));
+  }
+
+  async setPreference(userId: string, channel: string, enabled: boolean) {
+    return this.prisma.notificationPreference.upsert({
+      where: { userId_channel: { userId, channel: channel as any } },
+      create: { userId, channel: channel as any, enabled },
+      update: { enabled },
+    });
+  }
 }

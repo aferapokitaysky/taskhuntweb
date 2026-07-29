@@ -40,6 +40,11 @@ describe('UsersService', () => {
         update: jest.fn(),
         delete: jest.fn(),
       },
+      savedFreelancer: {
+        upsert: jest.fn(),
+        deleteMany: jest.fn(),
+        findMany: jest.fn(),
+      },
     };
     matching = {};
 
@@ -175,6 +180,39 @@ describe('UsersService', () => {
       await service.recordProfileView('user-self', 'user-self');
 
       expect(prisma.profile.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('saveFreelancer / unsaveFreelancer', () => {
+    it('бросает BadRequestException при попытке сохранить пользователя без роли FREELANCER', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-client', roles: ['CLIENT'] });
+
+      await expect(service.saveFreelancer('user-1', 'user-client')).rejects.toThrow(BadRequestException);
+    });
+
+    it('идемпотентно сохраняет фрилансера через upsert', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-free', roles: ['FREELANCER'] });
+      prisma.savedFreelancer.upsert.mockResolvedValue({ id: 'saved-1', userId: 'user-1', freelancerId: 'user-free' });
+
+      const res = await service.saveFreelancer('user-1', 'user-free');
+
+      expect(prisma.savedFreelancer.upsert).toHaveBeenCalledWith({
+        where: { userId_freelancerId: { userId: 'user-1', freelancerId: 'user-free' } },
+        create: { userId: 'user-1', freelancerId: 'user-free' },
+        update: {},
+      });
+      expect(res.id).toBe('saved-1');
+    });
+
+    it('удаляет запись из избранного через deleteMany без ошибки при повторном вызове', async () => {
+      prisma.savedFreelancer.deleteMany.mockResolvedValue({ count: 0 });
+
+      const res = await service.unsaveFreelancer('user-1', 'user-free');
+
+      expect(prisma.savedFreelancer.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', freelancerId: 'user-free' },
+      });
+      expect(res).toEqual({ success: true });
     });
   });
 });

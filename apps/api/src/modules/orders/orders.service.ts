@@ -172,6 +172,7 @@ export class OrdersService {
         bids: { include: { freelancer: { include: { profile: true } } } },
         milestones: true,
         chatThreads: true,
+        disputes: { orderBy: { createdAt: 'desc' }, take: 1 },
       },
     });
     if (!order) throw new NotFoundException('Order not found');

@@ -30,6 +30,16 @@ export interface SavedSearch {
   lastMatchedAt?: string | null;
 }
 
+export interface PortfolioItem {
+  id: string;
+  title: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  projectUrl?: string | null;
+  tags: string[];
+  createdAt: string;
+}
+
 export interface Profile {
   displayName: string;
   avatarUrl?: string | null;
@@ -39,6 +49,7 @@ export interface Profile {
   githubUrl?: string | null;
   websiteUrl?: string | null;
   skills?: { skill: Skill }[];
+  portfolioItems?: PortfolioItem[];
 }
 
 export interface User {
@@ -119,6 +130,7 @@ export interface Order {
   chatThreads?: { id: string; freelancerId: string }[];
   _count?: { bids: number };
   isPromoted?: boolean;
+  disputes?: Dispute[];
 }
 
 export interface ChatThreadSummary {
@@ -139,11 +151,24 @@ export interface SavedPayoutAddress {
   lastUsedAt?: string | null;
 }
 
+export interface LedgerEntryItem {
+  id: string;
+  type: 'DEPOSIT' | 'WITHDRAWAL' | 'ESCROW_LOCK' | 'ESCROW_RELEASE' | 'REFUND' | 'COMMISSION' | 'BONUS' | 'REFERRAL' | 'PROMO' | 'CHARGEBACK';
+  direction: 'DEBIT' | 'CREDIT';
+  balanceType: 'MAIN' | 'ESCROW' | 'LOCKED' | 'WITHDRAWABLE' | 'PENDING';
+  amount: string;
+  currency: string;
+  description?: string | null;
+  referenceType: string;
+  createdAt: string;
+}
+
 export interface Dispute {
   id: string;
   orderId: string;
   reason: string;
   status: string;
+  resolutionNotes?: string | null;
   openedBy?: User & { profile?: Profile | null };
   order?: Order;
 }

@@ -97,6 +97,8 @@ model User {
   payoutAddresses   SavedPayoutAddress[]
   savedOrders       SavedOrder[]
   savedSearches     SavedSearch[]
+  savedFreelancers    SavedFreelancer[]
+  savedByAsFreelancer SavedFreelancer[] @relation("SavedFreelancerTarget")
 
   fraudFlags         FraudFlag[] @relation("FraudFlagSubject")
   fraudFlagsReviewed FraudFlag[] @relation("FraudFlagReviewer")
@@ -127,6 +129,7 @@ model Profile {
   disputesCount   Int      @default(0)
   lateDeliveries  Int      @default(0)
   viewsCount      Int      @default(0)
+  availableForWork Boolean @default(true)
 
   skills          ProfileSkill[]
   portfolioItems  PortfolioItem[]
@@ -294,6 +297,18 @@ model SavedSearch {
   @@index([userId])
   @@index([categoryId])
   @@map("saved_searches")
+}
+
+model SavedFreelancer {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  freelancerId String
+  freelancer   User     @relation("SavedFreelancerTarget", fields: [freelancerId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, freelancerId])
+  @@map("saved_freelancers")
 }
 
 // Хранит снапшот заказа при каждом значимом изменении — можно строить diff

@@ -1,13 +1,24 @@
-import { Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { NotificationsService } from './notifications.service';
+import { SetPreferenceDto } from './dto/set-preference.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
+
+  @Get('preferences')
+  getPreferences(@CurrentUser() user: AuthenticatedUser) {
+    return this.notificationsService.getPreferences(user.id);
+  }
+
+  @Patch('preferences')
+  setPreference(@CurrentUser() user: AuthenticatedUser, @Body() dto: SetPreferenceDto) {
+    return this.notificationsService.setPreference(user.id, dto.channel, dto.enabled);
+  }
 
   @Get('me')
   listMyNotifications(

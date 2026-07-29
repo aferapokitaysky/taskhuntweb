@@ -19,6 +19,37 @@ export class WalletService {
     return wallet;
   }
 
+  /** Курсорная пагинация — таблица только растёт, offset на больших объёмах деградирует. */
+  async getTransactionHistory(userId: string, cursor?: string, limit = 20) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    const entries = await this.prisma.ledgerEntry.findMany({
+      where: { walletId: wallet.id },
+      include: { transaction: true },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(cursor && { cursor: { id: cursor }, skip: 1 }),
+    });
+
+    const nextCursor = entries.length > limit ? entries.pop()!.id : null;
+
+    return {
+      items: entries.map((entry) => ({
+        id: entry.id,
+        type: entry.transaction.type,
+        direction: entry.direction,
+        balanceType: entry.balanceType,
+        amount: entry.amount,
+        currency: entry.currency,
+        description: entry.transaction.description,
+        referenceType: entry.transaction.referenceType,
+        createdAt: entry.createdAt,
+      })),
+      nextCursor,
+    };
+  }
+
   async getSystemWalletId(): Promise<string> {
     const wallet = await this.getSystemWallet();
     return wallet.id;

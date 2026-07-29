@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth.service';
 
 /**
@@ -16,6 +17,7 @@ describe('AuthService — verification & password reset', () => {
     prisma = {
       user: {
         findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
         update: jest.fn().mockResolvedValue({}),
       },
     };
@@ -143,6 +145,35 @@ describe('AuthService — verification & password reset', () => {
       expect(call.data.passwordHash).not.toBe('newpassword123'); // точно хэш, не голый пароль
       expect(call.data.passwordResetToken).toBeNull();
       expect(call.data.passwordResetExpiresAt).toBeNull();
+    });
+  });
+
+  describe('changePassword', () => {
+    it('бросает BadRequestException, если у аккаунта нет пароля (вход через OAuth)', async () => {
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'user-1', passwordHash: null });
+      await expect(service.changePassword('user-1', 'whatever', 'newpassword123')).rejects.toThrow(BadRequestException);
+    });
+
+    it('бросает BadRequestException при неверном текущем пароле', async () => {
+      const realHash = await bcrypt.hash('correct-password', 4);
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'user-1', passwordHash: realHash });
+
+      await expect(service.changePassword('user-1', 'wrong-password', 'newpassword123')).rejects.toThrow(BadRequestException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('меняет пароль на новый валидный хэш при верном текущем пароле', async () => {
+      const realHash = await bcrypt.hash('correct-password', 4);
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'user-1', passwordHash: realHash });
+
+      const result = await service.changePassword('user-1', 'correct-password', 'brand-new-password');
+
+      expect(result).toEqual({ changed: true });
+      const call = prisma.user.update.mock.calls[0][0];
+      expect(call.where).toEqual({ id: 'user-1' });
+      // Реально валидный bcrypt-хэш нового пароля, а не заглушка.
+      const newHashIsValid = await bcrypt.compare('brand-new-password', call.data.passwordHash);
+      expect(newHashIsValid).toBe(true);
     });
   });
 });
