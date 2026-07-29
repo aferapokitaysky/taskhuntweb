@@ -18,6 +18,16 @@ export interface Skill {
   slug: string;
 }
 
+export interface SavedSearch {
+  id: string;
+  label: string;
+  categoryId?: string | null;
+  tags: string[];
+  minBudget?: string | null;
+  createdAt: string;
+  lastMatchedAt?: string | null;
+}
+
 export interface Profile {
   displayName: string;
   avatarUrl?: string | null;

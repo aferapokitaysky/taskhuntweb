@@ -9,7 +9,7 @@ import { PayoutAddressBook, type WithdrawTarget } from '@/components/PayoutAddre
 import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import type { Category, Order, User, WalletBalance } from '@/lib/types';
+import type { Category, Order, SavedSearch, User, WalletBalance } from '@/lib/types';
 import { money } from '@/lib/types';
 
 export default function DashboardPage() {
@@ -42,6 +42,13 @@ export default function DashboardPage() {
   const [savedOrderIds, setSavedOrderIds] = useState<Set<string>>(new Set());
   const [savedOrders, setSavedOrders] = useState<Order[]>([]);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [filterCategoryId, setFilterCategoryId] = useState('');
+  const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [filterTagInput, setFilterTagInput] = useState('');
+  const [filterMinBudget, setFilterMinBudget] = useState('');
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [savingSearch, setSavingSearch] = useState(false);
+  const [savedSearchError, setSavedSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([api<User>('/users/me'), api<WalletBalance>('/wallet/balance'), api<Order[]>('/orders'), api<Category[]>('/categories')])
@@ -61,6 +68,10 @@ export default function DashboardPage() {
         setSavedOrders(list);
         setSavedOrderIds(new Set(list.map((o) => o.id)));
       })
+      .catch(() => undefined);
+
+    api<SavedSearch[]>('/saved-searches')
+      .then(setSavedSearches)
       .catch(() => undefined);
   }, []);
 
@@ -93,22 +104,60 @@ export default function DashboardPage() {
   const hasAside = isClient || !!selectedOrder;
   const flatCategories = categories.flatMap((category) => [category, ...(category.children ?? [])]);
 
-  async function refreshOrders(search?: string) {
+  async function refreshOrders() {
     const params = new URLSearchParams();
-    if (search) params.set('search', search);
+    if (orderSearch) params.set('search', orderSearch);
+    if (filterCategoryId) params.set('categoryId', filterCategoryId);
+    if (filterTags.length > 0) params.set('tags', filterTags.join(','));
+    if (filterMinBudget) params.set('minBudget', filterMinBudget);
     const nextOrders = await api<Order[]>(`/orders${params.toString() ? `?${params}` : ''}`);
     setOrders(nextOrders);
   }
 
-  // Дебаунс поиска — не дёргаем API на каждое нажатие клавиши
+  // Дебаунс — не дёргаем API на каждое нажатие клавиши/клик по фильтру
   useEffect(() => {
     if (loading) return; // не дублируем самый первый запрос из основного useEffect
     const timeout = setTimeout(() => {
-      refreshOrders(orderSearch).catch((err) => setError(err instanceof Error ? err.message : 'Не удалось найти заказы'));
+      refreshOrders().catch((err) => setError(err instanceof Error ? err.message : 'Не удалось найти заказы'));
     }, 300);
     return () => clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderSearch]);
+  }, [orderSearch, filterCategoryId, filterTags, filterMinBudget]);
+
+  const hasActiveFilter = Boolean(filterCategoryId || filterTags.length > 0 || filterMinBudget);
+
+  async function saveCurrentSearch() {
+    const parts: string[] = [];
+    const categoryName = flatCategories.find((c) => c.id === filterCategoryId)?.name;
+    if (categoryName) parts.push(categoryName);
+    if (filterTags.length > 0) parts.push(filterTags.join(', '));
+    if (filterMinBudget) parts.push(`от $${filterMinBudget}`);
+    const label = parts.join(' · ') || 'Новые заказы';
+
+    setSavingSearch(true);
+    setSavedSearchError(null);
+    try {
+      const created = await api<SavedSearch>('/saved-searches', {
+        method: 'POST',
+        body: JSON.stringify({
+          label,
+          categoryId: filterCategoryId || undefined,
+          tags: filterTags,
+          minBudget: filterMinBudget ? Number(filterMinBudget) : undefined,
+        }),
+      });
+      setSavedSearches((current) => [created, ...current]);
+    } catch (err) {
+      setSavedSearchError(err instanceof Error ? err.message : 'Не удалось сохранить подписку');
+    } finally {
+      setSavingSearch(false);
+    }
+  }
+
+  async function deleteSavedSearch(id: string) {
+    setSavedSearches((current) => current.filter((s) => s.id !== id));
+    await api(`/saved-searches/${id}`, { method: 'DELETE' }).catch(() => undefined);
+  }
 
   async function createOrder(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -286,12 +335,95 @@ export default function DashboardPage() {
             </div>
           </div>
           {!showSavedOnly && (
-            <input
-              placeholder="Поиск по названию или описанию"
-              value={orderSearch}
-              onChange={(e) => setOrderSearch(e.target.value)}
-              className="mb-4 w-full rounded-lg border border-stone-300 px-4 py-2 text-sm"
-            />
+            <>
+              <input
+                placeholder="Поиск по названию или описанию"
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+                className="mb-3 w-full rounded-lg border border-stone-300 px-4 py-2 text-sm"
+              />
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <select
+                  value={filterCategoryId}
+                  onChange={(e) => setFilterCategoryId(e.target.value)}
+                  className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Все категории</option>
+                  {flatCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  placeholder="Тэги через Enter"
+                  value={filterTagInput}
+                  onChange={(e) => setFilterTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || !filterTagInput.trim()) return;
+                    e.preventDefault();
+                    const tag = filterTagInput.trim();
+                    if (!filterTags.includes(tag)) setFilterTags((current) => [...current, tag]);
+                    setFilterTagInput('');
+                  }}
+                  className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Бюджет от"
+                  value={filterMinBudget}
+                  onChange={(e) => setFilterMinBudget(e.target.value)}
+                  className="w-28 rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                />
+                {isFreelancer && (
+                  <button
+                    type="button"
+                    onClick={saveCurrentSearch}
+                    disabled={!hasActiveFilter || savingSearch || savedSearches.length >= 5}
+                    title={
+                      savedSearches.length >= 5
+                        ? 'Можно сохранить не больше 5 подписок'
+                        : 'Получать уведомление о новых заказах по этому фильтру'
+                    }
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-600 transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-stone-300 disabled:hover:text-stone-600"
+                  >
+                    🔔 Уведомлять об этом фильтре
+                  </button>
+                )}
+              </div>
+              {filterTags.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {filterTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setFilterTags((current) => current.filter((t) => t !== tag))}
+                      className="rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700 hover:line-through"
+                    >
+                      {tag} ×
+                    </button>
+                  ))}
+                </div>
+              )}
+              {savedSearchError && <p className="mb-3 text-xs text-red-600">{savedSearchError}</p>}
+              {savedSearches.length > 0 && (
+                <div className="mb-4 flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-stone-400">Подписки:</span>
+                  {savedSearches.map((s) => (
+                    <span
+                      key={s.id}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand"
+                    >
+                      🔔 {s.label}
+                      <button type="button" onClick={() => deleteSavedSearch(s.id)} className="hover:text-brand-dark">
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
           )}
           <div className="space-y-3">
             {(showSavedOnly ? savedOrders : orders).map((order) => (

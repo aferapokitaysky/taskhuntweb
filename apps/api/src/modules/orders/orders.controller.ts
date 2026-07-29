@@ -27,8 +27,15 @@ export class OrdersController {
     @Query('categoryId') categoryId?: string,
     @Query('status') status?: string,
     @Query('search') search?: string,
+    @Query('tags') tagsParam?: string,
+    @Query('minBudget') minBudgetParam?: string,
   ) {
-    return this.ordersService.findMany({ categoryId, status, search });
+    const tags = tagsParam
+      ?.split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const minBudget = minBudgetParam !== undefined ? parseFloat(minBudgetParam) : undefined;
+    return this.ordersService.findMany({ categoryId, status, search, tags, minBudget });
   }
 
   @Get(':id')

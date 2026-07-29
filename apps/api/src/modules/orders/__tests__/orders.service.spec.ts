@@ -94,6 +94,31 @@ describe('OrdersService', () => {
       expect(result[1].id).toBe('order-normal');
       expect(result[1].isPromoted).toBe(false);
     });
+
+    it('фильтрует по тэгам через hasSome, не ломая текстовый поиск', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findMany({ search: 'сайт', tags: ['React', 'Node.js'] });
+
+      const call = prisma.order.findMany.mock.calls[0][0];
+      expect(call.where.AND).toEqual(
+        expect.arrayContaining([
+          { OR: [{ title: { contains: 'сайт', mode: 'insensitive' } }, { description: { contains: 'сайт', mode: 'insensitive' } }] },
+          { tags: { hasSome: ['React', 'Node.js'] } },
+        ]),
+      );
+    });
+
+    it('фильтр по минимальному бюджету учитывает заказы без верхней границы', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findMany({ minBudget: 100 });
+
+      const call = prisma.order.findMany.mock.calls[0][0];
+      expect(call.where.AND).toContainEqual({
+        OR: [{ budgetMax: { gte: 100 } }, { budgetMax: null, budgetMin: { gte: 100 } }],
+      });
+    });
   });
 
   describe('update', () => {

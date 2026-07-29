@@ -26,6 +26,7 @@ import { HealthModule } from './modules/health/health.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SavedSearchesModule } from './modules/saved-searches/saved-searches.module';
 import { FraudModule } from './modules/fraud/fraud.module';
 import { PAYOUT_QUEUE } from './modules/wallet/payout.processor';
 import { FILE_SCAN_QUEUE } from './modules/files/files.service';
@@ -93,6 +94,7 @@ import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
     SubscriptionsModule,
     PromotionsModule,
     NotificationsModule,
+    SavedSearchesModule,
     FraudModule,
   ],
   providers: [

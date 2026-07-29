@@ -96,6 +96,7 @@ model User {
   files             FileAsset[]
   payoutAddresses   SavedPayoutAddress[]
   savedOrders       SavedOrder[]
+  savedSearches     SavedSearch[]
 
   fraudFlags         FraudFlag[] @relation("FraudFlagSubject")
   fraudFlagsReviewed FraudFlag[] @relation("FraudFlagReviewer")
@@ -125,8 +126,10 @@ model Profile {
   avgResponseMins Int?
   disputesCount   Int      @default(0)
   lateDeliveries  Int      @default(0)
+  viewsCount      Int      @default(0)
 
   skills          ProfileSkill[]
+  portfolioItems  PortfolioItem[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -151,6 +154,22 @@ model ProfileSkill {
 
   @@id([profileId, skillId])
   @@map("profile_skills")
+}
+
+model PortfolioItem {
+  id          String   @id @default(uuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  imageUrl    String?
+  projectUrl  String?
+  tags        String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([profileId])
+  @@map("portfolio_items")
 }
 
 // Анкета/квиз при регистрации — ответы различаются в зависимости от роли,
@@ -187,6 +206,7 @@ model Category {
   parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children  Category[] @relation("CategoryTree")
   orders    Order[]
+  savedSearches SavedSearch[]
 
   @@index([parentId])
   @@map("categories")
@@ -255,6 +275,25 @@ model SavedOrder {
 
   @@unique([userId, orderId])
   @@map("saved_orders")
+}
+
+// Подписка на новые заказы по фильтру — при публикации подходящего
+// заказа (см. SavedSearchMatcherListener) юзеру падает уведомление.
+model SavedSearch {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label         String
+  categoryId    String?
+  category      Category? @relation(fields: [categoryId], references: [id])
+  tags          String[]  @default([])
+  minBudget     Decimal?  @db.Decimal(12, 2)
+  createdAt     DateTime  @default(now())
+  lastMatchedAt DateTime?
+
+  @@index([userId])
+  @@index([categoryId])
+  @@map("saved_searches")
 }
 
 // Хранит снапшот заказа при каждом значимом изменении — можно строить diff

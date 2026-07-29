@@ -95,18 +95,41 @@ export class OrdersService {
     return order;
   }
 
-  async findMany(filters: { categoryId?: string; status?: string; search?: string }) {
+  async findMany(filters: {
+    categoryId?: string;
+    status?: string;
+    search?: string;
+    tags?: string[];
+    minBudget?: number;
+  }) {
+    const and: Prisma.OrderWhereInput[] = [];
+
+    if (filters.search) {
+      and.push({
+        OR: [
+          { title: { contains: filters.search, mode: 'insensitive' } },
+          { description: { contains: filters.search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (filters.tags && filters.tags.length > 0) {
+      and.push({ tags: { hasSome: filters.tags } });
+    }
+
+    if (filters.minBudget !== undefined && !Number.isNaN(filters.minBudget)) {
+      // budgetMax может быть не указан ("бюджет открытый") — тогда сверяем
+      // с budgetMin: заказ подходит, если сам минимум уже не ниже порога.
+      and.push({
+        OR: [{ budgetMax: { gte: filters.minBudget } }, { budgetMax: null, budgetMin: { gte: filters.minBudget } }],
+      });
+    }
+
     const where: Prisma.OrderWhereInput = {
       categoryId: filters.categoryId,
       status: (filters.status as any) ?? { not: 'DRAFT' },
+      ...(and.length > 0 && { AND: and }),
     };
-
-    if (filters.search) {
-      where.OR = [
-        { title: { contains: filters.search, mode: 'insensitive' } },
-        { description: { contains: filters.search, mode: 'insensitive' } },
-      ];
-    }
 
     const orders = await this.prisma.order.findMany({
       where,

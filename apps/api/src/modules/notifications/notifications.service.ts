@@ -43,4 +43,8 @@ export class NotificationsService {
       data: { read: true },
     });
   }
+
+  async createForUser(data: { userId: string; title: string; message: string; eventName: string }) {
+    return this.prisma.notification.create({ data });
+  }
 }
