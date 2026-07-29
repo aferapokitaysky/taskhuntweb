@@ -15,7 +15,7 @@ async function main() {
       primaryRole: 'CLIENT',
       status: 'ACTIVE',
       isStaff: true,
-      profile: { create: { displayName: 'TuskHunt System' } },
+      profile: { create: { displayName: 'TaskHunt System' } },
       wallet: { create: {} },
     },
   });

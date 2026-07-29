@@ -71,7 +71,7 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
-  app.get(Logger).log(`TuskHunt API listening on :${port}`);
+  app.get(Logger).log(`TaskHunt API listening on :${port}`);
 }
 
 bootstrap();

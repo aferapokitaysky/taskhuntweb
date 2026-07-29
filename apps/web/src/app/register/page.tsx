@@ -45,7 +45,7 @@ export default function RegisterPage() {
       <Link href="/" className="mb-8 inline-flex w-fit transition-transform hover:scale-105">
         <Logo className="h-9" />
       </Link>
-      <h1 className="mb-6 font-serif text-2xl text-stone-900">Регистрация на TuskHunt</h1>
+      <h1 className="mb-6 font-serif text-2xl text-stone-900">Регистрация на TaskHunt</h1>
 
       {/* Шаг 1: выбор роли — определяет дальнейшую анкету/квиз */}
       <div className="mb-6 grid grid-cols-2 gap-3">
