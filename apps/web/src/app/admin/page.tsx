@@ -5,6 +5,11 @@ import { api } from '@/lib/api';
 import { Toggle } from '@/components/Toggle';
 import { AppHeader } from '@/components/AppHeader';
 import { ErrorNotice } from '@/components/ErrorNotice';
+import { EmptyState } from '@/components/EmptyState';
+import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
+import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
+import { EscrowIcon } from '@/components/icons/illustrated/EscrowIcon';
+import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
 import type { Category, CommissionRule, Dispute, FeatureFlag, Skill, User } from '@/lib/types';
 
 // Category.slug/Skill.slug обязательны и уникальны на бэке — генерируем
@@ -149,6 +154,7 @@ export default function AdminPage() {
               </div>
             </article>
           ))}
+          {!loading && users.length === 0 && <EmptyState icon={<MatchIcon />} title="Пользователей пока нет" />}
         </section>
       )}
 
@@ -208,6 +214,7 @@ export default function AdminPage() {
               </div>
             </article>
           ))}
+          {!loading && disputes.length === 0 && <EmptyState icon={<EscrowIcon />} title="Активных споров нет" />}
         </section>
       )}
 
@@ -235,6 +242,7 @@ export default function AdminPage() {
               </div>
             </article>
           ))}
+          {!loading && flags.length === 0 && <EmptyState icon={<BuildIcon />} title="Feature flags ещё не заведены" />}
         </section>
       )}
 
@@ -246,6 +254,7 @@ export default function AdminPage() {
               body: JSON.stringify({ percentage }),
             }))} />
           ))}
+          {!loading && commissions.length === 0 && <EmptyState icon={<ChatIcon />} title="Правила комиссии не настроены" />}
         </section>
       )}
 
@@ -335,6 +344,7 @@ export default function AdminPage() {
                   </button>
                 </div>
               ))}
+              {categories.length === 0 && <p className="text-sm text-stone-500">Категорий пока нет.</p>}
             </div>
           </div>
 
@@ -377,6 +387,7 @@ export default function AdminPage() {
                   </button>
                 </div>
               ))}
+              {skills.length === 0 && <p className="text-sm text-stone-500">Навыков пока нет.</p>}
             </div>
           </div>
         </section>

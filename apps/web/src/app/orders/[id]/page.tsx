@@ -12,6 +12,8 @@ import { StarIcon } from '@/components/icons/StarIcon';
 import { BoostIcon } from '@/components/icons/BoostIcon';
 import { AppHeader } from '@/components/AppHeader';
 import { ErrorNotice } from '@/components/ErrorNotice';
+import { EmptyState } from '@/components/EmptyState';
+import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
 
 const MILESTONE_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Не оплачен',
@@ -302,6 +304,7 @@ export default function OrderPage() {
               </p>
             </div>
           ))}
+          {(order.bids ?? []).length === 0 && <EmptyState icon={<MatchIcon />} title="Откликов пока нет" />}
         </div>
       </section>
 

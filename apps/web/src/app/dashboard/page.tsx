@@ -46,7 +46,7 @@ export default function DashboardPage() {
         const firstCategory = categoryList.flatMap((category) => [category, ...(category.children ?? [])])[0];
         setOrderForm((current) => ({ ...current, categoryId: firstCategory?.id ?? '' }));
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Не удалось загрузить dashboard'))
+      .catch(() => undefined) // сбой начальной загрузки — просто пустой dashboard с иллюстрациями, без тревожного баннера
       .finally(() => setLoading(false));
   }, []);
 
@@ -216,9 +216,11 @@ export default function DashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <section>
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex items-center gap-2.5">
             <h2 className="font-serif text-xl text-stone-900">Заказы</h2>
-            <span className="text-sm text-stone-500">{orders.length}</span>
+            <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-brand px-2 text-xs font-semibold text-white">
+              {orders.length}
+            </span>
           </div>
           <input
             placeholder="Поиск по названию или описанию"

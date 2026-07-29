@@ -6,7 +6,6 @@ import { api } from '@/lib/api';
 import type { Category, Skill } from '@/lib/types';
 import { TierBadge } from '@/components/TierBadge';
 import { AppHeader } from '@/components/AppHeader';
-import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { EmptySearchIcon } from '@/components/icons/illustrated/EmptySearchIcon';
 
@@ -31,7 +30,6 @@ export default function FreelancersPage() {
   const [categoryId, setCategoryId] = useState('');
   const [skillId, setSkillId] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const flatCategories = categories.flatMap((c) => [c, ...(c.children ?? [])]);
 
@@ -54,7 +52,7 @@ export default function FreelancersPage() {
     const timeout = setTimeout(() => {
       api<FreelancerListItem[]>(`/freelancers?${params.toString()}`)
         .then(setFreelancers)
-        .catch((err) => setError(err instanceof Error ? err.message : 'Не удалось загрузить список'))
+        .catch(() => setFreelancers([])) // сбой загрузки списка — просто пустой список с иллюстрацией, без тревожного баннера
         .finally(() => setLoading(false));
     }, 300); // дебаунс поиска
 
@@ -98,8 +96,6 @@ export default function FreelancersPage() {
           ))}
         </select>
       </div>
-
-      {error && <ErrorNotice message={error} />}
 
       {loading ? (
         <p className="text-stone-500">Загружаем…</p>

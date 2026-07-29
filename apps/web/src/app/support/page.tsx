@@ -71,7 +71,7 @@ export default function SupportPage() {
 
   useEffect(() => {
     loadTickets()
-      .catch((err) => setError(err instanceof Error ? err.message : 'Не удалось загрузить тикеты'))
+      .catch(() => undefined) // сбой начальной загрузки — просто пустой список с иллюстрацией, без тревожного баннера
       .finally(() => setLoading(false));
   }, []);
 
