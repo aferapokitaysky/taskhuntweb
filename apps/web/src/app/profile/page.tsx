@@ -80,6 +80,16 @@ export default function ProfilePage() {
       <AppHeader />
       <h1 className="mb-6 font-serif text-2xl text-stone-900">Профиль</h1>
 
+      <div className="mb-6 flex items-center gap-4">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-card-sand font-serif text-2xl text-stone-900">
+          {form.displayName ? form.displayName.charAt(0).toUpperCase() : '?'}
+        </div>
+        <div>
+          <p className="font-serif text-lg text-stone-900">{form.displayName || 'Без имени'}</p>
+          <p className="text-sm text-stone-500">{[form.city, form.country].filter(Boolean).join(', ') || 'Локация не указана'}</p>
+        </div>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-4 rounded-3xl bg-white p-6 shadow-sm">
         <div>
           <label className="mb-1 block text-sm font-medium text-stone-600">Имя</label>
