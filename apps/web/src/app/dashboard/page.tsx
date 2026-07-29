@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { BoostIcon } from '@/components/icons/BoostIcon';
+import { BellIcon } from '@/components/icons/BellIcon';
 import { AppHeader } from '@/components/AppHeader';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
@@ -388,7 +389,8 @@ export default function DashboardPage() {
                     }
                     className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-600 transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-stone-300 disabled:hover:text-stone-600"
                   >
-                    🔔 Уведомлять об этом фильтре
+                    <BellIcon className="h-4 w-4" />
+                    Уведомлять об этом фильтре
                   </button>
                 )}
               </div>
@@ -415,7 +417,8 @@ export default function DashboardPage() {
                       key={s.id}
                       className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand"
                     >
-                      🔔 {s.label}
+                      <BellIcon className="h-3.5 w-3.5" />
+                      {s.label}
                       <button type="button" onClick={() => deleteSavedSearch(s.id)} className="hover:text-brand-dark">
                         ×
                       </button>

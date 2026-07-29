@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { User } from '@/lib/types';
 import { BellIcon } from './icons/BellIcon';
+import { MatchIcon } from './icons/illustrated/MatchIcon';
 
 interface Notification {
   id: string;
@@ -149,7 +150,9 @@ export function NotificationBell() {
                 className="block w-full border-b border-stone-100 bg-gradient-to-r from-brand/15 to-card-sand/40 px-4 py-3 text-left transition hover:from-brand/25"
               >
                 <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-sm">✨</span>
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10">
+                    <MatchIcon className="h-6 w-6" />
+                  </span>
                   <div>
                     <p className="text-sm font-semibold text-stone-900">
                       Вам подошло {matches.length} {pluralOrders(matches.length)}
