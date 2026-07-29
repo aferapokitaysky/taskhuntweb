@@ -1,34 +1,22 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { Category, Skill } from '@/lib/types';
-import { TierBadge } from '@/components/TierBadge';
 import { AppHeader } from '@/components/AppHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { EmptySearchIcon } from '@/components/icons/illustrated/EmptySearchIcon';
+import { FreelancerCard, type FreelancerListItem } from '@/components/FreelancerCard';
 
-interface FreelancerListItem {
-  id: string;
-  profile: {
-    displayName: string;
-    bio?: string | null;
-    country?: string | null;
-    city?: string | null;
-    successRate?: string | null;
-    skills: { id: string; name: string }[];
-  };
-  subscriptionTier: 'STARTER' | 'PRO' | 'PREMIUM';
-}
-
-export default function FreelancersPage() {
+function FreelancersPageContent() {
+  const searchParams = useSearchParams();
   const [freelancers, setFreelancers] = useState<FreelancerListItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [skillId, setSkillId] = useState('');
+  const [skillId, setSkillId] = useState(searchParams.get('skillId') ?? '');
   const [loading, setLoading] = useState(true);
 
   const flatCategories = categories.flatMap((c) => [c, ...(c.children ?? [])]);
@@ -59,10 +47,21 @@ export default function FreelancersPage() {
     return () => clearTimeout(timeout);
   }, [search, categoryId, skillId]);
 
+  const activeSkillName = skillId ? skills.find((s) => s.id === skillId)?.name : null;
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
       <AppHeader />
       <h1 className="mb-6 font-serif text-3xl text-stone-900">Фрилансеры</h1>
+
+      {activeSkillName && (
+        <p className="mb-4 -mt-4 text-sm text-stone-500">
+          Фильтр по навыку: <span className="font-medium text-brand">{activeSkillName}</span>{' '}
+          <button type="button" onClick={() => setSkillId('')} className="text-stone-400 hover:text-stone-600">
+            × сбросить
+          </button>
+        </p>
+      )}
 
       <div className="mb-6 flex flex-wrap gap-3 rounded-2xl bg-white p-3 shadow-sm">
         <input
@@ -101,35 +100,8 @@ export default function FreelancersPage() {
         <p className="text-stone-500">Загружаем…</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
-          {freelancers.map((f) => (
-            <Link
-              key={f.id}
-              href={`/freelancers/${f.id}`}
-              className="group rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-card-sand font-serif text-lg text-stone-900">
-                  {f.profile.displayName.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-stone-900">{f.profile.displayName}</p>
-                    <TierBadge tier={f.subscriptionTier} />
-                  </div>
-                  <p className="text-xs text-stone-500">
-                    {[f.profile.city, f.profile.country].filter(Boolean).join(', ') || 'Локация не указана'}
-                  </p>
-                </div>
-              </div>
-              {f.profile.bio && <p className="mt-3 line-clamp-2 text-sm text-stone-600">{f.profile.bio}</p>}
-              <div className="mt-3 flex flex-wrap gap-1">
-                {f.profile.skills.slice(0, 4).map((skill) => (
-                  <span key={skill.id} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600">
-                    {skill.name}
-                  </span>
-                ))}
-              </div>
-            </Link>
+          {freelancers.map((freelancer) => (
+            <FreelancerCard key={freelancer.id} freelancer={freelancer} />
           ))}
           {freelancers.length === 0 && (
             <div className="sm:col-span-2">
@@ -143,5 +115,13 @@ export default function FreelancersPage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function FreelancersPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto max-w-6xl px-4 py-8 text-stone-500">Загружаем…</main>}>
+      <FreelancersPageContent />
+    </Suspense>
   );
 }

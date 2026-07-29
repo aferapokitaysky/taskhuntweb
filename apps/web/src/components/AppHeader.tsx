@@ -7,9 +7,11 @@ import { api } from '@/lib/api';
 import type { User } from '@/lib/types';
 import { Logo } from './Logo';
 import { NotificationBell } from './NotificationBell';
+import { HeaderSearch } from './HeaderSearch';
 
 const NAV_LINKS = [
   { href: '/dashboard', label: 'Заказы' },
+  { href: '/categories', label: 'Категории' },
   { href: '/freelancers', label: 'Фрилансеры' },
   { href: '/pricing', label: 'Тарифы' },
   { href: '/referrals', label: 'Партнёрка' },
@@ -48,6 +50,7 @@ export function AppHeader() {
         ))}
       </nav>
       <div className="flex shrink-0 items-center gap-2">
+        <HeaderSearch />
         <NotificationBell />
         <Link
           href="/profile"

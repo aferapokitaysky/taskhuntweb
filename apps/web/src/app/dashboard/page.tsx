@@ -8,12 +8,22 @@ import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { PayoutAddressBook, type WithdrawTarget } from '@/components/PayoutAddressBook';
 import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { Category, Order, SavedSearch, User, WalletBalance } from '@/lib/types';
 import { money } from '@/lib/types';
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto max-w-7xl px-4 py-10 text-stone-500">Загружаем dashboard...</main>}>
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+function DashboardContent() {
+  const searchParams = useSearchParams();
   const [me, setMe] = useState<User | null>(null);
   const [wallet, setWallet] = useState<WalletBalance | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -43,7 +53,7 @@ export default function DashboardPage() {
   const [savedOrderIds, setSavedOrderIds] = useState<Set<string>>(new Set());
   const [savedOrders, setSavedOrders] = useState<Order[]>([]);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
-  const [filterCategoryId, setFilterCategoryId] = useState('');
+  const [filterCategoryId, setFilterCategoryId] = useState(searchParams.get('categoryId') ?? '');
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const [filterTagInput, setFilterTagInput] = useState('');
   const [filterMinBudget, setFilterMinBudget] = useState('');
@@ -52,7 +62,11 @@ export default function DashboardPage() {
   const [savedSearchError, setSavedSearchError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api<User>('/users/me'), api<WalletBalance>('/wallet/balance'), api<Order[]>('/orders'), api<Category[]>('/categories')])
+    // Если пришли по ссылке с /categories с уже готовым ?categoryId= —
+    // применяем фильтр сразу в первом запросе, а не ждём отдельного
+    // дебаунса (тот на первом рендере намеренно не стреляет, см. ниже).
+    const initialOrdersUrl = filterCategoryId ? `/orders?categoryId=${filterCategoryId}` : '/orders';
+    Promise.all([api<User>('/users/me'), api<WalletBalance>('/wallet/balance'), api<Order[]>(initialOrdersUrl), api<Category[]>('/categories')])
       .then(([user, balance, orderList, categoryList]) => {
         setMe(user);
         setWallet(balance);

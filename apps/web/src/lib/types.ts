@@ -10,12 +10,14 @@ export interface Category {
   name: string;
   slug: string;
   children?: Category[];
+  orderCount?: number;
 }
 
 export interface Skill {
   id: string;
   name: string;
   slug: string;
+  usageCount?: number;
 }
 
 export interface SavedSearch {
