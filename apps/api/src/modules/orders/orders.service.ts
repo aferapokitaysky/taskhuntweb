@@ -74,7 +74,9 @@ export class OrdersService {
 
     const order = await this.prisma.$transaction(async (tx) => {
       const created = await tx.order.create({
-        data: { ...dto, clientId, status: 'OPEN' },
+        // dto.deadline приходит с фронта как "YYYY-MM-DD" (input type="date") —
+        // Prisma требует полный ISO-8601 DateTime, голая дата валится с ошибкой.
+        data: { ...dto, deadline: dto.deadline ? new Date(dto.deadline) : undefined, clientId, status: 'OPEN' },
       });
       await tx.orderVersion.create({
         data: { orderId: created.id, versionNumber: 1, snapshot: created as any, editedById: clientId },
@@ -199,7 +201,10 @@ export class OrdersService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.order.update({ where: { id: orderId }, data: dto });
+      const updated = await tx.order.update({
+        where: { id: orderId },
+        data: { ...dto, deadline: dto.deadline ? new Date(dto.deadline) : undefined },
+      });
 
       const lastVersion = await tx.orderVersion.findFirst({
         where: { orderId },

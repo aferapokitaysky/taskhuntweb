@@ -4,7 +4,7 @@ RUN corepack enable
 
 FROM base AS deps
 COPY package.json ./
-RUN npm install -g pnpm && pnpm install --no-frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 FROM deps AS build
 COPY . .
