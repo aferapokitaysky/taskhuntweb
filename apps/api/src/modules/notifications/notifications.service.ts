@@ -62,4 +62,11 @@ export class NotificationsService {
       update: { enabled },
     });
   }
+
+  async setDigestFrequency(userId: string, frequency: 'NONE' | 'DAILY' | 'WEEKLY') {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { digestFrequency: frequency as any },
+    });
+  }
 }

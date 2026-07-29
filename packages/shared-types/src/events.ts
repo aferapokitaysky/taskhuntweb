@@ -17,6 +17,7 @@ export enum DomainEventName {
   EscrowReleased = 'EscrowReleased',
   WorkSubmitted = 'WorkSubmitted',
   DisputeOpened = 'DisputeOpened',
+  OrderInviteCreated = 'OrderInviteCreated',
   EmailVerificationRequested = 'EmailVerificationRequested',
   PasswordResetRequested = 'PasswordResetRequested',
   SubscriptionExpiringSoon = 'SubscriptionExpiringSoon',
@@ -49,6 +50,11 @@ export type BidSubmittedEvent = BaseDomainEvent<
 export type BidAcceptedEvent = BaseDomainEvent<
   DomainEventName.BidAccepted,
   { bidId: string; orderId: string; freelancerId: string; clientId: string; amount: number }
+>;
+
+export type OrderInviteCreatedEvent = BaseDomainEvent<
+  DomainEventName.OrderInviteCreated,
+  { inviteId: string; orderId: string; orderTitle: string; freelancerId: string; clientId: string }
 >;
 
 export type InvoiceIssuedEvent = BaseDomainEvent<
@@ -107,6 +113,7 @@ export type DomainEvent =
   | EscrowReleasedEvent
   | WorkSubmittedEvent
   | DisputeOpenedEvent
+  | OrderInviteCreatedEvent
   | EmailVerificationRequestedEvent
   | PasswordResetRequestedEvent
   | SubscriptionExpiringSoonEvent;

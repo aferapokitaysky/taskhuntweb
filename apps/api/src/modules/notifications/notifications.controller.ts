@@ -4,6 +4,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { NotificationsService } from './notifications.service';
 import { SetPreferenceDto } from './dto/set-preference.dto';
+import { SetDigestDto } from './dto/set-digest.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
@@ -18,6 +19,11 @@ export class NotificationsController {
   @Patch('preferences')
   setPreference(@CurrentUser() user: AuthenticatedUser, @Body() dto: SetPreferenceDto) {
     return this.notificationsService.setPreference(user.id, dto.channel, dto.enabled);
+  }
+
+  @Patch('preferences/digest')
+  setDigestPreference(@CurrentUser() user: AuthenticatedUser, @Body() dto: SetDigestDto) {
+    return this.notificationsService.setDigestFrequency(user.id, dto.frequency);
   }
 
   @Get('me')

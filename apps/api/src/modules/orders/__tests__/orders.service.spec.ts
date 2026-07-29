@@ -56,7 +56,13 @@ describe('OrdersService', () => {
       publish: jest.fn().mockResolvedValue(undefined),
     };
 
-    service = new OrdersService(prisma, eventBus as any, new MatchingService(prisma));
+    const usersService = {
+      recalculateAvgResponseTime: jest.fn(),
+      recalculateSuccessMetrics: jest.fn(),
+      incrementDisputesCount: jest.fn(),
+    };
+
+    service = new OrdersService(prisma, eventBus as any, new MatchingService(prisma), usersService as any);
   });
 
   describe('create', () => {

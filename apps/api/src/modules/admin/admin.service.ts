@@ -508,4 +508,35 @@ export class AdminService {
     result.sort((a, b) => b.earnings - a.earnings);
     return result.slice(0, validLimit);
   }
+
+  async mergeSkill(sourceId: string, targetId: string) {
+    const [source, target] = await Promise.all([
+      this.prisma.skill.findUnique({ where: { id: sourceId } }),
+      this.prisma.skill.findUnique({ where: { id: targetId } }),
+    ]);
+    if (!source || !target) {
+      throw new NotFoundException('One or both skills not found');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const profileSkills = await tx.profileSkill.findMany({ where: { skillId: sourceId } });
+      for (const ps of profileSkills) {
+        const existing = await tx.profileSkill.findUnique({
+          where: { profileId_skillId: { profileId: ps.profileId, skillId: targetId } },
+        });
+        if (!existing) {
+          await tx.profileSkill.create({
+            data: { profileId: ps.profileId, skillId: targetId },
+          });
+        }
+        await tx.profileSkill.delete({
+          where: { profileId_skillId: { profileId: ps.profileId, skillId: sourceId } },
+        });
+      }
+
+      await tx.skill.delete({ where: { id: sourceId } });
+    });
+
+    return { success: true };
+  }
 }

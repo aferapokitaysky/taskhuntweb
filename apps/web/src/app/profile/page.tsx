@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { api, API_URL, createSkill, uploadAvatar } from '@/lib/api';
-import type { PortfolioItem, Skill, User } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+import { api, API_URL, createSkill, downloadFile, uploadAvatar } from '@/lib/api';
+import type { BidTemplate, PortfolioItem, SessionItem, Skill, User } from '@/lib/types';
 import { AppHeader } from '@/components/AppHeader';
 import { GithubIcon } from '@/components/icons/GithubIcon';
 import { GlobeIcon } from '@/components/icons/GlobeIcon';
@@ -14,7 +15,9 @@ const MAX_SKILLS = 25;
 const EMPTY_PORTFOLIO_FORM = { title: '', description: '', imageUrl: '', projectUrl: '', tags: [] as string[] };
 
 export default function ProfilePage() {
+  const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
+  const [isFreelancer, setIsFreelancer] = useState(false);
   const [availableForWork, setAvailableForWork] = useState(true);
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
   const [viewsCount, setViewsCount] = useState(0);
@@ -50,10 +53,36 @@ export default function ProfilePage() {
   const [portfolioSaving, setPortfolioSaving] = useState(false);
   const [portfolioError, setPortfolioError] = useState<string | null>(null);
 
+  const [bidTemplates, setBidTemplates] = useState<BidTemplate[]>([]);
+  const [showBidTemplateForm, setShowBidTemplateForm] = useState(false);
+  const [editingBidTemplateId, setEditingBidTemplateId] = useState<string | null>(null);
+  const [bidTemplateForm, setBidTemplateForm] = useState({ name: '', message: '', defaultDeliveryDays: '' });
+  const [bidTemplateSaving, setBidTemplateSaving] = useState(false);
+  const [bidTemplateError, setBidTemplateError] = useState<string | null>(null);
+
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' });
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const [totpEnabled, setTotpEnabled] = useState(false);
+  const [totpEnrollment, setTotpEnrollment] = useState<{ qrCodeDataUrl: string } | null>(null);
+  const [totpCode, setTotpCode] = useState('');
+  const [totpBackupCodes, setTotpBackupCodes] = useState<string[] | null>(null);
+  const [totpDisablePassword, setTotpDisablePassword] = useState('');
+  const [showTotpDisable, setShowTotpDisable] = useState(false);
+  const [totpBusy, setTotpBusy] = useState(false);
+  const [totpError, setTotpError] = useState<string | null>(null);
+
+  const [sessions, setSessions] = useState<SessionItem[] | null>(null);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([api<User>('/users/me'), api<Skill[]>('/skills')])
@@ -73,6 +102,12 @@ export default function ProfilePage() {
         setViewsCount(user.profile?.viewsCount ?? 0);
         setSelectedSkillIds((user.profile?.skills ?? []).map((s) => s.skill.id));
         setPortfolioItems(user.profile?.portfolioItems ?? []);
+        setTotpEnabled(user.totpEnabled ?? false);
+        loadSessions();
+        setIsFreelancer(user.roles.includes('FREELANCER'));
+        if (user.roles.includes('FREELANCER')) {
+          api<BidTemplate[]>('/users/me/bid-templates').then(setBidTemplates).catch(() => undefined);
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Не удалось загрузить профиль'))
       .finally(() => setLoading(false));
@@ -138,6 +173,61 @@ export default function ProfilePage() {
     await api(`/users/me/portfolio/${id}`, { method: 'DELETE' }).catch(() => undefined);
   }
 
+  function startAddBidTemplate() {
+    setEditingBidTemplateId(null);
+    setBidTemplateForm({ name: '', message: '', defaultDeliveryDays: '' });
+    setBidTemplateError(null);
+    setShowBidTemplateForm(true);
+  }
+
+  function startEditBidTemplate(template: BidTemplate) {
+    setEditingBidTemplateId(template.id);
+    setBidTemplateForm({
+      name: template.name,
+      message: template.message,
+      defaultDeliveryDays: template.defaultDeliveryDays ? String(template.defaultDeliveryDays) : '',
+    });
+    setBidTemplateError(null);
+    setShowBidTemplateForm(true);
+  }
+
+  async function submitBidTemplate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBidTemplateSaving(true);
+    setBidTemplateError(null);
+    const payload = {
+      name: bidTemplateForm.name,
+      message: bidTemplateForm.message,
+      defaultDeliveryDays: bidTemplateForm.defaultDeliveryDays ? Number(bidTemplateForm.defaultDeliveryDays) : undefined,
+    };
+    try {
+      if (editingBidTemplateId) {
+        const updated = await api<BidTemplate>(`/users/me/bid-templates/${editingBidTemplateId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        setBidTemplates((current) => current.map((t) => (t.id === editingBidTemplateId ? updated : t)));
+      } else {
+        const created = await api<BidTemplate>('/users/me/bid-templates', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        setBidTemplates((current) => [created, ...current]);
+      }
+      setShowBidTemplateForm(false);
+      setEditingBidTemplateId(null);
+    } catch (err) {
+      setBidTemplateError(err instanceof Error ? err.message : 'Не удалось сохранить шаблон');
+    } finally {
+      setBidTemplateSaving(false);
+    }
+  }
+
+  async function deleteBidTemplate(id: string) {
+    setBidTemplates((current) => current.filter((t) => t.id !== id));
+    await api(`/users/me/bid-templates/${id}`, { method: 'DELETE' }).catch(() => undefined);
+  }
+
   async function toggleAvailableForWork() {
     const next = !availableForWork;
     setAvailableForWork(next);
@@ -174,6 +264,109 @@ export default function ProfilePage() {
       setPasswordError(err instanceof Error ? err.message : 'Не удалось сменить пароль');
     } finally {
       setPasswordSaving(false);
+    }
+  }
+
+  async function startTotpEnrollment() {
+    setTotpError(null);
+    setTotpBusy(true);
+    try {
+      const result = await api<{ qrCodeDataUrl: string }>('/auth/2fa/enroll', { method: 'POST' });
+      setTotpEnrollment(result);
+    } catch (err) {
+      setTotpError(err instanceof Error ? err.message : 'Не удалось начать подключение 2FA');
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  async function confirmTotpEnrollment(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setTotpError(null);
+    setTotpBusy(true);
+    try {
+      const result = await api<{ backupCodes: string[] }>('/auth/2fa/enroll/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ code: totpCode }),
+      });
+      setTotpEnabled(true);
+      setTotpEnrollment(null);
+      setTotpCode('');
+      setTotpBackupCodes(result.backupCodes);
+    } catch (err) {
+      setTotpError(err instanceof Error ? err.message : 'Неверный код');
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  async function disableTotp(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setTotpError(null);
+    setTotpBusy(true);
+    try {
+      await api('/auth/2fa/disable', {
+        method: 'POST',
+        body: JSON.stringify({ password: totpDisablePassword }),
+      });
+      setTotpEnabled(false);
+      setShowTotpDisable(false);
+      setTotpDisablePassword('');
+    } catch (err) {
+      setTotpError(err instanceof Error ? err.message : 'Не удалось отключить 2FA');
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  function loadSessions() {
+    setSessionsError(null);
+    api<SessionItem[]>('/auth/sessions')
+      .then(setSessions)
+      .catch((err) => setSessionsError(err instanceof Error ? err.message : 'Не удалось загрузить сессии'));
+  }
+
+  async function revokeSession(id: string) {
+    setSessions((current) => current?.filter((s) => s.id !== id) ?? null);
+    await api(`/auth/sessions/${id}`, { method: 'DELETE' }).catch(() => undefined);
+  }
+
+  async function revokeOtherSessions() {
+    setSessions((current) => current?.filter((s) => s.isCurrent) ?? null);
+    await api('/auth/sessions/revoke-others', { method: 'POST' }).catch(() => undefined);
+  }
+
+  function deviceLabel(userAgent?: string | null): string {
+    if (!userAgent) return 'Неизвестное устройство';
+    if (/mobile|iphone|android/i.test(userAgent)) return 'Мобильное устройство';
+    if (/ipad|tablet/i.test(userAgent)) return 'Планшет';
+    return 'Компьютер';
+  }
+
+  async function exportMyData() {
+    setExportError(null);
+    setExportBusy(true);
+    try {
+      await downloadFile('/users/me/export', 'taskhunt-data.json');
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Не удалось скачать данные');
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
+  async function deleteAccount(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setDeleteError(null);
+    setDeleteBusy(true);
+    try {
+      await api('/users/me', { method: 'DELETE', body: JSON.stringify({ password: deletePassword }) });
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      router.push('/');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Не удалось удалить аккаунт');
+      setDeleteBusy(false);
     }
   }
 
@@ -638,6 +831,100 @@ export default function ProfilePage() {
         )}
       </section>
 
+      {isFreelancer && (
+        <section className="rounded-3xl bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-serif text-xl text-stone-900">Шаблоны откликов</h2>
+            {!showBidTemplateForm && (
+              <button
+                type="button"
+                onClick={startAddBidTemplate}
+                className="rounded-full border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-600 transition hover:border-brand hover:text-brand"
+              >
+                + Добавить шаблон
+              </button>
+            )}
+          </div>
+
+          {bidTemplates.length > 0 && (
+            <div className="mb-4 grid gap-3 sm:grid-cols-2">
+              {bidTemplates.map((template) => (
+                <div key={template.id} className="rounded-2xl border border-stone-100 p-4">
+                  <p className="font-medium text-stone-900">{template.name}</p>
+                  <p className="mt-1 line-clamp-2 text-sm text-stone-600">{template.message}</p>
+                  {template.defaultDeliveryDays && (
+                    <p className="mt-1 text-xs text-stone-400">Срок по умолчанию: {template.defaultDeliveryDays} дн.</p>
+                  )}
+                  <div className="mt-3 flex items-center gap-3 text-sm">
+                    <button type="button" onClick={() => startEditBidTemplate(template)} className="text-stone-500 hover:text-stone-700">
+                      Изменить
+                    </button>
+                    <button type="button" onClick={() => deleteBidTemplate(template.id)} className="text-stone-400 hover:text-red-600">
+                      Удалить
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {bidTemplates.length === 0 && !showBidTemplateForm && (
+            <p className="text-sm text-stone-400">
+              Пока пусто — сохраните заготовку текста отклика, чтобы быстро применять её к похожим заказам.
+            </p>
+          )}
+
+          {showBidTemplateForm && (
+            <form onSubmit={submitBidTemplate} className="space-y-3 rounded-2xl border border-stone-100 p-4">
+              <input
+                required
+                placeholder="Название шаблона"
+                value={bidTemplateForm.name}
+                onChange={(e) => setBidTemplateForm((f) => ({ ...f, name: e.target.value }))}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              />
+              <textarea
+                required
+                placeholder="Текст отклика"
+                value={bidTemplateForm.message}
+                onChange={(e) => setBidTemplateForm((f) => ({ ...f, message: e.target.value }))}
+                className="min-h-24 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="number"
+                min="1"
+                placeholder="Срок по умолчанию, дней (необязательно)"
+                value={bidTemplateForm.defaultDeliveryDays}
+                onChange={(e) => setBidTemplateForm((f) => ({ ...f, defaultDeliveryDays: e.target.value }))}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              />
+
+              {bidTemplateError && <p className="text-sm text-red-600">{bidTemplateError}</p>}
+
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={bidTemplateSaving}
+                  className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {bidTemplateSaving ? 'Сохраняем…' : editingBidTemplateId ? 'Сохранить изменения' : 'Добавить'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBidTemplateForm(false);
+                    setEditingBidTemplateId(null);
+                  }}
+                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                >
+                  Отмена
+                </button>
+              </div>
+            </form>
+          )}
+        </section>
+      )}
+
       <section className="rounded-3xl bg-white p-6 shadow-sm">
         <h2 className="mb-4 font-serif text-xl text-stone-900">Безопасность</h2>
         <form onSubmit={submitPasswordChange} className="max-w-sm space-y-3">
@@ -685,6 +972,212 @@ export default function ProfilePage() {
             {passwordSaving ? 'Сохраняем…' : 'Сменить пароль'}
           </button>
         </form>
+
+        <div className="mt-6 max-w-sm border-t border-stone-100 pt-6">
+          <h3 className="mb-1 font-medium text-stone-900">Двухфакторная аутентификация</h3>
+
+          {totpBackupCodes ? (
+            <div>
+              <p className="mb-2 text-sm text-stone-600">
+                2FA включена. Сохраните резервные коды — каждый работает один раз, если потеряете доступ к
+                приложению-аутентификатору. Больше мы их не покажем.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 rounded-lg bg-stone-50 p-3 font-mono text-sm">
+                {totpBackupCodes.map((code) => (
+                  <span key={code}>{code}</span>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setTotpBackupCodes(null)}
+                className="mt-3 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white"
+              >
+                Готово, я сохранил коды
+              </button>
+            </div>
+          ) : totpEnrollment ? (
+            <form onSubmit={confirmTotpEnrollment} className="space-y-3">
+              <p className="text-sm text-stone-600">Отсканируйте QR-код в приложении-аутентификаторе (Google Authenticator, Authy) и введите код:</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={totpEnrollment.qrCodeDataUrl} alt="QR-код для 2FA" className="h-40 w-40 rounded-lg border border-stone-200" />
+              <input
+                required
+                inputMode="numeric"
+                placeholder="6-значный код"
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value)}
+                className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm"
+              />
+              {totpError && <p className="text-sm text-red-600">{totpError}</p>}
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={totpBusy}
+                  className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  Подтвердить
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTotpEnrollment(null)}
+                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                >
+                  Отмена
+                </button>
+              </div>
+            </form>
+          ) : totpEnabled ? (
+            showTotpDisable ? (
+              <form onSubmit={disableTotp} className="space-y-3">
+                <label className="block text-sm text-stone-600">Введите пароль, чтобы отключить 2FA:</label>
+                <input
+                  required
+                  type="password"
+                  value={totpDisablePassword}
+                  onChange={(e) => setTotpDisablePassword(e.target.value)}
+                  className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm"
+                />
+                {totpError && <p className="text-sm text-red-600">{totpError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={totpBusy}
+                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    Отключить 2FA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowTotpDisable(false)}
+                    className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-700">Включена</span>
+                <button
+                  type="button"
+                  onClick={() => setShowTotpDisable(true)}
+                  className="text-sm font-medium text-stone-500 hover:text-red-600"
+                >
+                  Отключить
+                </button>
+              </div>
+            )
+          ) : (
+            <div>
+              <p className="mb-2 text-sm text-stone-600">Дополнительный код из приложения при входе — защищает аккаунт, даже если пароль утёк.</p>
+              {totpError && <p className="mb-2 text-sm text-red-600">{totpError}</p>}
+              <button
+                type="button"
+                onClick={startTotpEnrollment}
+                disabled={totpBusy}
+                className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:border-brand hover:text-brand disabled:opacity-50"
+              >
+                Включить 2FA
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 border-t border-stone-100 pt-6">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="font-medium text-stone-900">Активные сессии</h3>
+            {sessions && sessions.length > 1 && (
+              <button type="button" onClick={revokeOtherSessions} className="text-sm font-medium text-stone-500 hover:text-red-600">
+                Завершить все остальные
+              </button>
+            )}
+          </div>
+          {sessionsError && <p className="text-sm text-red-600">{sessionsError}</p>}
+          {!sessions && !sessionsError && <p className="text-sm text-stone-400">Загружаем сессии…</p>}
+          <div className="space-y-2">
+            {sessions?.map((session) => (
+              <div key={session.id} className="flex items-center justify-between rounded-lg border border-stone-200 px-4 py-2.5 text-sm">
+                <div>
+                  <p className="font-medium text-stone-800">
+                    {deviceLabel(session.userAgent)}
+                    {session.isCurrent && <span className="ml-2 text-xs font-normal text-emerald-600">Это устройство</span>}
+                  </p>
+                  <p className="text-xs text-stone-500">
+                    {session.ip} · последняя активность {new Date(session.lastUsedAt).toLocaleString('ru-RU')}
+                  </p>
+                </div>
+                {!session.isCurrent && (
+                  <button type="button" onClick={() => revokeSession(session.id)} className="text-stone-400 hover:text-red-600">
+                    Завершить
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl bg-white p-6 shadow-sm">
+        <h2 className="mb-4 font-serif text-xl text-stone-900">Данные и приватность</h2>
+
+        <div className="max-w-sm">
+          <p className="mb-2 text-sm text-stone-600">Скачайте копию всех своих данных на TaskHunt в формате JSON.</p>
+          {exportError && <p className="mb-2 text-sm text-red-600">{exportError}</p>}
+          <button
+            type="button"
+            onClick={exportMyData}
+            disabled={exportBusy}
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:border-brand hover:text-brand disabled:opacity-50"
+          >
+            {exportBusy ? 'Готовим файл…' : 'Скачать мои данные'}
+          </button>
+        </div>
+
+        <div className="mt-6 max-w-sm border-t border-stone-100 pt-6">
+          <h3 className="mb-1 font-medium text-red-700">Удалить аккаунт</h3>
+          <p className="mb-2 text-sm text-stone-600">
+            Необратимо: вход станет невозможен, имя и фото профиля заменятся на «Удалённый пользователь». История
+            заказов и платежей у ваших контрагентов сохранится — это нужно им для их собственной отчётности.
+          </p>
+
+          {showDeleteAccount ? (
+            <form onSubmit={deleteAccount} className="space-y-3">
+              <label className="block text-sm text-stone-600">Введите пароль, чтобы подтвердить удаление:</label>
+              <input
+                required
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm"
+              />
+              {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={deleteBusy}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {deleteBusy ? 'Удаляем…' : 'Удалить аккаунт навсегда'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteAccount(false)}
+                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                >
+                  Отмена
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowDeleteAccount(true)}
+              className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+            >
+              Удалить аккаунт
+            </button>
+          )}
+        </div>
       </section>
         </div>
       </div>

@@ -185,6 +185,13 @@ export class AdminController {
     return this.adminService.deleteSkill(id);
   }
 
+  @RequirePermissions(PermissionCode.CatalogManage)
+  @AuditLog('SKILL_MERGED', 'Skill')
+  @Post('skills/:id/merge-into/:targetId')
+  mergeSkill(@Param('id') id: string, @Param('targetId') targetId: string) {
+    return this.adminService.mergeSkill(id, targetId);
+  }
+
   // --- Анти-фрод ---
 
   @RequirePermissions(PermissionCode.FraudReview)

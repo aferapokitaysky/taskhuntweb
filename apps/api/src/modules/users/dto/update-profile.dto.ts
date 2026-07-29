@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsOptional, IsString, IsUrl } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsOptional, IsString, IsUrl } from 'class-validator';
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -33,4 +33,8 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsBoolean()
   availableForWork?: boolean;
+
+  @IsOptional()
+  @IsDateString()
+  vacationUntil?: string;
 }

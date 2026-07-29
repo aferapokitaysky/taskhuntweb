@@ -215,4 +215,47 @@ describe('UsersService', () => {
       expect(res).toEqual({ success: true });
     });
   });
+
+  describe('Round 13: Freelancer metrics calculation', () => {
+    it('правильно рассчитывает successRate и completionRate', async () => {
+      prisma.bid = {
+        findMany: jest.fn().mockResolvedValue([
+          { status: 'ACCEPTED', order: { status: 'COMPLETED', disputes: [] } },
+          { status: 'ACCEPTED', order: { status: 'COMPLETED', disputes: [{ id: 'disp-1' }] } },
+        ]),
+      };
+      prisma.profile.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+
+      await service.recalculateSuccessMetrics('freelancer-1');
+
+      expect(prisma.profile.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'freelancer-1' },
+        data: {
+          successRate: 100,
+          completionRate: 50,
+        },
+      });
+    });
+
+    it('рассчитывает avgResponseMins по последним бидам', async () => {
+      const now = new Date();
+      const orderDate1 = new Date(now.getTime() - 60 * 60 * 1000); // 60 min ago
+      const orderDate2 = new Date(now.getTime() - 30 * 60 * 1000); // 30 min ago
+
+      prisma.bid = {
+        findMany: jest.fn().mockResolvedValue([
+          { createdAt: now, order: { createdAt: orderDate1 } }, // 60 mins
+          { createdAt: now, order: { createdAt: orderDate2 } }, // 30 mins
+        ]),
+      };
+      prisma.profile.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+
+      await service.recalculateAvgResponseTime('freelancer-1');
+
+      expect(prisma.profile.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'freelancer-1' },
+        data: { avgResponseMins: 45 },
+      });
+    });
+  });
 });

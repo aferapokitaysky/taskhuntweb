@@ -58,7 +58,7 @@ export default function CategoriesPage() {
               key={category.id}
               className="rounded-3xl border border-stone-100 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
             >
-              <Link href={`/dashboard?categoryId=${category.id}`} className="flex items-start gap-3">
+              <Link href={`/categories/${category.id}`} className="flex items-start gap-3">
                 <div className="flex h-20 w-20 shrink-0 items-center justify-center">
                   <CategoryIcon slug={category.slug} className="h-20 w-20" />
                 </div>
@@ -72,7 +72,7 @@ export default function CategoriesPage() {
                   {category.children.map((child) => (
                     <Link
                       key={child.id}
-                      href={`/dashboard?categoryId=${child.id}`}
+                      href={`/categories/${child.id}`}
                       className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600 transition hover:bg-brand/10 hover:text-brand"
                     >
                       {child.name}

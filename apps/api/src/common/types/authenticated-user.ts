@@ -7,4 +7,5 @@ export interface AuthenticatedUser {
   roles: MarketplaceRole[];
   isStaff: boolean;
   staffPermissions: string[]; // коды из PermissionCode, вычисленные при логине
+  sessionId?: string; // id RefreshSession, из claim'а sid в access-токене
 }

@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { API_URL } from '@/lib/api';
 import { TierBadge } from '@/components/TierBadge';
+import { FreelancerLevelBadge, type FreelancerLevel } from '@/components/FreelancerLevelBadge';
 
 export interface FreelancerListItem {
   id: string;
+  level?: FreelancerLevel;
   profile: {
     displayName: string;
     avatarUrl?: string | null;
@@ -39,6 +41,7 @@ export function FreelancerCard({ freelancer }: { freelancer: FreelancerListItem 
           <p className="text-xs text-stone-500">
             {[freelancer.profile.city, freelancer.profile.country].filter(Boolean).join(', ') || 'Локация не указана'}
           </p>
+          <FreelancerLevelBadge level={freelancer.level} className="mt-1.5" />
         </div>
       </div>
       {freelancer.profile.bio && <p className="mt-3 line-clamp-2 text-sm text-stone-600">{freelancer.profile.bio}</p>}

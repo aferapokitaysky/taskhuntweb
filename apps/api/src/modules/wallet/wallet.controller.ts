@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { IsBoolean, IsIn, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -10,6 +11,7 @@ import { WalletService } from './wallet.service';
 import { InvoiceService } from './invoice.service';
 import { PayoutAddressesService } from './payout-addresses.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { SetAutoWithdrawDto } from './dto/set-auto-withdraw.dto';
 import { PAYOUT_QUEUE, PayoutJobData } from './payout.processor';
 import { Throttle } from '@nestjs/throttler';
 
@@ -18,12 +20,10 @@ export class WithdrawDto {
   @IsPositive()
   amount!: number;
 
-  /** Выбор сохранённого адреса — если задан, `payoutAddress`/`network` не нужны. */
   @IsOptional()
   @IsUUID()
   savedAddressId?: string;
 
-  /** Новый адрес, если не пользуемся книгой адресов. */
   @IsOptional()
   @IsString()
   @IsNotEmpty()
@@ -33,7 +33,6 @@ export class WithdrawDto {
   @IsIn(PAYOUT_NETWORKS)
   network?: string;
 
-  /** Сохранить `payoutAddress` в книгу адресов на будущее. */
   @IsOptional()
   @IsBoolean()
   saveAddress?: boolean;
@@ -68,6 +67,31 @@ export class WalletController {
     return this.walletService.getTransactionHistory(user.id, cursor);
   }
 
+  @Get('transactions/export.csv')
+  async exportTransactionsCsv(@CurrentUser() user: AuthenticatedUser, @Res() res: Response) {
+    const csv = await this.walletService.exportTransactionHistoryCsv(user.id);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="transactions.csv"');
+    res.send(csv);
+  }
+
+  @Get('transactions/:entryId/receipt.pdf')
+  async getReceiptPdf(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('entryId') entryId: string,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.walletService.generateReceiptPdf(user.id, entryId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="receipt-${entryId}.pdf"`);
+    res.send(pdf);
+  }
+
+  @Patch('auto-withdraw')
+  setAutoWithdraw(@CurrentUser() user: AuthenticatedUser, @Body() dto: SetAutoWithdrawDto) {
+    return this.walletService.setAutoWithdraw(user.id, dto.threshold, dto.savedAddressId);
+  }
+
   @Post('withdraw')
   async withdraw(@CurrentUser() user: AuthenticatedUser, @Body() dto: WithdrawDto) {
     if (!dto.savedAddressId && !dto.payoutAddress) {
@@ -81,12 +105,9 @@ export class WalletController {
     } else {
       payoutAddress = dto.payoutAddress!;
       if (dto.saveAddress) {
-        // Сохраняем до постановки в очередь — адрес должен остаться в
-        // книге даже если сама выплата зафейлится и деньги вернутся рефандом,
-        // это два независимых события.
         await this.payoutAddressesService
           .create(user.id, { label: dto.label || dto.network || payoutAddress, network: dto.network ?? 'ERC20', address: payoutAddress })
-          .catch(() => undefined); // дубль адреса — не блокируем сам вывод из-за ConflictException
+          .catch(() => undefined);
       }
     }
 

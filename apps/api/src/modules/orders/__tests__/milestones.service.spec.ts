@@ -46,7 +46,11 @@ describe('MilestonesService', () => {
     };
     wallet = { releaseEscrow: jest.fn().mockResolvedValue(undefined) };
     eventBus = { publish: jest.fn().mockResolvedValue(undefined) };
-    service = new MilestonesService(prisma, wallet as any, eventBus as any);
+    const usersService = {
+      incrementLateDeliveries: jest.fn(),
+      recalculateSuccessMetrics: jest.fn(),
+    };
+    service = new MilestonesService(prisma, wallet as any, eventBus as any, usersService as any);
   });
 
   describe('create', () => {

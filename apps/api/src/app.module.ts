@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
@@ -11,6 +11,7 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { PrismaModule } from './prisma/prisma.module';
 import { EventBusModule } from './common/events/event-bus.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { SubscriptionAwareThrottlerGuard } from './common/guards/subscription-aware-throttler.guard';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -39,8 +40,8 @@ import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
     ConfigModule.forRoot({ isGlobal: true }),
     LoggerModule.forRoot({
       pinoHttp: {
+        level: process.env.NODE_ENV !== 'production' ? 'debug' : 'info',
         transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
-        autoLogging: true,
       },
     }),
     ThrottlerModule.forRoot([
@@ -51,13 +52,13 @@ import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
     ]),
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         connection: {
-          host: config.get<string>('REDIS_HOST', 'localhost'),
+          host: config.get('REDIS_HOST', 'localhost'),
           port: config.get<number>('REDIS_PORT', 6379),
         },
       }),
+      inject: [ConfigService],
     }),
     BullBoardModule.forRoot({
       route: '/admin/queues',
@@ -101,7 +102,7 @@ import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: SubscriptionAwareThrottlerGuard },
   ],
 })
 export class AppModule {}

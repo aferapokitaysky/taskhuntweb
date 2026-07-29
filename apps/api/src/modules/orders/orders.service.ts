@@ -3,10 +3,12 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { DomainEventName } from '@taskhunt/shared-types';
-import { MatchingService } from '../matching/matching.service';
+import { MatchingService, compatibilityPercent } from '../matching/matching.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { CreateBidDto } from './dto/create-bid.dto';
+
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class OrdersService {
@@ -14,6 +16,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly eventBus: EventBusService,
     private readonly matching: MatchingService,
+    private readonly usersService: UsersService,
   ) {}
 
   private getStartOfMonth(): Date {
@@ -101,6 +104,8 @@ export class OrdersService {
     search?: string;
     tags?: string[];
     minBudget?: number;
+    clientId?: string;
+    requesterId?: string;
   }) {
     const and: Prisma.OrderWhereInput[] = [];
 
@@ -127,6 +132,7 @@ export class OrdersService {
 
     const where: Prisma.OrderWhereInput = {
       categoryId: filters.categoryId,
+      clientId: filters.clientId,
       status: (filters.status as any) ?? { not: 'DRAFT' },
       ...(and.length > 0 && { AND: and }),
     };
@@ -153,7 +159,27 @@ export class OrdersService {
       isPromoted: promotedOrderIds.has(order.id),
     }));
 
-    return this.matching.rankOrdersForFeed(withPromotion);
+    const ranked = this.matching.rankOrdersForFeed(withPromotion);
+
+    // % совпадения с навыками — только для залогиненного фрилансера
+    // (OptionalJwtAuthGuard на контроллере), считаем один раз здесь,
+    // не в персональной ленте (см. MatchingService.recommendOrdersForFreelancer,
+    // тот путь остаётся отдельным — там ранжирование, тут просто отображение).
+    if (filters.requesterId) {
+      const requesterProfile = await this.prisma.profile.findUnique({
+        where: { userId: filters.requesterId },
+        include: { skills: { include: { skill: true } } },
+      });
+      const skillNames = requesterProfile?.skills.map((s) => s.skill.name) ?? [];
+      if (skillNames.length > 0) {
+        return ranked.map((order) => ({
+          ...order,
+          compatibilityPercent: compatibilityPercent(order.tags, skillNames),
+        }));
+      }
+    }
+
+    return ranked.map((order) => ({ ...order, compatibilityPercent: null as number | null }));
   }
 
   async getRankedBids(clientId: string, orderId: string) {
@@ -165,37 +191,69 @@ export class OrdersService {
   }
 
   async findOne(id: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { id },
-      include: {
-        category: true,
-        bids: { include: { freelancer: { include: { profile: true } } } },
-        milestones: true,
-        chatThreads: true,
-        disputes: { orderBy: { createdAt: 'desc' }, take: 1 },
-      },
-    });
+    // Инкремент счётчика просмотров тем же запросом, что и чтение — простая
+    // метрика по аналогии с Profile.viewsCount, не защищена от накрутки
+    // владельцем, это осознанно (см. TZ_CLAUDE_13.md, п.1).
+    let order: any;
+    try {
+      const res = this.prisma.order.update({
+        where: { id },
+        data: { viewsCount: { increment: 1 } },
+        include: {
+          category: true,
+          client: { include: { profile: true } },
+          bids: { include: { freelancer: { include: { profile: true } } } },
+          milestones: true,
+          chatThreads: true,
+          disputes: { orderBy: { createdAt: 'desc' }, take: 1 },
+        },
+      });
+      order = res && typeof (res as any).then === 'function' ? await (res as any).catch(() => null) : res;
+    } catch {
+      order = null;
+    }
+
+    if (!order) {
+      order = await (this.prisma.order.findUnique({
+        where: { id },
+        include: {
+          category: true,
+          client: { include: { profile: true } },
+          bids: { include: { freelancer: { include: { profile: true } } } },
+          milestones: true,
+          chatThreads: true,
+          disputes: { orderBy: { createdAt: 'desc' }, take: 1 },
+        },
+      }) as Promise<any>).catch(() => null);
+    }
+
     if (!order) throw new NotFoundException('Order not found');
 
-    const freelancerIds = Array.from(new Set(order.bids.map((b) => b.freelancerId)));
+    const completedClientOrders = await this.prisma.order.count({
+      where: { clientId: order.clientId, status: 'COMPLETED' },
+    });
+    const verifiedPayer = completedClientOrders > 0;
+    const clientWithVerified = order.client ? { ...order.client, verifiedPayer } : null;
+
+    const freelancerIds: string[] = Array.from(new Set(order.bids.map((b: any) => b.freelancerId)));
 
     if (freelancerIds.length > 0) {
-      const reviewStats = await this.prisma.review.groupBy({
+      const reviewStats = (await (this.prisma.review as any).groupBy({
         by: ['targetId'],
         where: { targetId: { in: freelancerIds } },
         _avg: { rating: true },
         _count: { id: true },
-      });
+      })) as any[];
 
       const statsMap = new Map<string, { avgRating: number | null; reviewsCount: number }>();
       for (const stat of reviewStats) {
         statsMap.set(stat.targetId, {
-          avgRating: stat._avg.rating ? Math.round(stat._avg.rating * 100) / 100 : null,
-          reviewsCount: stat._count.id,
+          avgRating: stat._avg?.rating ? Math.round(stat._avg.rating * 100) / 100 : null,
+          reviewsCount: stat._count?.id ?? 0,
         });
       }
 
-      const bidsWithStats = order.bids.map((bid) => {
+      const bidsWithStats = order.bids.map((bid: any) => {
         const stats = statsMap.get(bid.freelancerId) ?? { avgRating: null, reviewsCount: 0 };
         return {
           ...bid,
@@ -209,11 +267,15 @@ export class OrdersService {
 
       return {
         ...order,
+        client: clientWithVerified,
         bids: bidsWithStats,
       };
     }
 
-    return order;
+    return {
+      ...order,
+      client: clientWithVerified,
+    };
   }
 
   async update(clientId: string, orderId: string, dto: UpdateOrderDto) {
@@ -260,6 +322,12 @@ export class OrdersService {
       data: { orderId, freelancerId, ...dto },
     });
 
+    // Если фрилансер был приглашён на этот заказ — считаем приглашение
+    // отработанным, откликнулся он сам или по приглашению, не важно.
+    await this.prisma.orderInvite
+      .updateMany({ where: { orderId, freelancerId, status: 'PENDING' }, data: { status: 'ACCEPTED' } })
+      .catch(() => undefined);
+
     await this.eventBus.publish(DomainEventName.BidSubmitted, {
       bidId: bid.id,
       orderId,
@@ -267,7 +335,50 @@ export class OrdersService {
       amount: Number(bid.amount),
     });
 
+    await this.usersService.recalculateAvgResponseTime(freelancerId);
+
     return bid;
+  }
+
+  async inviteFreelancer(clientId: string, orderId: string, freelancerId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.clientId !== clientId) throw new ForbiddenException('Not your order');
+    if (order.status !== 'OPEN') throw new BadRequestException('Нельзя пригласить на закрытый заказ');
+
+    const freelancer = await this.prisma.user.findUnique({ where: { id: freelancerId } });
+    if (!freelancer || !freelancer.roles.includes('FREELANCER')) {
+      throw new BadRequestException('Пользователь не является фрилансером');
+    }
+
+    try {
+      const invite = await this.prisma.orderInvite.create({
+        data: { orderId, freelancerId, clientId },
+      });
+
+      await this.eventBus.publish(DomainEventName.OrderInviteCreated, {
+        inviteId: invite.id,
+        orderId,
+        orderTitle: order.title,
+        freelancerId,
+        clientId,
+      });
+
+      return invite;
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException('Этот фрилансер уже приглашён на заказ');
+      }
+      throw err;
+    }
+  }
+
+  async listMyInvites(freelancerId: string) {
+    return this.prisma.orderInvite.findMany({
+      where: { freelancerId, status: 'PENDING' },
+      include: { order: { include: { category: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async acceptBid(clientId: string, orderId: string, bidId: string) {
@@ -306,6 +417,8 @@ export class OrdersService {
       amount: Number(bid.amount),
     });
 
+    await this.usersService.recalculateSuccessMetrics(bid.freelancerId);
+
     return result;
   }
 
@@ -324,6 +437,12 @@ export class OrdersService {
       await tx.order.update({ where: { id: orderId }, data: { status: 'DISPUTED' } });
       return created;
     });
+
+    const acceptedBid = order.bids[0];
+    if (acceptedBid) {
+      await this.usersService.incrementDisputesCount(acceptedBid.freelancerId);
+      await this.usersService.recalculateSuccessMetrics(acceptedBid.freelancerId);
+    }
 
     await this.eventBus.publish(DomainEventName.DisputeOpened, {
       disputeId: dispute.id,
@@ -359,5 +478,96 @@ export class OrdersService {
       include: { order: { include: { category: true, _count: { select: { bids: true } } } } },
     });
     return saved.map((s) => s.order);
+  }
+
+  async findSimilar(orderId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+
+    const candidates = await this.prisma.order.findMany({
+      where: {
+        id: { not: orderId },
+        status: { notIn: ['CANCELLED', 'EXPIRED'] },
+        OR: [
+          { categoryId: order.categoryId },
+          ...(order.tags.length > 0 ? [{ tags: { hasSome: order.tags } }] : []),
+        ],
+      },
+      take: 20,
+    });
+
+    const skillSet = new Set(order.tags.map((t) => t.toLowerCase()));
+    candidates.sort((a, b) => {
+      const aOverlap = a.tags.filter((t) => skillSet.has(t.toLowerCase())).length;
+      const bOverlap = b.tags.filter((t) => skillSet.has(t.toLowerCase())).length;
+      if (bOverlap !== aOverlap) return bOverlap - aOverlap;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
+
+    return candidates.slice(0, 5);
+  }
+
+  async cloneOrder(clientId: string, orderId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.clientId !== clientId) {
+      throw new ForbiddenException('Вы не являетесь владельцем этого заказа');
+    }
+
+    return this.prisma.order.create({
+      data: {
+        clientId,
+        categoryId: order.categoryId,
+        title: `${order.title} (копия)`,
+        description: order.description,
+        tags: order.tags,
+        budgetMin: order.budgetMin,
+        budgetMax: order.budgetMax,
+        currency: order.currency,
+        status: 'DRAFT',
+        deadline: null,
+      },
+    });
+  }
+
+  async endorseSkill(clientId: string, orderId: string, skillId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        bids: { where: { status: 'ACCEPTED' } },
+      },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.clientId !== clientId) {
+      throw new ForbiddenException('Только заказчик может подтверждать навыки');
+    }
+    if (order.status !== 'COMPLETED') {
+      throw new BadRequestException('Навык можно подтвердить только для завершённого заказа');
+    }
+    const acceptedBid = order.bids[0];
+    if (!acceptedBid) {
+      throw new BadRequestException('У заказа нет принятого исполнителя');
+    }
+
+    const freelancerId = acceptedBid.freelancerId;
+
+    const profileSkill = await this.prisma.profileSkill.findFirst({
+      where: {
+        profile: { userId: freelancerId },
+        skillId,
+      },
+    });
+    if (!profileSkill) {
+      throw new BadRequestException('У фрилансера не указан этот навык');
+    }
+
+    return this.prisma.skillEndorsement.create({
+      data: {
+        endorserId: clientId,
+        targetId: freelancerId,
+        skillId,
+        orderId,
+      },
+    });
   }
 }

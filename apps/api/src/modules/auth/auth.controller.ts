@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Ip, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Ip, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -7,10 +7,16 @@ import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ConfirmTotpDto, DisableTotpDto, VerifyTotpDto } from './dto/totp.dto';
 import { GoogleInitGuard, GithubInitGuard, AppleInitGuard } from './guards/oauth-init.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
+import type { RequestMeta } from './auth.service';
+
+function requestMeta(req: Request): RequestMeta {
+  return { userAgent: req.headers['user-agent'], ip: req.ip };
+}
 
 @Controller('auth')
 export class AuthController {
@@ -18,19 +24,19 @@ export class AuthController {
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('register')
-  register(@Body() dto: RegisterDto, @Ip() ip: string) {
-    return this.authService.register(dto, ip);
+  register(@Body() dto: RegisterDto, @Ip() ip: string, @Req() req: Request) {
+    return this.authService.register(dto, ip, requestMeta(req));
   }
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Body() dto: LoginDto, @Req() req: Request) {
+    return this.authService.login(dto, requestMeta(req));
   }
 
   @Post('refresh')
-  refresh(@Body('refreshToken') refreshToken: string) {
-    return this.authService.refresh(refreshToken);
+  refresh(@Body('refreshToken') refreshToken: string, @Req() req: Request) {
+    return this.authService.refresh(refreshToken, requestMeta(req));
   }
 
   // --- Верификация email ---
@@ -69,6 +75,52 @@ export class AuthController {
   @Post('change-password')
   changePassword(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(user.id, dto.currentPassword, dto.newPassword);
+  }
+
+  // --- 2FA (TOTP) ---
+
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/enroll')
+  enrollTotp(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.enrollTotp(user.id, user.email);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/enroll/confirm')
+  confirmTotpEnrollment(@CurrentUser() user: AuthenticatedUser, @Body() dto: ConfirmTotpDto) {
+    return this.authService.confirmTotpEnrollment(user.id, dto.code);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/disable')
+  disableTotp(@CurrentUser() user: AuthenticatedUser, @Body() dto: DisableTotpDto) {
+    return this.authService.disableTotp(user.id, dto.password);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('2fa/verify')
+  verifyTotp(@Body() dto: VerifyTotpDto) {
+    return this.authService.verifyTotp(dto.totpToken, dto.code);
+  }
+
+  // --- Активные сессии ---
+
+  @UseGuards(JwtAuthGuard)
+  @Get('sessions')
+  listSessions(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.listSessions(user.id, user.sessionId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('sessions/:id')
+  revokeSession(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.authService.revokeSession(user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('sessions/revoke-others')
+  revokeOtherSessions(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.revokeOtherSessions(user.id, user.sessionId);
   }
 
   // --- Google ---
@@ -117,7 +169,7 @@ export class AuthController {
    * на странице /oauth/callback и перенаправит на /onboarding или /dashboard).
    */
   private async finishOAuth(req: Request, res: Response) {
-    const tokens = await this.authService.handleOAuthLogin(req.user as any);
+    const tokens = await this.authService.handleOAuthLogin(req.user as any, requestMeta(req));
     const webUrl = process.env.WEB_PUBLIC_URL ?? 'http://localhost:3000';
     res.redirect(
       `${webUrl}/oauth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`,

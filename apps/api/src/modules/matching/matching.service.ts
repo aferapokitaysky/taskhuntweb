@@ -19,7 +19,7 @@ function clamp(value: number, min: number, max: number): number {
  * отображаемая метрика для пользователя, в сам `matchScore` не входит
  * (ранжирование по-прежнему только по откалиброванным весам ниже).
  */
-function compatibilityPercent(orderTags: string[], freelancerSkillNames: string[]): number | null {
+export function compatibilityPercent(orderTags: string[], freelancerSkillNames: string[]): number | null {
   if (orderTags.length === 0) return null;
   const skillSet = new Set(freelancerSkillNames.map((s) => s.trim().toLowerCase()));
   const matched = orderTags.filter((t) => skillSet.has(t.trim().toLowerCase())).length;
@@ -280,7 +280,11 @@ export class MatchingService {
     });
 
     const now = new Date();
-    const freelancerIds = bids.map((b) => b.freelancerId);
+    const activeBids = bids.filter((b) => {
+      const v = b.freelancer.profile?.vacationUntil;
+      return !v || v <= now;
+    });
+    const freelancerIds = activeBids.map((b) => b.freelancerId);
     const acceptedBids = freelancerIds.length
       ? await this.prisma.bid.findMany({
           where: { freelancerId: { in: freelancerIds }, status: 'ACCEPTED' },
@@ -300,7 +304,7 @@ export class MatchingService {
       affinity.set(freelancerId, FREELANCER_DIRECTORY_WEIGHTS.categoryAffinityMaxPoints * (entry.sameCategory / entry.total));
     }
 
-    const candidates = bids.map((bid) => {
+    const candidates = activeBids.map((bid) => {
       const activeSub = bid.freelancer.subscription;
       const isActiveSub = activeSub?.status === 'ACTIVE' && activeSub.expiresAt > now;
       const skillNames = bid.freelancer.profile?.skills?.map((s) => s.skill.name) ?? [];

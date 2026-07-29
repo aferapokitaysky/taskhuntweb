@@ -97,9 +97,13 @@ export function GithubRepos({ username }: { username: string }) {
             href={`https://github.com/${username}`}
             target="_blank"
             rel="noreferrer"
-            className="text-sm text-stone-500 hover:text-brand"
+            className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-brand"
           >
-            {stats.repoCount} репозиториев · {stats.stars} ★ · {stats.forks} форков
+            {stats.repoCount} репозиториев
+            <StarIcon className="h-3.5 w-3.5" filled />
+            {stats.stars}
+            <ForkIcon className="h-3.5 w-3.5" />
+            {stats.forks}
           </a>
         )}
       </div>

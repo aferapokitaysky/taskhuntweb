@@ -5,6 +5,8 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
+export type LoginResponse = AuthTokens | { requiresTotp: true; totpToken: string };
+
 export interface Category {
   id: string;
   name: string;
@@ -40,6 +42,23 @@ export interface PortfolioItem {
   createdAt: string;
 }
 
+export interface BidTemplate {
+  id: string;
+  name: string;
+  message: string;
+  defaultDeliveryDays?: number | null;
+  createdAt: string;
+}
+
+export interface SessionItem {
+  id: string;
+  userAgent?: string | null;
+  ip?: string | null;
+  createdAt: string;
+  lastUsedAt: string;
+  isCurrent: boolean;
+}
+
 export interface Profile {
   displayName: string;
   avatarUrl?: string | null;
@@ -60,6 +79,7 @@ export interface User {
   primaryRole: MarketplaceRole;
   roles: MarketplaceRole[];
   isStaff: boolean;
+  totpEnabled?: boolean;
   profile?: Profile | null;
 }
 
@@ -124,7 +144,7 @@ export interface Order {
   currency: string;
   deadline?: string | null;
   tags?: string[];
-  status: 'DRAFT' | 'OPEN' | 'IN_PROGRESS' | 'IN_REVIEW' | 'COMPLETED' | 'CANCELLED' | 'DISPUTED';
+  status: 'DRAFT' | 'OPEN' | 'IN_PROGRESS' | 'IN_REVIEW' | 'COMPLETED' | 'CANCELLED' | 'DISPUTED' | 'EXPIRED';
   acceptedBidId?: string | null;
   category?: Category;
   bids?: Bid[];
@@ -133,6 +153,18 @@ export interface Order {
   _count?: { bids: number };
   isPromoted?: boolean;
   disputes?: Dispute[];
+  viewsCount?: number;
+  compatibilityPercent?: number | null;
+}
+
+export interface OrderInvite {
+  id: string;
+  orderId: string;
+  freelancerId: string;
+  clientId: string;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+  createdAt: string;
+  order: Order;
 }
 
 export interface ChatThreadSummary {

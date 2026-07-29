@@ -16,6 +16,7 @@ import {
   handleInvoiceIssued,
   handleInvoicePaid,
   handleOrderCreated,
+  handleOrderInviteCreated,
   handleWorkSubmitted,
 } from './handlers/orders';
 
@@ -65,6 +66,8 @@ async function route(event: DomainEvent) {
       return handleWorkSubmitted(event, context);
     case DomainEventName.DisputeOpened:
       return handleDisputeOpened(event, context);
+    case DomainEventName.OrderInviteCreated:
+      return handleOrderInviteCreated(event, context);
     case DomainEventName.EmailVerificationRequested:
       return handleEmailVerificationRequested(event, context);
     case DomainEventName.PasswordResetRequested:

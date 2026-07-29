@@ -9,9 +9,13 @@ import { WalletController } from './wallet.controller';
 import { NowPaymentsController } from './nowpayments.controller';
 import { PayoutAddressesController } from './payout-addresses.controller';
 import { PayoutProcessor, PAYOUT_QUEUE } from './payout.processor';
+import { AutoWithdrawProcessor, AUTO_WITHDRAW_QUEUE } from './auto-withdraw.processor';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: PAYOUT_QUEUE })],
+  imports: [
+    BullModule.registerQueue({ name: PAYOUT_QUEUE }),
+    BullModule.registerQueue({ name: AUTO_WITHDRAW_QUEUE }),
+  ],
   controllers: [WalletController, NowPaymentsController, PayoutAddressesController],
   providers: [
     WalletService,
@@ -20,6 +24,7 @@ import { PayoutProcessor, PAYOUT_QUEUE } from './payout.processor';
     NowPaymentsService,
     PayoutAddressesService,
     PayoutProcessor,
+    AutoWithdrawProcessor,
   ],
   exports: [WalletService, LedgerService, InvoiceService, NowPaymentsService, PayoutAddressesService],
 })

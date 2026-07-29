@@ -5,6 +5,7 @@ import { EventBusService } from '../../common/events/event-bus.service';
 import { DomainEventName } from '@taskhunt/shared-types';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
 import { DeliverWorkDto } from './dto/deliver-work.dto';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class MilestonesService {
@@ -12,6 +13,7 @@ export class MilestonesService {
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
     private readonly eventBus: EventBusService,
+    private readonly usersService: UsersService,
   ) {}
 
   async create(clientId: string, orderId: string, dto: CreateMilestoneDto) {
@@ -85,6 +87,10 @@ export class MilestonesService {
     });
 
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    if (order.deadline && new Date() > order.deadline) {
+      await this.usersService.incrementLateDeliveries(freelancerId);
+    }
+
     await this.eventBus.publish(DomainEventName.WorkSubmitted, {
       orderId,
       deliveryId: delivery.id,
@@ -141,6 +147,11 @@ export class MilestonesService {
       }
     } else {
       await this.prisma.order.update({ where: { id: orderId }, data: { status: 'COMPLETED' } });
+    }
+
+    const updatedOrder = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (updatedOrder?.status === 'COMPLETED') {
+      await this.usersService.recalculateSuccessMetrics(acceptedBid.freelancerId);
     }
 
     return { released: true, invoiceId: invoice.id };

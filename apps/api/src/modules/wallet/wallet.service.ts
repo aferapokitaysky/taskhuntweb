@@ -1,9 +1,28 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import * as PDFDocument from 'pdfkit';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LedgerService } from './ledger.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { DomainEventName } from '@taskhunt/shared-types';
 import { SYSTEM_ACCOUNT_EMAIL, DEFAULT_MARKETPLACE_FEE_PERCENT } from './constants';
+
+// PDFKit-овские встроенные Standard-14 шрифты (Helvetica и т.п.) не
+// поддерживают кириллицу — без встраивания отдельного TTF-шрифта русский
+// текст рендерится битой кашей (проверено вживую). Библиотеку шрифтов
+// ради одного PDF-чека тащить не стали — чек на английском, это обычная
+// практика для авто-генерируемых финансовых документов.
+const TRANSACTION_TYPE_LABELS_EN: Record<string, string> = {
+  DEPOSIT: 'Deposit',
+  WITHDRAWAL: 'Withdrawal',
+  ESCROW_LOCK: 'Escrow lock',
+  ESCROW_RELEASE: 'Escrow release',
+  REFUND: 'Refund',
+  COMMISSION: 'Commission',
+  BONUS: 'Bonus',
+  REFERRAL: 'Referral reward',
+  PROMO: 'Promotion',
+  CHARGEBACK: 'Chargeback',
+};
 
 @Injectable()
 export class WalletService {
@@ -224,6 +243,87 @@ export class WalletService {
     });
 
     return { transaction, amount, fee, netAmount };
+  }
+
+  async setAutoWithdraw(userId: string, threshold: number | null | undefined, savedAddressId?: string) {
+    return this.prisma.wallet.update({
+      where: { userId },
+      data: {
+        autoWithdrawThreshold: threshold !== undefined && threshold !== null ? threshold : null,
+        autoWithdrawAddressId: savedAddressId ?? null,
+      },
+    });
+  }
+
+  async exportTransactionHistoryCsv(userId: string): Promise<string> {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) return 'Date,Type,Amount,Currency,Description\n';
+
+    const entries = await this.prisma.ledgerEntry.findMany({
+      where: { walletId: wallet.id },
+      include: { transaction: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const escapeCsv = (str: string) => {
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const header = 'Date,Type,Amount,Currency,Description\n';
+    const rows = entries.map((e) => {
+      const date = e.createdAt.toISOString();
+      const type = e.transaction.type;
+      const amount = e.amount.toString();
+      const currency = wallet.currency;
+      const desc = escapeCsv(e.transaction.description ?? '');
+      return `${date},${type},${amount},${currency},${desc}`;
+    });
+
+    return header + rows.join('\n');
+  }
+
+  async generateReceiptPdf(userId: string, entryId: string): Promise<Buffer> {
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    const entry = await this.prisma.ledgerEntry.findUnique({
+      where: { id: entryId },
+      include: { transaction: true },
+    });
+    if (!entry || entry.walletId !== wallet.id) {
+      throw new ForbiddenException('This transaction does not belong to your wallet');
+    }
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    const done = new Promise<Buffer>((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+
+    doc.fontSize(20).text('TaskHunt', { continued: false });
+    doc.fontSize(10).fillColor('#888').text('Wallet transaction receipt').moveDown(1.5);
+
+    doc.fillColor('#000').fontSize(12);
+    doc.text(`Type: ${TRANSACTION_TYPE_LABELS_EN[entry.transaction.type] ?? entry.transaction.type}`);
+    doc.text(`Amount: ${entry.direction === 'CREDIT' ? '+' : '-'}${entry.amount.toString()} ${entry.currency}`);
+    doc.text(`Date: ${entry.createdAt.toISOString()}`);
+    // description может быть на русском — встроенный шрифт pdfkit его не
+    // отрендерит (см. комментарий у TRANSACTION_TYPE_LABELS_EN), поэтому
+    // сюда идут только ASCII-описания, остальные молча пропускаются, а не
+    // показываются битой кашей.
+    if (entry.transaction.description && /^[\x20-\x7E]*$/.test(entry.transaction.description)) {
+      doc.text(`Description: ${entry.transaction.description}`);
+    }
+    doc.text(`Transaction ID: ${entry.id}`);
+
+    doc.moveDown(2).fontSize(8).fillColor('#888').text('This is not a tax document.');
+
+    doc.end();
+    return done;
   }
 }
 

@@ -7,6 +7,7 @@ import type {
   InvoiceIssuedEvent,
   InvoicePaidEvent,
   OrderCreatedEvent,
+  OrderInviteCreatedEvent,
   WorkSubmittedEvent,
 } from '@taskhunt/shared-types';
 import type { HandlerContext } from './shared';
@@ -106,6 +107,15 @@ export function handleWorkSubmitted(event: WorkSubmittedEvent, context: HandlerC
       metadata: event.payload,
     }),
   ]);
+}
+
+export function handleOrderInviteCreated(event: OrderInviteCreatedEvent, context: HandlerContext) {
+  return notifyUser(context, event.payload.freelancerId, {
+    eventName: event.name,
+    title: 'Вас пригласили на заказ',
+    message: `Заказчик пригласил вас откликнуться на заказ «${event.payload.orderTitle}».`,
+    metadata: event.payload,
+  });
 }
 
 export function handleDisputeOpened(event: DisputeOpenedEvent, context: HandlerContext) {

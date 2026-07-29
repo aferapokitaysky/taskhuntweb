@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -22,20 +23,31 @@ export class OrdersController {
     private readonly reviewsService: ReviewsService,
   ) {}
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get()
   findMany(
+    @CurrentUser() user: AuthenticatedUser | null,
     @Query('categoryId') categoryId?: string,
     @Query('status') status?: string,
     @Query('search') search?: string,
     @Query('tags') tagsParam?: string,
     @Query('minBudget') minBudgetParam?: string,
+    @Query('clientId') clientId?: string,
   ) {
     const tags = tagsParam
       ?.split(',')
       .map((t) => t.trim())
       .filter(Boolean);
     const minBudget = minBudgetParam !== undefined ? parseFloat(minBudgetParam) : undefined;
-    return this.ordersService.findMany({ categoryId, status, search, tags, minBudget });
+    return this.ordersService.findMany({
+      categoryId,
+      status,
+      search,
+      tags,
+      minBudget,
+      clientId,
+      requesterId: user?.id,
+    });
   }
 
   @Get(':id')
@@ -50,6 +62,24 @@ export class OrdersController {
   @Get('saved/mine')
   listSaved(@CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.listSavedOrders(user.id);
+  }
+
+  // Тоже до ':id' — тот же приём, что 'saved/mine' строкой выше.
+  @UseGuards(JwtAuthGuard)
+  @Get('invites/mine')
+  listMyInvites(@CurrentUser() user: AuthenticatedUser) {
+    return this.ordersService.listMyInvites(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Post(':id/invite')
+  inviteFreelancer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') orderId: string,
+    @Body('freelancerId') freelancerId: string,
+  ) {
+    return this.ordersService.inviteFreelancer(user.id, orderId, freelancerId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -186,5 +216,27 @@ export class OrdersController {
   @Get('reviews/:userId')
   listReviewsForUser(@Param('userId') userId: string) {
     return this.reviewsService.listForUser(userId);
+  }
+
+  @Get(':id/similar')
+  findSimilar(@Param('id') id: string) {
+    return this.ordersService.findSimilar(id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Post(':id/clone')
+  cloneOrder(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.ordersService.cloneOrder(user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/endorse')
+  endorseSkill(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') orderId: string,
+    @Body('skillId') skillId: string,
+  ) {
+    return this.ordersService.endorseSkill(user.id, orderId, skillId);
   }
 }

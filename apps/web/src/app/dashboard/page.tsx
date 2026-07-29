@@ -15,10 +15,12 @@ import { PadlockIcon } from '@/components/icons/PadlockIcon';
 import { WithdrawIcon } from '@/components/icons/WithdrawIcon';
 import { ClockIcon } from '@/components/icons/ClockIcon';
 import { Mascot } from '@/components/Mascot';
+import { TargetIcon } from '@/components/icons/TargetIcon';
+import { DownloadIcon } from '@/components/icons/DownloadIcon';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { api } from '@/lib/api';
-import type { Category, LedgerEntryItem, Order, SavedSearch, User, WalletBalance } from '@/lib/types';
+import { api, downloadFile } from '@/lib/api';
+import type { BidTemplate, Category, LedgerEntryItem, Order, SavedSearch, User, WalletBalance } from '@/lib/types';
 import { money } from '@/lib/types';
 
 // Тянет @web3icons/react (лого сетей) — тяжёлый пакет, нужен только когда
@@ -84,6 +86,7 @@ function DashboardContent() {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [orderSearch, setOrderSearch] = useState('');
   const [savedOrderIds, setSavedOrderIds] = useState<Set<string>>(new Set());
+  const [invitedOrderIds, setInvitedOrderIds] = useState<Set<string>>(new Set());
   const [savedOrders, setSavedOrders] = useState<Order[]>([]);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [filterCategoryId, setFilterCategoryId] = useState(searchParams.get('categoryId') ?? '');
@@ -91,6 +94,7 @@ function DashboardContent() {
   const [filterTagInput, setFilterTagInput] = useState('');
   const [filterMinBudget, setFilterMinBudget] = useState('');
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [bidTemplates, setBidTemplates] = useState<BidTemplate[]>([]);
   const [savingSearch, setSavingSearch] = useState(false);
   const [savedSearchError, setSavedSearchError] = useState<string | null>(null);
 
@@ -120,6 +124,14 @@ function DashboardContent() {
 
     api<SavedSearch[]>('/saved-searches')
       .then(setSavedSearches)
+      .catch(() => undefined);
+
+    api<{ orderId: string }[]>('/orders/invites/mine')
+      .then((invites) => setInvitedOrderIds(new Set(invites.map((i) => i.orderId))))
+      .catch(() => undefined);
+
+    api<BidTemplate[]>('/users/me/bid-templates')
+      .then(setBidTemplates)
       .catch(() => undefined);
   }, []);
 
@@ -411,10 +423,20 @@ function DashboardContent() {
                       </p>
                     </div>
                   </div>
-                  <p className={`shrink-0 font-medium ${item.direction === 'CREDIT' ? 'text-emerald-600' : 'text-stone-700'}`}>
-                    {item.direction === 'CREDIT' ? '+' : '−'}
-                    {money(item.amount, item.currency)}
-                  </p>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <p className={`font-medium ${item.direction === 'CREDIT' ? 'text-emerald-600' : 'text-stone-700'}`}>
+                      {item.direction === 'CREDIT' ? '+' : '−'}
+                      {money(item.amount, item.currency)}
+                    </p>
+                    <button
+                      type="button"
+                      title="Скачать чек"
+                      onClick={() => downloadFile(`/wallet/transactions/${item.id}/receipt.pdf`, `receipt-${item.id}.pdf`)}
+                      className="rounded-full p-1.5 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+                    >
+                      <DownloadIcon className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -616,6 +638,12 @@ function DashboardContent() {
                       Открыть чат
                     </Link>
                   )}
+                  {invitedOrderIds.has(order.id) && (
+                    <span className="flex items-center gap-1 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand">
+                      <TargetIcon className="h-3.5 w-3.5" />
+                      Вас пригласили
+                    </span>
+                  )}
                   {isFreelancer && order.status === 'OPEN' && order.clientId !== me?.id && (
                     <button
                       type="button"
@@ -749,6 +777,29 @@ function DashboardContent() {
               <h2 className="mb-1 text-lg font-semibold">Отклик</h2>
               <p className="mb-4 text-sm text-stone-500">{selectedOrder.title}</p>
               <form onSubmit={submitBid} className="space-y-3">
+                {bidTemplates.length > 0 && (
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const template = bidTemplates.find((t) => t.id === e.target.value);
+                      if (!template) return;
+                      setBidForm((f) => ({
+                        ...f,
+                        message: template.message,
+                        deliveryDays: template.defaultDeliveryDays ? String(template.defaultDeliveryDays) : f.deliveryDays,
+                      }));
+                      e.target.value = '';
+                    }}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-600"
+                  >
+                    <option value="">Вставить шаблон…</option>
+                    {bidTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <input
                   required
                   type="number"

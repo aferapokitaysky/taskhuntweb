@@ -34,6 +34,30 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return res.json();
 }
 
+/**
+ * Скачивание файлов с эндпоинтов, требующих Authorization-заголовок —
+ * обычный `<a href>` не может его передать, поэтому качаем как blob и
+ * кликаем по временной ссылке. Общий хэлпер для GDPR-экспорта и
+ * PDF-чеков (оба требуют авторизации).
+ */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Request failed: ${res.status}`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export interface UploadedFileAsset {
   id: string;
   url: string;

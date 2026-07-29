@@ -37,22 +37,23 @@ enum UserStatus {
   ACTIVE
   SUSPENDED
   BANNED
+  DELETED
 }
 
 model User {
-  id                String        @id @default(uuid())
-  email             String        @unique
-  passwordHash      String?
-  authProvider      AuthProvider  @default(LOCAL)
-  oauthId           String?
+  id           String       @id @default(uuid())
+  email        String       @unique
+  passwordHash String?
+  authProvider AuthProvider @default(LOCAL)
+  oauthId      String?
 
   // выбирается на регистрации; пользователь может позже включить вторую роль
   // (стать ещё и фрилансером, если начинал как заказчик) — см. roles[]
-  primaryRole       MarketplaceRole
-  roles             MarketplaceRole[] @default([])
+  primaryRole MarketplaceRole
+  roles       MarketplaceRole[] @default([])
 
-  status            UserStatus    @default(PENDING_VERIFICATION)
-  isStaff           Boolean       @default(false)
+  status  UserStatus @default(PENDING_VERIFICATION)
+  isStaff Boolean    @default(false)
 
   // Единый активный токен на пользователя — новый запрос перетирает
   // старый (предыдущая ссылка перестаёт работать), проще чем отдельная
@@ -62,43 +63,61 @@ model User {
   passwordResetToken         String?   @unique
   passwordResetExpiresAt     DateTime?
 
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  lastSeenAt        DateTime?
+  // Двухфакторная аутентификация (TOTP) — см. TZ_CLAUDE_13.md, п.4
+  totpSecret  String?
+  totpEnabled Boolean          @default(false)
+  backupCodes TotpBackupCode[]
 
-  profile           Profile?
-  wallet            Wallet?
-  onboarding        OnboardingResponse?
+  refreshSessions RefreshSession[]
 
-  ordersAsClient    Order[]         @relation("ClientOrders")
-  bids              Bid[]
-  reviewsAuthored   Review[]        @relation("ReviewAuthor")
-  reviewsReceived   Review[]        @relation("ReviewTarget")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  lastSeenAt DateTime?
 
-  sentChatMessages  ChatMessage[]   @relation("ChatSender")
-  chatThreadsAsFreelancer ChatThread[] @relation("ChatThreadFreelancer")
-  supportTickets    SupportTicket[] @relation("TicketOwner")
-  assignedTickets   SupportTicket[] @relation("TicketAssignee")
-  supportMessages   SupportMessage[]
+  profile    Profile?
+  wallet     Wallet?
+  onboarding OnboardingResponse?
 
-  disputesOpened    Dispute[]       @relation("DisputeOpener")
-  disputesAssigned  Dispute[]       @relation("DisputeArbitrator")
+  ordersAsClient  Order[]  @relation("ClientOrders")
+  bids            Bid[]
+  reviewsAuthored Review[] @relation("ReviewAuthor")
+  reviewsReceived Review[] @relation("ReviewTarget")
 
-  staffRoles        UserStaffRole[]
-  auditLogs         AuditLog[]
+  sentChatMessages        ChatMessage[]    @relation("ChatSender")
+  chatThreadsAsFreelancer ChatThread[]     @relation("ChatThreadFreelancer")
+  supportTickets          SupportTicket[]  @relation("TicketOwner")
+  assignedTickets         SupportTicket[]  @relation("TicketAssignee")
+  supportMessages         SupportMessage[]
 
-  referralCode       ReferralCode?
-  referredBy        ReferralUse?    @relation("ReferredUser")
-  subscription      Subscription?
+  disputesOpened   Dispute[] @relation("DisputeOpener")
+  disputesAssigned Dispute[] @relation("DisputeArbitrator")
 
-  notificationPrefs NotificationPreference[]
-  notifications     Notification[]
-  files             FileAsset[]
-  payoutAddresses   SavedPayoutAddress[]
-  savedOrders       SavedOrder[]
-  savedSearches     SavedSearch[]
+  staffRoles UserStaffRole[]
+  auditLogs  AuditLog[]
+
+  referralCode ReferralCode?
+  referredBy   ReferralUse?  @relation("ReferredUser")
+  subscription Subscription?
+
+  notificationPrefs   NotificationPreference[]
+  notifications       Notification[]
+  files               FileAsset[]
+  payoutAddresses     SavedPayoutAddress[]
+  savedOrders         SavedOrder[]
+  savedSearches       SavedSearch[]
   savedFreelancers    SavedFreelancer[]
-  savedByAsFreelancer SavedFreelancer[] @relation("SavedFreelancerTarget")
+  savedByAsFreelancer SavedFreelancer[]        @relation("SavedFreelancerTarget")
+
+  digestFrequency  DigestFrequency @default(NONE)
+  lastDigestSentAt DateTime?
+
+  endorsementsGiven    SkillEndorsement[] @relation("EndorsementAuthor")
+  endorsementsReceived SkillEndorsement[] @relation("EndorsementTarget")
+
+  sentInvites     OrderInvite[] @relation("OrderInviteClient")
+  receivedInvites OrderInvite[] @relation("OrderInviteFreelancer")
+
+  bidTemplates BidTemplate[]
 
   fraudFlags         FraudFlag[] @relation("FraudFlagSubject")
   fraudFlagsReviewed FraudFlag[] @relation("FraudFlagReviewer")
@@ -107,44 +126,77 @@ model User {
   @@map("users")
 }
 
+enum DigestFrequency {
+  NONE
+  DAILY
+  WEEKLY
+}
+
+model TotpBackupCode {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@map("totp_backup_codes")
+}
+
+model RefreshSession {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime  @default(now())
+  revokedAt  DateTime?
+
+  @@map("refresh_sessions")
+}
+
 // Профиль — публичные данные + то, что видно в карточке пользователя
 model Profile {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  displayName     String
-  avatarUrl       String?
-  avatarData      Bytes?
-  avatarMimeType  String?
-  bio             String?
-  country         String?
-  city            String?
-  githubUrl       String?
-  websiteUrl      String?
+  displayName    String
+  avatarUrl      String?
+  avatarData     Bytes?
+  avatarMimeType String?
+  bio            String?
+  country        String?
+  city           String?
+  githubUrl      String?
+  websiteUrl     String?
 
-  successRate     Decimal? @db.Decimal(5, 2) // % успешных сделок
-  completionRate  Decimal? @db.Decimal(5, 2)
-  avgResponseMins Int?
-  disputesCount   Int      @default(0)
-  lateDeliveries  Int      @default(0)
-  viewsCount      Int      @default(0)
-  availableForWork Boolean @default(true)
+  successRate      Decimal?  @db.Decimal(5, 2) // % успешных сделок
+  completionRate   Decimal?  @db.Decimal(5, 2)
+  avgResponseMins  Int?
+  disputesCount    Int       @default(0)
+  lateDeliveries   Int       @default(0)
+  viewsCount       Int       @default(0)
+  availableForWork Boolean   @default(true)
+  vacationUntil    DateTime?
 
-  skills          ProfileSkill[]
-  portfolioItems  PortfolioItem[]
+  skills         ProfileSkill[]
+  portfolioItems PortfolioItem[]
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("profiles")
 }
 
 model Skill {
-  id       String         @id @default(uuid())
-  name     String         @unique
-  slug     String         @unique
-  profiles ProfileSkill[]
+  id           String             @id @default(uuid())
+  name         String             @unique
+  slug         String             @unique
+  profiles     ProfileSkill[]
+  endorsements SkillEndorsement[]
 
   @@map("skills")
 }
@@ -175,24 +227,37 @@ model PortfolioItem {
   @@map("portfolio_items")
 }
 
+model BidTemplate {
+  id                  String   @id @default(uuid())
+  freelancerId        String
+  freelancer          User     @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  name                String
+  message             String
+  defaultDeliveryDays Int?
+  createdAt           DateTime @default(now())
+
+  @@index([freelancerId])
+  @@map("bid_templates")
+}
+
 // Анкета/квиз при регистрации — ответы различаются в зависимости от роли,
 // поэтому большая часть хранится как гибкий JSON (structuredAnswers),
 // а самые важные для матчинга поля вынесены в колонки.
 model OnboardingResponse {
-  id                 String          @id @default(uuid())
-  userId             String          @unique
-  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  role               MarketplaceRole
-  experienceLevel    String?         // junior/middle/senior — для фрилансера
-  primaryGoal        String?         // "найти исполнителя" / "найти подработку" / "нанять команду"
-  interestedCategoryIds String[]     @default([])
-  expectedBudgetMin  Decimal?        @db.Decimal(12, 2) // для клиента: типичный бюджет заказа
-  expectedRateMin    Decimal?        @db.Decimal(12, 2) // для фрилансера: ожидаемая ставка
-  availability       String?         // full-time/part-time/occasional
-  structuredAnswers  Json            @default("{}")
+  role                  MarketplaceRole
+  experienceLevel       String? // junior/middle/senior — для фрилансера
+  primaryGoal           String? // "найти исполнителя" / "найти подработку" / "нанять команду"
+  interestedCategoryIds String[]        @default([])
+  expectedBudgetMin     Decimal?        @db.Decimal(12, 2) // для клиента: типичный бюджет заказа
+  expectedRateMin       Decimal?        @db.Decimal(12, 2) // для фрилансера: ожидаемая ставка
+  availability          String? // full-time/part-time/occasional
+  structuredAnswers     Json            @default("{}")
 
-  completedAt        DateTime        @default(now())
+  completedAt DateTime @default(now())
 
   @@map("onboarding_responses")
 }
@@ -202,13 +267,13 @@ model OnboardingResponse {
 // ============================================================================
 
 model Category {
-  id        String     @id @default(uuid())
-  name      String
-  slug      String     @unique
-  parentId  String?
-  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
-  children  Category[] @relation("CategoryTree")
-  orders    Order[]
+  id            String        @id @default(uuid())
+  name          String
+  slug          String        @unique
+  parentId      String?
+  parent        Category?     @relation("CategoryTree", fields: [parentId], references: [id])
+  children      Category[]    @relation("CategoryTree")
+  orders        Order[]
   savedSearches SavedSearch[]
 
   @@index([parentId])
@@ -227,43 +292,68 @@ enum OrderStatus {
   COMPLETED
   CANCELLED
   DISPUTED
+  EXPIRED
 }
 
 model Order {
-  id           String        @id @default(uuid())
-  clientId     String
-  client       User          @relation("ClientOrders", fields: [clientId], references: [id])
+  id       String @id @default(uuid())
+  clientId String
+  client   User   @relation("ClientOrders", fields: [clientId], references: [id])
 
-  categoryId   String
-  category     Category      @relation(fields: [categoryId], references: [id])
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
 
-  title        String
-  description  String
-  budgetMin    Decimal       @db.Decimal(12, 2)
-  budgetMax    Decimal?      @db.Decimal(12, 2)
-  currency     String        @default("USD")
-  deadline     DateTime?
-  tags         String[]      @default([])
+  title       String
+  description String
+  budgetMin   Decimal   @db.Decimal(12, 2)
+  budgetMax   Decimal?  @db.Decimal(12, 2)
+  currency    String    @default("USD")
+  deadline    DateTime?
+  tags        String[]  @default([])
 
-  status       OrderStatus   @default(OPEN)
-  acceptedBidId String?      @unique
+  status        OrderStatus @default(OPEN)
+  acceptedBidId String?     @unique
+  viewsCount    Int         @default(0)
 
-  bids         Bid[]
-  milestones   Milestone[]
-  versions     OrderVersion[]
-  chatThreads  ChatThread[]
-  deliveries   Delivery[]
-  disputes     Dispute[]
-  invoices     Invoice[]
-  fraudFlags   FraudFlag[]
-  savedBy      SavedOrder[]
+  bids              Bid[]
+  milestones        Milestone[]
+  versions          OrderVersion[]
+  chatThreads       ChatThread[]
+  deliveries        Delivery[]
+  disputes          Dispute[]
+  invoices          Invoice[]
+  fraudFlags        FraudFlag[]
+  savedBy           SavedOrder[]
+  skillEndorsements SkillEndorsement[]
+  invites           OrderInvite[]
 
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([categoryId])
   @@map("orders")
+}
+
+enum OrderInviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model OrderInvite {
+  id           String            @id @default(uuid())
+  orderId      String
+  order        Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  freelancerId String
+  freelancer   User              @relation("OrderInviteFreelancer", fields: [freelancerId], references: [id])
+  clientId     String
+  client       User              @relation("OrderInviteClient", fields: [clientId], references: [id])
+  status       OrderInviteStatus @default(PENDING)
+  createdAt    DateTime          @default(now())
+
+  @@unique([orderId, freelancerId])
+  @@map("order_invites")
 }
 
 // "Избранное" — фрилансер откладывает заказ, чтобы вернуться к нему позже
@@ -333,19 +423,19 @@ enum BidStatus {
 }
 
 model Bid {
-  id            String    @id @default(uuid())
-  orderId       String
-  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  freelancerId  String
-  freelancer    User      @relation(fields: [freelancerId], references: [id])
+  id           String @id @default(uuid())
+  orderId      String
+  order        Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  freelancerId String
+  freelancer   User   @relation(fields: [freelancerId], references: [id])
 
-  amount        Decimal   @db.Decimal(12, 2)
-  deliveryDays  Int
-  message       String
-  status        BidStatus @default(PENDING)
+  amount       Decimal   @db.Decimal(12, 2)
+  deliveryDays Int
+  message      String
+  status       BidStatus @default(PENDING)
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([freelancerId])
@@ -363,20 +453,20 @@ enum MilestoneStatus {
 }
 
 model Milestone {
-  id         String          @id @default(uuid())
-  orderId    String
-  order      Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  title      String
-  amount     Decimal         @db.Decimal(12, 2)
-  position   Int             // порядок этапа (Design -> Frontend -> Backend -> ...)
-  status     MilestoneStatus @default(PENDING)
-  dueDate    DateTime?
+  id       String          @id @default(uuid())
+  orderId  String
+  order    Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  title    String
+  amount   Decimal         @db.Decimal(12, 2)
+  position Int // порядок этапа (Design -> Frontend -> Backend -> ...)
+  status   MilestoneStatus @default(PENDING)
+  dueDate  DateTime?
 
   invoices   Invoice[]
   deliveries Delivery[]
 
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@map("milestones")
@@ -387,11 +477,11 @@ model Milestone {
 // ============================================================================
 
 enum BalanceType {
-  MAIN          // доступные средства
-  ESCROW        // заморожено в активной сделке
-  LOCKED        // заблокировано (спор, ручная проверка)
-  WITHDRAWABLE  // прошло холд-период, готово к выводу
-  PENDING       // ожидает подтверждения сети (крипто-депозит не подтверждён)
+  MAIN // доступные средства
+  ESCROW // заморожено в активной сделке
+  LOCKED // заблокировано (спор, ручная проверка)
+  WITHDRAWABLE // прошло холд-период, готово к выводу
+  PENDING // ожидает подтверждения сети (крипто-депозит не подтверждён)
 }
 
 enum LedgerDirection {
@@ -413,10 +503,10 @@ enum LedgerTransactionType {
 }
 
 model Wallet {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  currency    String   @default("USD")
+  id       String @id @default(uuid())
+  userId   String @unique
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency String @default("USD")
 
   // Денормализованный кэш баланса для быстрого чтения.
   // Источник правды — SUM(LedgerEntry), эти поля пересчитываются
@@ -427,10 +517,13 @@ model Wallet {
   withdrawableBalance Decimal @default(0) @db.Decimal(18, 8)
   pendingBalance      Decimal @default(0) @db.Decimal(18, 8)
 
-  entries     LedgerEntry[]
+  autoWithdrawThreshold Decimal? @db.Decimal(12, 2)
+  autoWithdrawAddressId String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  entries LedgerEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("wallets")
 }
@@ -455,10 +548,10 @@ model SavedPayoutAddress {
 model LedgerTransaction {
   id            String                @id @default(uuid())
   type          LedgerTransactionType
-  referenceType String                // "ORDER" | "MILESTONE" | "INVOICE" | "WITHDRAWAL" | ...
+  referenceType String // "ORDER" | "MILESTONE" | "INVOICE" | "WITHDRAWAL" | ...
   referenceId   String?
   description   String?
-  createdById   String?               // null = система
+  createdById   String? // null = система
   entries       LedgerEntry[]
   createdAt     DateTime              @default(now())
 
@@ -492,26 +585,26 @@ enum InvoiceStatus {
 
 // Инвойс/счёт, выставляемый прямо в чате заказа
 model Invoice {
-  id                 String        @id @default(uuid())
-  orderId            String
-  order              Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  milestoneId        String?
-  milestone          Milestone?    @relation(fields: [milestoneId], references: [id])
+  id          String     @id @default(uuid())
+  orderId     String
+  order       Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  milestoneId String?
+  milestone   Milestone? @relation(fields: [milestoneId], references: [id])
 
-  issuedById         String        // фрилансер
-  payerId            String        // заказчик
-  amount             Decimal       @db.Decimal(12, 2)
-  currency           String        @default("USD")
-  description        String?
-  status             InvoiceStatus @default(PENDING)
+  issuedById  String // фрилансер
+  payerId     String // заказчик
+  amount      Decimal       @db.Decimal(12, 2)
+  currency    String        @default("USD")
+  description String?
+  status      InvoiceStatus @default(PENDING)
 
-  nowPaymentsPaymentId String?     @unique
-  paidAt             DateTime?
+  nowPaymentsPaymentId String?   @unique
+  paidAt               DateTime?
 
-  chatMessage        ChatMessage?
+  chatMessage ChatMessage?
 
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([status])
@@ -546,22 +639,22 @@ enum ChatMessageType {
 }
 
 model ChatMessage {
-  id         String          @id @default(uuid())
-  threadId   String
-  thread     ChatThread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  senderId   String
-  sender     User            @relation("ChatSender", fields: [senderId], references: [id])
+  id       String     @id @default(uuid())
+  threadId String
+  thread   ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId String
+  sender   User       @relation("ChatSender", fields: [senderId], references: [id])
 
-  type       ChatMessageType @default(TEXT)
-  body       String?
-  invoiceId  String?         @unique
-  invoice    Invoice?        @relation(fields: [invoiceId], references: [id])
-  fileId     String?
-  file       FileAsset?      @relation(fields: [fileId], references: [id])
+  type      ChatMessageType @default(TEXT)
+  body      String?
+  invoiceId String?         @unique
+  invoice   Invoice?        @relation(fields: [invoiceId], references: [id])
+  fileId    String?
+  file      FileAsset?      @relation(fields: [fileId], references: [id])
 
-  editedAt   DateTime?
-  deletedAt  DateTime?       // soft delete — видно в audit log, не пропадает физически
-  createdAt  DateTime        @default(now())
+  editedAt  DateTime?
+  deletedAt DateTime? // soft delete — видно в audit log, не пропадает физически
+  createdAt DateTime  @default(now())
 
   @@index([threadId])
   @@map("chat_messages")
@@ -582,35 +675,35 @@ enum TicketPriority {
 }
 
 model SupportTicket {
-  id             String           @id @default(uuid())
-  userId         String
-  user           User             @relation("TicketOwner", fields: [userId], references: [id])
-  assignedToId   String?
-  assignedTo     User?            @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  id           String  @id @default(uuid())
+  userId       String
+  user         User    @relation("TicketOwner", fields: [userId], references: [id])
+  assignedToId String?
+  assignedTo   User?   @relation("TicketAssignee", fields: [assignedToId], references: [id])
 
-  subject        String
-  status         TicketStatus     @default(OPEN)
-  priority       TicketPriority   @default(NORMAL)
+  subject  String
+  status   TicketStatus   @default(OPEN)
+  priority TicketPriority @default(NORMAL)
 
-  messages       SupportMessage[]
+  messages SupportMessage[]
 
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status])
   @@map("support_tickets")
 }
 
 model SupportMessage {
-  id         String        @id @default(uuid())
-  ticketId   String
-  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  senderId   String
-  sender     User          @relation(fields: [senderId], references: [id])
-  body       String
-  fileId     String?
-  file       FileAsset?    @relation(fields: [fileId], references: [id])
-  createdAt  DateTime      @default(now())
+  id        String        @id @default(uuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User          @relation(fields: [senderId], references: [id])
+  body      String
+  fileId    String?
+  file      FileAsset?    @relation(fields: [fileId], references: [id])
+  createdAt DateTime      @default(now())
 
   @@index([ticketId])
   @@map("support_messages")
@@ -636,20 +729,20 @@ enum ScanStatus {
 }
 
 model FileAsset {
-  id          String       @id @default(uuid())
-  ownerId     String
-  owner       User         @relation(fields: [ownerId], references: [id])
-  url         String
-  mimeType    String
-  sizeBytes   Int
-  kind        FileKind
-  scanStatus  ScanStatus   @default(PENDING)
+  id         String     @id @default(uuid())
+  ownerId    String
+  owner      User       @relation(fields: [ownerId], references: [id])
+  url        String
+  mimeType   String
+  sizeBytes  Int
+  kind       FileKind
+  scanStatus ScanStatus @default(PENDING)
 
   chatMessages    ChatMessage[]
   supportMessages SupportMessage[]
   deliveryFiles   DeliveryFile[]
 
-  createdAt   DateTime     @default(now())
+  createdAt DateTime @default(now())
 
   @@map("file_assets")
 }
@@ -686,15 +779,15 @@ model DeliveryFile {
 // ============================================================================
 
 model Review {
-  id         String   @id @default(uuid())
-  orderId    String
-  authorId   String
-  author     User     @relation("ReviewAuthor", fields: [authorId], references: [id])
-  targetId   String
-  target     User     @relation("ReviewTarget", fields: [targetId], references: [id])
-  rating     Int      // 1..5
-  comment    String?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  orderId   String
+  authorId  String
+  author    User     @relation("ReviewAuthor", fields: [authorId], references: [id])
+  targetId  String
+  target    User     @relation("ReviewTarget", fields: [targetId], references: [id])
+  rating    Int // 1..5
+  comment   String?
+  createdAt DateTime @default(now())
 
   @@unique([orderId, authorId])
   @@map("reviews")
@@ -710,21 +803,21 @@ enum DisputeStatus {
 }
 
 model Dispute {
-  id                String        @id @default(uuid())
-  orderId           String
-  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  milestoneId       String?
-  openedById        String
-  openedBy          User          @relation("DisputeOpener", fields: [openedById], references: [id])
-  assignedToId      String?
-  assignedTo        User?         @relation("DisputeArbitrator", fields: [assignedToId], references: [id])
+  id           String  @id @default(uuid())
+  orderId      String
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  milestoneId  String?
+  openedById   String
+  openedBy     User    @relation("DisputeOpener", fields: [openedById], references: [id])
+  assignedToId String?
+  assignedTo   User?   @relation("DisputeArbitrator", fields: [assignedToId], references: [id])
 
-  reason            String
-  status            DisputeStatus @default(OPEN)
-  resolutionNotes   String?
+  reason          String
+  status          DisputeStatus @default(OPEN)
+  resolutionNotes String?
 
-  createdAt         DateTime      @default(now())
-  resolvedAt        DateTime?
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
 
   @@index([status])
   @@map("disputes")
@@ -735,8 +828,8 @@ model Dispute {
 // ============================================================================
 
 model StaffRole {
-  id          String            @id @default(uuid())
-  name        String            @unique // OWNER, SUPPORT, FINANCE, MODERATOR, ARBITRATOR, ANALYST, DEVELOPER...
+  id          String                @id @default(uuid())
+  name        String                @unique // OWNER, SUPPORT, FINANCE, MODERATOR, ARBITRATOR, ANALYST, DEVELOPER...
   description String?
   permissions StaffRolePermission[]
   users       UserStaffRole[]
@@ -779,12 +872,12 @@ model UserStaffRole {
 
 model AuditLog {
   id         String   @id @default(uuid())
-  actorId    String?  // null = system
+  actorId    String? // null = system
   actor      User?    @relation(fields: [actorId], references: [id])
-  action     String   // "ORDER_EDITED", "ESCROW_RELEASED", "MODERATOR_CHANGED_STATUS", ...
-  targetType String   // "Order", "Wallet", "Dispute", ...
+  action     String // "ORDER_EDITED", "ESCROW_RELEASED", "MODERATOR_CHANGED_STATUS", ...
+  targetType String // "Order", "Wallet", "Dispute", ...
   targetId   String?
-  metadata   Json      @default("{}")
+  metadata   Json     @default("{}")
   ip         String?
   userAgent  String?
   createdAt  DateTime @default(now())
@@ -866,11 +959,11 @@ model CommissionRule {
 }
 
 model FeatureFlag {
-  id               String   @id @default(uuid())
-  key              String   @unique // "AI_FRAUD_SCORING", "MILESTONES", "REFERRALS", ...
-  enabled          Boolean  @default(false)
-  rolloutPercent   Int      @default(100)
-  updatedAt        DateTime @updatedAt
+  id             String   @id @default(uuid())
+  key            String   @unique // "AI_FRAUD_SCORING", "MILESTONES", "REFERRALS", ...
+  enabled        Boolean  @default(false)
+  rolloutPercent Int      @default(100)
+  updatedAt      DateTime @updatedAt
 
   @@map("feature_flags")
 }
@@ -971,28 +1064,44 @@ enum FraudFlagStatus {
 }
 
 model FraudFlag {
-  id           String            @id @default(uuid())
-  eventName    String // доменное событие, вызвавшее скоринг: 'OrderCreated', 'BidAccepted', ...
+  id        String @id @default(uuid())
+  eventName String // доменное событие, вызвавшее скоринг: 'OrderCreated', 'BidAccepted', ...
 
-  userId       String?
-  user         User?             @relation("FraudFlagSubject", fields: [userId], references: [id])
-  orderId      String?
-  order        Order?            @relation(fields: [orderId], references: [id])
+  userId  String?
+  user    User?   @relation("FraudFlagSubject", fields: [userId], references: [id])
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
 
-  riskScore    Int // 0-100, считает fraud-service
-  severity     FraudFlagSeverity
-  reasons      String[]          @default([])
+  riskScore Int // 0-100, считает fraud-service
+  severity  FraudFlagSeverity
+  reasons   String[]          @default([])
 
-  status       FraudFlagStatus   @default(OPEN)
+  status       FraudFlagStatus @default(OPEN)
   reviewedById String?
-  reviewedBy   User?             @relation("FraudFlagReviewer", fields: [reviewedById], references: [id])
+  reviewedBy   User?           @relation("FraudFlagReviewer", fields: [reviewedById], references: [id])
   reviewNote   String?
   reviewedAt   DateTime?
 
-  createdAt    DateTime          @default(now())
+  createdAt DateTime @default(now())
 
   @@index([status, severity])
   @@index([userId])
   @@index([orderId])
   @@map("fraud_flags")
+}
+
+model SkillEndorsement {
+  id         String   @id @default(uuid())
+  endorserId String
+  endorser   User     @relation("EndorsementAuthor", fields: [endorserId], references: [id])
+  targetId   String
+  target     User     @relation("EndorsementTarget", fields: [targetId], references: [id])
+  skillId    String
+  skill      Skill    @relation(fields: [skillId], references: [id])
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@unique([endorserId, targetId, skillId, orderId])
+  @@map("skill_endorsements")
 }

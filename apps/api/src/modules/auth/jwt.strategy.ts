@@ -7,6 +7,7 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user';
 
 interface JwtPayload {
   sub: string;
+  sid?: string;
 }
 
 @Injectable()
@@ -28,7 +29,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       include: { staffRoles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } },
     });
 
-    if (!user || user.status === 'BANNED' || user.status === 'SUSPENDED') {
+    if (!user || user.status === 'BANNED' || user.status === 'SUSPENDED' || user.status === 'DELETED') {
       throw new UnauthorizedException();
     }
 
@@ -43,6 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       roles: user.roles,
       isStaff: user.isStaff,
       staffPermissions: [...new Set(staffPermissions)],
+      sessionId: payload.sid,
     };
   }
 }

@@ -1,15 +1,32 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MatchingService } from '../matching/matching.service';
 import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { CreatePortfolioItemDto } from './dto/create-portfolio-item.dto';
 import { UpdatePortfolioItemDto } from './dto/update-portfolio-item.dto';
+import { CreateBidTemplateDto } from './dto/create-bid-template.dto';
+import { UpdateBidTemplateDto } from './dto/update-bid-template.dto';
 
 const MAX_SKILLS_PER_PROFILE = 25;
+const MAX_BID_TEMPLATES = 10;
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2MB — этого достаточно для фото профиля
 const ALLOWED_AVATAR_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+type FreelancerLevel = 'TOP_RATED' | 'RISING_TALENT' | 'NEW';
+
+// Чистая презентационная метрика поверх Profile.successRate — считается
+// на лету, не хранится, чтобы не рассинхронизироваться с исходными
+// данными (см. TZ_CLAUDE_13.md, п.3). completedOrders — число заказов,
+// где этот юзер был принятым фрилансером и заказ дошёл до COMPLETED.
+function computeFreelancerLevel(completedOrders: number, successRate: Prisma.Decimal | number | null): FreelancerLevel {
+  const rate = successRate === null ? 0 : Number(successRate);
+  if (completedOrders >= 10 && rate >= 95) return 'TOP_RATED';
+  if (completedOrders >= 3 && rate >= 90) return 'RISING_TALENT';
+  return 'NEW';
+}
 
 // Сверяем реальные magic bytes, а не только Content-Type из запроса —
 // иначе можно было бы залить произвольный файл с подделанным заголовком
@@ -90,8 +107,21 @@ export class UsersService {
 
     missingSteps.sort((a, b) => b.points - a.points);
 
+    // Никогда не отдаём секреты наружу — passwordHash/totpSecret/токены
+    // верификации-сброса раньше утекали целиком через `...user` (реальный
+    // баг, найден при добавлении 2FA: секрет TOTP через этот же спред
+    // сделал бы саму двухфакторку бессмысленной — любой с access-токеном
+    // мог бы прочитать totpSecret и сам генерировать валидные коды).
+    const {
+      passwordHash: _passwordHash,
+      totpSecret: _totpSecret,
+      emailVerificationToken: _emailVerificationToken,
+      passwordResetToken: _passwordResetToken,
+      ...safeUser
+    } = user;
+
     return {
-      ...user,
+      ...safeUser,
       profileCompleteness,
       missingSteps,
     };
@@ -141,6 +171,13 @@ export class UsersService {
 
     const subscriptionTier = activeSub?.tier?.name ?? 'STARTER';
 
+    const endorsements = await this.prisma.skillEndorsement.groupBy({
+      by: ['skillId'],
+      where: { targetId: id },
+      _count: { _all: true },
+    });
+    const endorsementMap = new Map(endorsements.map((e) => [e.skillId, e._count._all]));
+
     const profileData = user.profile
       ? {
           displayName: user.profile.displayName,
@@ -160,6 +197,7 @@ export class UsersService {
             id: s.skill.id,
             name: s.skill.name,
             slug: s.skill.slug,
+            endorsementCount: endorsementMap.get(s.skill.id) ?? 0,
           })),
           portfolioItems: user.profile.portfolioItems,
         }
@@ -176,10 +214,20 @@ export class UsersService {
       },
     }));
 
+    const completedOrdersCount = await this.prisma.order.count({
+      where: { clientId: id, status: 'COMPLETED' },
+    });
+
+    const completedAsFreelancer = await this.prisma.bid.count({
+      where: { freelancerId: id, status: 'ACCEPTED', order: { status: 'COMPLETED' } },
+    });
+
     return {
       id: user.id,
       primaryRole: user.primaryRole,
       roles: user.roles,
+      verifiedPayer: completedOrdersCount > 0,
+      level: computeFreelancerLevel(completedAsFreelancer, user.profile?.successRate ?? null),
       profile: profileData,
       subscriptionTier,
       reviews: reviewsData,
@@ -199,6 +247,15 @@ export class UsersService {
       };
     }
 
+    const now = new Date();
+    const vacationWhere: Prisma.ProfileWhereInput = {
+      OR: [
+        { vacationUntil: null },
+        { vacationUntil: { lt: now } },
+      ],
+    };
+    where.profile = vacationWhere;
+
     if (filters.search) {
       const searchWhere: Prisma.ProfileWhereInput = {
         OR: [
@@ -206,11 +263,7 @@ export class UsersService {
           { bio: { contains: filters.search, mode: 'insensitive' } },
         ],
       };
-      if (where.profile) {
-        where.profile = { AND: [where.profile, searchWhere] };
-      } else {
-        where.profile = searchWhere;
-      }
+      where.profile = { AND: [where.profile, searchWhere] };
     }
 
     const freelancers = await this.prisma.user.findMany({
@@ -229,7 +282,26 @@ export class UsersService {
       },
     });
 
-    const now = new Date();
+    const targetIds = freelancers.map((f) => f.id);
+    const endorsements = targetIds.length
+      ? await this.prisma.skillEndorsement.groupBy({
+          by: ['targetId', 'skillId'],
+          where: { targetId: { in: targetIds } },
+          _count: { _all: true },
+        })
+      : [];
+    const endorsementMap = new Map(endorsements.map((e) => [`${e.targetId}:${e.skillId}`, e._count._all]));
+
+    // Батчем, не в цикле — один groupBy на весь список, тот же приём,
+    // что уже используется для endorsements/orderCount в этом раунде.
+    const completedCounts = targetIds.length
+      ? await this.prisma.bid.groupBy({
+          by: ['freelancerId'],
+          where: { freelancerId: { in: targetIds }, status: 'ACCEPTED', order: { status: 'COMPLETED' } },
+          _count: { _all: true },
+        })
+      : [];
+    const completedCountMap = new Map(completedCounts.map((c) => [c.freelancerId, c._count._all]));
 
     const candidates = freelancers.map((user) => {
       const isActiveSub = user.subscription?.status === 'ACTIVE' && user.subscription.expiresAt > now;
@@ -239,6 +311,7 @@ export class UsersService {
         id: user.id,
         primaryRole: user.primaryRole,
         roles: user.roles,
+        level: computeFreelancerLevel(completedCountMap.get(user.id) ?? 0, user.profile?.successRate ?? null),
         profile: user.profile
           ? {
               displayName: user.profile.displayName,
@@ -251,6 +324,7 @@ export class UsersService {
                 id: s.skill.id,
                 name: s.skill.name,
                 slug: s.skill.slug,
+                endorsementCount: endorsementMap.get(`${user.id}:${s.skill.id}`) ?? 0,
               })),
               successRate: user.profile.successRate,
               completionRate: user.profile.completionRate,
@@ -479,5 +553,240 @@ export class UsersService {
         isPremium: tierName === 'PREMIUM',
       };
     });
+  }
+
+  async recalculateSuccessMetrics(freelancerId: string) {
+    const acceptedBids = await this.prisma.bid.findMany({
+      where: { freelancerId, status: 'ACCEPTED' },
+      include: { order: { include: { disputes: true } } },
+    });
+
+    const acceptedOrdersCount = acceptedBids.length;
+    if (acceptedOrdersCount === 0) {
+      await this.prisma.profile.updateMany({
+        where: { userId: freelancerId },
+        data: { successRate: 0, completionRate: 0 },
+      });
+      return;
+    }
+
+    const completedBids = acceptedBids.filter((b) => b.order.status === 'COMPLETED');
+    const completedOrdersCount = completedBids.length;
+
+    const successRate = (completedOrdersCount / acceptedOrdersCount) * 100;
+
+    let completionRate = 0;
+    if (completedOrdersCount > 0) {
+      const completedWithoutDispute = completedBids.filter((b) => b.order.disputes.length === 0).length;
+      completionRate = (completedWithoutDispute / completedOrdersCount) * 100;
+    }
+
+    await this.prisma.profile.updateMany({
+      where: { userId: freelancerId },
+      data: {
+        successRate: Number(successRate.toFixed(2)),
+        completionRate: Number(completionRate.toFixed(2)),
+      },
+    });
+  }
+
+  async recalculateAvgResponseTime(freelancerId: string) {
+    const recentBids = await this.prisma.bid.findMany({
+      where: { freelancerId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: { order: true },
+    });
+
+    if (recentBids.length === 0) return;
+
+    let totalMins = 0;
+    for (const bid of recentBids) {
+      const diffMs = bid.createdAt.getTime() - bid.order.createdAt.getTime();
+      const mins = Math.max(0, Math.floor(diffMs / 60000));
+      totalMins += mins;
+    }
+
+    const avgResponseMins = Math.round(totalMins / recentBids.length);
+
+    await this.prisma.profile.updateMany({
+      where: { userId: freelancerId },
+      data: { avgResponseMins },
+    });
+  }
+
+  async incrementDisputesCount(freelancerId: string) {
+    await this.prisma.profile.updateMany({
+      where: { userId: freelancerId },
+      data: { disputesCount: { increment: 1 } },
+    });
+  }
+
+  async incrementLateDeliveries(freelancerId: string) {
+    await this.prisma.profile.updateMany({
+      where: { userId: freelancerId },
+      data: { lateDeliveries: { increment: 1 } },
+    });
+  }
+
+  async listPreviousFreelancers(clientId: string) {
+    const completedOrders = await this.prisma.order.findMany({
+      where: { clientId, status: 'COMPLETED' },
+      include: {
+        bids: {
+          where: { status: 'ACCEPTED' },
+          include: {
+            freelancer: {
+              include: {
+                profile: {
+                  include: {
+                    skills: { include: { skill: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const reviews = await this.prisma.review.findMany({
+      where: { authorId: clientId },
+    });
+    const ratingMap = new Map<string, number[]>();
+    for (const r of reviews) {
+      const arr = ratingMap.get(r.targetId) ?? [];
+      arr.push(r.rating);
+      ratingMap.set(r.targetId, arr);
+    }
+
+    const hireCountMap = new Map<string, { freelancer: any; count: number }>();
+    for (const order of completedOrders) {
+      for (const bid of order.bids) {
+        const free = bid.freelancer;
+        if (!free) continue;
+        const existing = hireCountMap.get(free.id);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          hireCountMap.set(free.id, { freelancer: free, count: 1 });
+        }
+      }
+    }
+
+    return Array.from(hireCountMap.values()).map(({ freelancer, count }) => {
+      const ratings = ratingMap.get(freelancer.id) ?? [];
+      const avgRating = ratings.length > 0 ? Number((ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(2)) : null;
+      return {
+        id: freelancer.id,
+        primaryRole: freelancer.primaryRole,
+        roles: freelancer.roles,
+        profile: freelancer.profile,
+        hireCount: count,
+        myAvgRating: avgRating,
+      };
+    });
+  }
+
+  // --- Шаблоны откликов (для фрилансеров) ---
+
+  async listBidTemplates(freelancerId: string) {
+    return this.prisma.bidTemplate.findMany({ where: { freelancerId }, orderBy: { createdAt: 'desc' } });
+  }
+
+  async createBidTemplate(freelancerId: string, dto: CreateBidTemplateDto) {
+    const count = await this.prisma.bidTemplate.count({ where: { freelancerId } });
+    if (count >= MAX_BID_TEMPLATES) {
+      throw new BadRequestException(`Можно сохранить не больше ${MAX_BID_TEMPLATES} шаблонов`);
+    }
+    return this.prisma.bidTemplate.create({ data: { freelancerId, ...dto } });
+  }
+
+  async updateBidTemplate(freelancerId: string, templateId: string, dto: UpdateBidTemplateDto) {
+    const template = await this.prisma.bidTemplate.findFirst({ where: { id: templateId, freelancerId } });
+    if (!template) throw new NotFoundException('Bid template not found');
+    return this.prisma.bidTemplate.update({ where: { id: templateId }, data: dto });
+  }
+
+  async deleteBidTemplate(freelancerId: string, templateId: string) {
+    const template = await this.prisma.bidTemplate.findFirst({ where: { id: templateId, freelancerId } });
+    if (!template) throw new NotFoundException('Bid template not found');
+    await this.prisma.bidTemplate.delete({ where: { id: templateId } });
+    return { success: true };
+  }
+
+  // --- GDPR: экспорт данных и удаление аккаунта ---
+
+  async exportUserData(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      include: {
+        profile: { include: { skills: { include: { skill: true } }, portfolioItems: true } },
+        ordersAsClient: true,
+        bids: true,
+        reviewsAuthored: true,
+        reviewsReceived: true,
+        wallet: true,
+        savedSearches: true,
+        payoutAddresses: true,
+      },
+    });
+
+    const ledgerEntries = user.wallet
+      ? await this.prisma.ledgerEntry.findMany({
+          where: { walletId: user.wallet.id },
+          include: { transaction: true },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+
+    const {
+      passwordHash: _passwordHash,
+      totpSecret: _totpSecret,
+      emailVerificationToken: _emailVerificationToken,
+      passwordResetToken: _passwordResetToken,
+      ...safeUser
+    } = user;
+
+    return {
+      exportedAt: new Date().toISOString(),
+      user: safeUser,
+      ledgerEntries,
+    };
+  }
+
+  async deleteAccount(userId: string, password: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
+      throw new BadRequestException('Неверный пароль');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          status: 'DELETED',
+          email: `deleted-${userId}@taskhunt.invalid`,
+          passwordHash: null,
+          totpSecret: null,
+          totpEnabled: false,
+        },
+      });
+      await tx.totpBackupCode.deleteMany({ where: { userId } });
+      await tx.refreshSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.profile.updateMany({
+        where: { userId },
+        data: {
+          displayName: 'Удалённый пользователь',
+          bio: null,
+          avatarUrl: null,
+          avatarData: null,
+          githubUrl: null,
+          websiteUrl: null,
+        },
+      });
+    });
+
+    return { deleted: true };
   }
 }
