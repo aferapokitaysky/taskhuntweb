@@ -56,6 +56,7 @@ export default function DashboardPage() {
 
   const isClient = me?.roles.includes('CLIENT') ?? false;
   const isFreelancer = me?.roles.includes('FREELANCER') ?? false;
+  const hasAside = isClient || !!selectedOrder;
   const flatCategories = categories.flatMap((category) => [category, ...(category.children ?? [])]);
 
   async function refreshOrders(search?: string) {
@@ -222,7 +223,7 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className={`grid gap-6 ${hasAside ? 'lg:grid-cols-[1fr_360px]' : ''}`}>
         <section>
           <div className="mb-3 flex items-center gap-2.5">
             <h2 className="font-serif text-xl text-stone-900">Заказы</h2>
@@ -304,6 +305,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
+        {hasAside && (
         <aside className="space-y-6">
           {isClient && (
             <section className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
@@ -436,6 +438,7 @@ export default function DashboardPage() {
             </section>
           )}
         </aside>
+        )}
       </div>
     </main>
   );
