@@ -14,7 +14,7 @@ export function Logo({ withWordmark = true, className = '' }: { withWordmark?: b
   return (
     <span className={`inline-flex items-center gap-2 ${className}`}>
       <LogoMark className="h-9 w-9 shrink-0" />
-      {withWordmark && <span className="font-serif text-xl text-stone-900">TaskHunt</span>}
+      {withWordmark && <span className="font-serif text-xl text-stone-900">TuskHunt</span>}
     </span>
   );
 }

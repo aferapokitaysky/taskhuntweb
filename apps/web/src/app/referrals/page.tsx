@@ -108,7 +108,7 @@ export default function ReferralsPage() {
       <div>
         <h1 className="font-serif text-3xl text-stone-900">Реферальная программа</h1>
         <p className="mt-2 text-stone-600">
-          Приглашайте друзей на TaskHunt и получайте 5% от первого оплаченного заказа каждого привлечённого пользователя.
+          Приглашайте друзей на TuskHunt и получайте 5% от первого оплаченного заказа каждого привлечённого пользователя.
         </p>
       </div>
 

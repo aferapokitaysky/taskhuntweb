@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 
 export const metadata = {
-  title: 'Условия использования — TaskHunt',
-  description: 'Условия использования платформы TaskHunt',
+  title: 'Условия использования — TuskHunt',
+  description: 'Условия использования платформы TuskHunt',
 };
 
 export default function TermsPage() {
@@ -22,7 +22,7 @@ export default function TermsPage() {
         <section>
           <h2 className="mb-2 text-lg font-semibold text-stone-900">1. Общие положения</h2>
           <p>
-            TaskHunt — платформа-посредник, соединяющая заказчиков и исполнителей услуг
+            TuskHunt — платформа-посредник, соединяющая заказчиков и исполнителей услуг
             (далее — «Платформа»). Используя Платформу, вы соглашаетесь с настоящими
             условиями. Если вы не согласны — не пользуйтесь Платформой.
           </p>

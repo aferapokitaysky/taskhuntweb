@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 
 export const metadata = {
-  title: 'Политика конфиденциальности — TaskHunt',
-  description: 'Политика обработки персональных данных TaskHunt',
+  title: 'Политика конфиденциальности — TuskHunt',
+  description: 'Политика обработки персональных данных TuskHunt',
 };
 
 export default function PrivacyPage() {

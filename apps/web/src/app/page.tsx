@@ -14,7 +14,7 @@ export default function HomePage() {
         <div className="animate-float">
           <Logo withWordmark={false} className="h-16 w-16" />
         </div>
-        <h1 className="max-w-2xl font-serif text-5xl leading-tight text-stone-900">TaskHunt</h1>
+        <h1 className="max-w-2xl font-serif text-5xl leading-tight text-stone-900">TuskHunt</h1>
         <p className="max-w-md text-stone-600">
           Деньги защищены на платформе, пока работа не сдана и не принята — заказчик и
           исполнитель встречаются на равных.
