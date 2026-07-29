@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { DomainEventName } from '@taskhunt/shared-types';
+import { MatchingService } from '../matching/matching.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { CreateBidDto } from './dto/create-bid.dto';
@@ -12,6 +13,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventBus: EventBusService,
+    private readonly matching: MatchingService,
   ) {}
 
   private getStartOfMonth(): Date {
@@ -121,18 +123,20 @@ export class OrdersService {
 
     const promotedOrderIds = new Set(activeOrderPromotions.map((p) => p.entityId));
 
-    const result = orders.map((order) => ({
+    const withPromotion = orders.map((order) => ({
       ...order,
       isPromoted: promotedOrderIds.has(order.id),
     }));
 
-    result.sort((a, b) => {
-      if (a.isPromoted && !b.isPromoted) return -1;
-      if (!a.isPromoted && b.isPromoted) return 1;
-      return 0;
-    });
+    return this.matching.rankOrdersForFeed(withPromotion);
+  }
 
-    return result;
+  async getRankedBids(clientId: string, orderId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.clientId !== clientId) throw new ForbiddenException('Not your order');
+
+    return this.matching.rankBidsForOrder(orderId);
   }
 
   async findOne(id: string) {
@@ -146,6 +150,43 @@ export class OrdersService {
       },
     });
     if (!order) throw new NotFoundException('Order not found');
+
+    const freelancerIds = Array.from(new Set(order.bids.map((b) => b.freelancerId)));
+
+    if (freelancerIds.length > 0) {
+      const reviewStats = await this.prisma.review.groupBy({
+        by: ['targetId'],
+        where: { targetId: { in: freelancerIds } },
+        _avg: { rating: true },
+        _count: { id: true },
+      });
+
+      const statsMap = new Map<string, { avgRating: number | null; reviewsCount: number }>();
+      for (const stat of reviewStats) {
+        statsMap.set(stat.targetId, {
+          avgRating: stat._avg.rating ? Math.round(stat._avg.rating * 100) / 100 : null,
+          reviewsCount: stat._count.id,
+        });
+      }
+
+      const bidsWithStats = order.bids.map((bid) => {
+        const stats = statsMap.get(bid.freelancerId) ?? { avgRating: null, reviewsCount: 0 };
+        return {
+          ...bid,
+          freelancer: {
+            ...bid.freelancer,
+            avgRating: stats.avgRating,
+            reviewsCount: stats.reviewsCount,
+          },
+        };
+      });
+
+      return {
+        ...order,
+        bids: bidsWithStats,
+      };
+    }
+
     return order;
   }
 

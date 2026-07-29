@@ -30,7 +30,10 @@ export interface BaseDomainEvent<TName extends DomainEventName, TPayload> {
 
 export type UserRegisteredEvent = BaseDomainEvent<
   DomainEventName.UserRegistered,
-  { userId: string; email: string; role: 'CLIENT' | 'FREELANCER' }
+  // ip — для анти-фрод детекции дублей аккаунтов по IP в fraud-service;
+  // null для OAuth-регистрации (там личность уже подтверждена провайдером,
+  // риск дублей ниже, IP через колбэк-цепочку тянуть не стали)
+  { userId: string; email: string; role: 'CLIENT' | 'FREELANCER'; ip: string | null }
 >;
 
 export type OrderCreatedEvent = BaseDomainEvent<

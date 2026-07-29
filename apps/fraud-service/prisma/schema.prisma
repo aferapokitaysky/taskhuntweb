@@ -8,16 +8,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model FraudSignal {
-  id        String   @id @default(uuid())
-  orderId   String   @unique
-  riskScore Int
-  reasons   String[]
-  createdAt DateTime @default(now())
-
-  @@map("fraud_signals")
-}
-
 model User {
   id        String    @id
   createdAt DateTime
@@ -39,10 +29,11 @@ model Profile {
 }
 
 model Order {
-  id        String   @id
+  id        String    @id
   clientId  String
-  client    User     @relation("ClientOrders", fields: [clientId], references: [id])
+  client    User      @relation("ClientOrders", fields: [clientId], references: [id])
   budgetMin Decimal
+  budgetMax Decimal?
   status    String
   bids      Bid[]
   disputes  Dispute[]

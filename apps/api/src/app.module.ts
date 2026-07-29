@@ -26,6 +26,7 @@ import { HealthModule } from './modules/health/health.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { FraudModule } from './modules/fraud/fraud.module';
 import { PAYOUT_QUEUE } from './modules/wallet/payout.processor';
 import { FILE_SCAN_QUEUE } from './modules/files/files.service';
 import { SUBSCRIPTION_EXPIRATION_QUEUE } from './modules/subscriptions/subscription-expiration.processor';
@@ -92,6 +93,7 @@ import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
     SubscriptionsModule,
     PromotionsModule,
     NotificationsModule,
+    FraudModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

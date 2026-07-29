@@ -36,6 +36,15 @@ export class OrdersController {
     return this.ordersService.findOne(id);
   }
 
+  // Ранжированные отклики ("Best Match") — видит только заказчик этого заказа,
+  // в откликах видны суммы бидов, это не публичные данные.
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Get(':id/recommended-freelancers')
+  getRecommendedFreelancers(@CurrentUser() user: AuthenticatedUser, @Param('id') orderId: string) {
+    return this.ordersService.getRankedBids(user.id, orderId);
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CLIENT')
   @Post()

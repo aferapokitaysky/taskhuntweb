@@ -31,7 +31,7 @@ export class AuthService {
     private readonly eventBus: EventBusService,
   ) {}
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, ip: string | null = null) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) {
       throw new ConflictException('Email already registered');
@@ -59,6 +59,7 @@ export class AuthService {
       userId: user.id,
       email: user.email,
       role: dto.role,
+      ip,
     });
 
     await this.sendVerificationEmail(user.id, user.email);
@@ -206,6 +207,7 @@ export class AuthService {
         userId: user.id,
         email: user.email,
         role: profile.role,
+        ip: null, // OAuth — личность уже подтверждена провайдером
       });
     }
 

@@ -3,7 +3,19 @@ import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { DomainEvent, DomainEventName, EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
 import { PrismaClient } from '../generated/prisma-client';
-import { saveRisk, scoreBidAccepted, scoreDisputeOpened, scoreOrderCreated } from './handlers/risk';
+import {
+  scoreBidAccepted,
+  scoreBidSubmitted,
+  scoreDisputeOpened,
+  scoreEscrowLocked,
+  scoreEscrowReleased,
+  scoreInvoiceIssued,
+  scoreInvoicePaid,
+  scoreOrderCreated,
+  scoreUserRegistered,
+  scoreWorkSubmitted,
+} from './handlers/risk';
+import { reportFlag } from './lib/report';
 
 const prisma = new PrismaClient();
 const connection = new IORedis({
@@ -12,14 +24,33 @@ const connection = new IORedis({
   maxRetriesPerRequest: null,
 });
 
+/**
+ * Не все 13 типов доменных событий фрод-релевантны: EmailVerificationRequested,
+ * PasswordResetRequested и SubscriptionExpiringSoon существуют только как
+ * триггеры для notifications-service, скоринг для них осознанно не пишем.
+ */
 async function route(event: DomainEvent) {
   switch (event.name) {
+    case DomainEventName.UserRegistered:
+      return reportFlag(await scoreUserRegistered(connection, event));
     case DomainEventName.OrderCreated:
-      return saveRisk(prisma, await scoreOrderCreated(prisma, event));
+      return reportFlag(await scoreOrderCreated(prisma, event));
+    case DomainEventName.BidSubmitted:
+      return reportFlag(await scoreBidSubmitted(prisma, connection, event));
     case DomainEventName.BidAccepted:
-      return saveRisk(prisma, await scoreBidAccepted(prisma, event));
+      return reportFlag(await scoreBidAccepted(prisma, event));
+    case DomainEventName.InvoiceIssued:
+      return reportFlag(await scoreInvoiceIssued(prisma, connection, event));
+    case DomainEventName.InvoicePaid:
+      return reportFlag(await scoreInvoicePaid(prisma, event));
+    case DomainEventName.EscrowLocked:
+      return reportFlag(await scoreEscrowLocked(prisma, event));
+    case DomainEventName.EscrowReleased:
+      return reportFlag(await scoreEscrowReleased(connection, event));
+    case DomainEventName.WorkSubmitted:
+      return reportFlag(await scoreWorkSubmitted(prisma, event));
     case DomainEventName.DisputeOpened:
-      return saveRisk(prisma, await scoreDisputeOpened(prisma, event));
+      return reportFlag(await scoreDisputeOpened(prisma, connection, event));
     default:
       return undefined;
   }
@@ -33,25 +64,14 @@ const worker = new Worker<DomainEvent>(
   { connection },
 );
 
-const server = createServer(async (req, res) => {
-  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
-  const match = url.pathname.match(/^\/fraud-signals\/([^/]+)$/);
-
-  if (req.method !== 'GET' || !match) {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ message: 'Not found' }));
+const server = createServer((req, res) => {
+  if (req.method === 'GET' && req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok' }));
     return;
   }
-
-  const signal = await prisma.fraudSignal.findUnique({ where: { orderId: decodeURIComponent(match[1]) } });
-  if (!signal) {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ message: 'Fraud signal not found' }));
-    return;
-  }
-
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(signal));
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ message: 'Not found' }));
 });
 
 const port = Number(process.env.PORT ?? 3002);

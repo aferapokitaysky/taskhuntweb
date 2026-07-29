@@ -92,6 +92,10 @@ model User {
   notificationPrefs NotificationPreference[]
   notifications     Notification[]
   files             FileAsset[]
+  payoutAddresses   SavedPayoutAddress[]
+
+  fraudFlags         FraudFlag[] @relation("FraudFlagSubject")
+  fraudFlagsReviewed FraudFlag[] @relation("FraudFlagReviewer")
 
   @@index([status])
   @@map("users")
@@ -211,6 +215,7 @@ model Order {
   budgetMax    Decimal?      @db.Decimal(12, 2)
   currency     String        @default("USD")
   deadline     DateTime?
+  tags         String[]      @default([])
 
   status       OrderStatus   @default(OPEN)
   acceptedBidId String?      @unique
@@ -222,6 +227,7 @@ model Order {
   deliveries   Delivery[]
   disputes     Dispute[]
   invoices     Invoice[]
+  fraudFlags   FraudFlag[]
 
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -353,6 +359,22 @@ model Wallet {
   updatedAt   DateTime @updatedAt
 
   @@map("wallets")
+}
+
+model SavedPayoutAddress {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String
+  network    String
+  address    String
+  isDefault  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@unique([userId, network, address])
+  @@index([userId])
+  @@map("saved_payout_addresses")
 }
 
 // Группа проводок, которая обязана балансироваться (сумма DEBIT == сумма CREDIT)
@@ -844,4 +866,53 @@ model Notification {
 
   @@index([userId, read])
   @@map("notifications")
+}
+
+// ============================================================================
+// АНТИ-ФРОД — fraud-service скорит события асинхронно (своя изолированная
+// БД, читает очередь доменных событий) и репортит результат сюда через
+// внутренний вебхук (см. FraudController.receiveFlag в apps/api). Раньше
+// вывод fraud-service нигде в основном апи не читался и не хранился — эта
+// таблица и есть мост между асинхронным скорингом и админкой.
+// ============================================================================
+
+enum FraudFlagSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FraudFlagStatus {
+  OPEN
+  REVIEWED
+  DISMISSED
+  CONFIRMED
+}
+
+model FraudFlag {
+  id           String            @id @default(uuid())
+  eventName    String // доменное событие, вызвавшее скоринг: 'OrderCreated', 'BidAccepted', ...
+
+  userId       String?
+  user         User?             @relation("FraudFlagSubject", fields: [userId], references: [id])
+  orderId      String?
+  order        Order?            @relation(fields: [orderId], references: [id])
+
+  riskScore    Int // 0-100, считает fraud-service
+  severity     FraudFlagSeverity
+  reasons      String[]          @default([])
+
+  status       FraudFlagStatus   @default(OPEN)
+  reviewedById String?
+  reviewedBy   User?             @relation("FraudFlagReviewer", fields: [reviewedById], references: [id])
+  reviewNote   String?
+  reviewedAt   DateTime?
+
+  createdAt    DateTime          @default(now())
+
+  @@index([status, severity])
+  @@index([userId])
+  @@index([orderId])
+  @@map("fraud_flags")
 }

@@ -4,24 +4,56 @@ import { AdminService } from '../admin.service';
 describe('AdminService', () => {
   let service: AdminService;
   let prisma: any;
-  let walletService: { releaseEscrow: jest.Mock; refundEscrow: jest.Mock };
+  let walletService: { releaseEscrow: jest.Mock; refundEscrow: jest.Mock; getSystemWalletId: jest.Mock };
 
   beforeEach(() => {
     prisma = {
       user: {
         update: jest.fn(),
-        findMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(10),
+      },
+      profile: {
+        count: jest.fn().mockResolvedValue(5),
       },
       dispute: {
         findUnique: jest.fn(),
-        findMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn(),
+        count: jest.fn().mockResolvedValue(2),
       },
       bid: {
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       invoice: {
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 500 }, _avg: { amount: 100 } }),
+      },
+      ledgerEntry: {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 50 } }),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      order: {
+        groupBy: jest.fn().mockResolvedValue([{ status: 'OPEN', _count: { id: 3 } }]),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(5),
+      },
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      category: {
+        create: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      skill: {
+        create: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
       },
       featureFlag: {
         findMany: jest.fn(),
@@ -36,9 +68,73 @@ describe('AdminService', () => {
     walletService = {
       releaseEscrow: jest.fn().mockResolvedValue(undefined),
       refundEscrow: jest.fn().mockResolvedValue(undefined),
+      getSystemWalletId: jest.fn().mockResolvedValue('system-wallet-id'),
     };
 
     service = new AdminService(prisma, walletService as any);
+  });
+
+  describe('getMetrics', () => {
+    it('возвращает сводную аналитику платформы со всеми необходимыми полями', async () => {
+      const metrics = await service.getMetrics();
+
+      expect(metrics).toHaveProperty('revenue');
+      expect(metrics).toHaveProperty('gmv');
+      expect(metrics).toHaveProperty('avgOrderValue');
+      expect(metrics).toHaveProperty('avgTimeToHireHours');
+      expect(metrics).toHaveProperty('avgDisputeResolutionHours');
+      expect(metrics).toHaveProperty('subscriptionChurnRate');
+      expect(metrics).toHaveProperty('activeDisputes');
+      expect(metrics).toHaveProperty('ordersByStatus');
+      expect(metrics.ordersByStatus.OPEN).toBe(3);
+    });
+  });
+
+  describe('getRevenueTimeseries', () => {
+    it('возвращает непрерывный временной ряд по дням', async () => {
+      const res = await service.getRevenueTimeseries(7);
+
+      expect(res).toHaveLength(7);
+      expect(res[0]).toHaveProperty('date');
+      expect(res[0]).toHaveProperty('revenue');
+      expect(res[0]).toHaveProperty('gmv');
+      expect(res[0]).toHaveProperty('newUsers');
+      expect(res[0]).toHaveProperty('newOrders');
+    });
+  });
+
+  describe('getFunnel', () => {
+    it('рассчитывает показатели конверсии воронки пользователей', async () => {
+      prisma.user.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]);
+      prisma.profile.count.mockResolvedValue(1);
+
+      const funnel = await service.getFunnel(30);
+
+      expect(funnel.registered).toBe(2);
+      expect(funnel.onboarded).toBe(1);
+    });
+  });
+
+  describe('getTopCategories', () => {
+    it('возвращает топы категорий отсортированные по GMV', async () => {
+      prisma.category.findMany.mockResolvedValue([
+        {
+          id: 'cat-1',
+          name: 'Web Dev',
+          orders: [
+            {
+              invoices: [{ amount: 300 }],
+            },
+          ],
+        },
+      ]);
+
+      const res = await service.getTopCategories(5);
+
+      expect(res).toHaveLength(1);
+      expect(res[0].categoryName).toBe('Web Dev');
+      expect(res[0].gmv).toBe(300);
+    });
   });
 
   describe('resolveDispute', () => {
@@ -62,7 +158,7 @@ describe('AdminService', () => {
         freelancerId: 'freelancer-1',
         freelancer: { wallet: { id: 'freelancer-wallet-id' } },
       });
-      prisma.invoice.findFirst.mockResolvedValue(null); // нет оплаченного инвойса
+      prisma.invoice.findFirst.mockResolvedValue(null);
 
       await expect(
         service.resolveDispute('disp-1', 'staff-1', {

@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
 import { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
@@ -18,7 +19,15 @@ async function bootstrap() {
     }
   }
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+
+  // За реверс-прокси (nginx/Cloudflare/балансировщик) без этого req.ip всегда
+  // возвращает адрес прокси, а не клиента — это ломает и rate limiting
+  // (ThrottlerGuard бьёт по IP), и анти-фрод (детекция дублей аккаунтов по
+  // IP при регистрации): все запросы выглядят пришедшими с одного адреса.
+  // trust proxy: 1 — доверяем ровно одному прокси-хопу перед приложением
+  // (стандартный безопасный дефолт для одного балансировщика/edge-прокси).
+  app.set('trust proxy', 1);
 
   // Bull Board монтируется в обход Nest-гардов (это express middleware, не контроллер),
   // поэтому /admin/queues защищаем отдельным Basic Auth — там видны и управляются очереди

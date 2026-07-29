@@ -30,6 +30,20 @@ describe('WalletService', () => {
     service = new WalletService(prisma, ledger as any, eventBus as any);
   });
 
+  describe('getWithdrawalFeeInfo', () => {
+    it('возвращает процент и фиксированную комиссию за вывод', async () => {
+      prisma.commissionRule.findUnique.mockResolvedValue({ percentage: 2, fixedAmount: 0.5, active: true });
+      const info = await service.getWithdrawalFeeInfo();
+      expect(info).toEqual({ percentage: 2, fixedAmount: 0.5 });
+    });
+
+    it('возвращает дефолт 1%/0, если правило отключено — не должен расходиться с реально списываемой комиссией', async () => {
+      prisma.commissionRule.findUnique.mockResolvedValue({ percentage: 5, fixedAmount: 10, active: false });
+      const info = await service.getWithdrawalFeeInfo();
+      expect(info).toEqual({ percentage: 1, fixedAmount: 0 });
+    });
+  });
+
   describe('lockEscrowForInvoice', () => {
     it('ищет системный кошелёк по SYSTEM_ACCOUNT_EMAIL и создаёт сбалансированную проводку ESCROW_LOCK', async () => {
       await service.lockEscrowForInvoice({

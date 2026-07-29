@@ -152,6 +152,8 @@ export class AdminService {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const totalRevenueAgg = await this.prisma.ledgerEntry.aggregate({
       where: {
@@ -168,6 +170,21 @@ export class AdminService {
         createdAt: { gte: startOfMonth },
       },
       _sum: { amount: true },
+    });
+
+    const totalGmvAgg = await this.prisma.invoice.aggregate({
+      where: { status: 'PAID' },
+      _sum: { amount: true },
+    });
+
+    const monthGmvAgg = await this.prisma.invoice.aggregate({
+      where: { status: 'PAID', paidAt: { gte: startOfMonth } },
+      _sum: { amount: true },
+    });
+
+    const avgOrderAgg = await this.prisma.invoice.aggregate({
+      where: { status: 'PAID' },
+      _avg: { amount: true },
     });
 
     const activeDisputes = await this.prisma.dispute.count({
@@ -216,15 +233,279 @@ export class AdminService {
     const activeSubUsersCount = activeSubs.length;
     activeSubscriptionsByTier.STARTER = Math.max(0, totalUsers - activeSubUsersCount);
 
+    const acceptedBids90Days = await this.prisma.bid.findMany({
+      where: { status: 'ACCEPTED', createdAt: { gte: ninetyDaysAgo } },
+      include: { order: true },
+    });
+    let avgTimeToHireHours: number | null = null;
+    if (acceptedBids90Days.length > 0) {
+      const totalHours = acceptedBids90Days.reduce((acc, b) => {
+        const diffMs = Math.max(0, b.createdAt.getTime() - b.order.createdAt.getTime());
+        return acc + diffMs / (1000 * 60 * 60);
+      }, 0);
+      avgTimeToHireHours = Math.round((totalHours / acceptedBids90Days.length) * 100) / 100;
+    }
+
+    const resolvedDisputes = await this.prisma.dispute.findMany({
+      where: { status: { in: ['RESOLVED_CLIENT', 'RESOLVED_FREELANCER', 'RESOLVED_SPLIT'] } },
+    });
+    let avgDisputeResolutionHours: number | null = null;
+    if (resolvedDisputes.length > 0) {
+      const totalHours = resolvedDisputes.reduce((acc, d) => {
+        const endTime = d.resolvedAt ? d.resolvedAt.getTime() : now.getTime();
+        const diffMs = Math.max(0, endTime - d.createdAt.getTime());
+        return acc + diffMs / (1000 * 60 * 60);
+      }, 0);
+      avgDisputeResolutionHours = Math.round((totalHours / resolvedDisputes.length) * 100) / 100;
+    }
+
+    const expiredRecently = await this.prisma.subscription.count({
+      where: {
+        status: 'EXPIRED',
+        expiresAt: { gte: thirtyDaysAgo },
+      },
+    });
+    const totalPaidSubs30DaysAgo = await this.prisma.subscription.count({
+      where: {
+        startedAt: { lte: thirtyDaysAgo },
+      },
+    });
+    const subscriptionChurnRate =
+      totalPaidSubs30DaysAgo > 0 ? Math.round((expiredRecently / totalPaidSubs30DaysAgo) * 10000) / 100 : 0;
+
     return {
       revenue: {
         total: Number(totalRevenueAgg._sum.amount ?? 0),
         thisMonth: Number(monthRevenueAgg._sum.amount ?? 0),
       },
+      gmv: {
+        total: Number(totalGmvAgg._sum.amount ?? 0),
+        thisMonth: Number(monthGmvAgg._sum.amount ?? 0),
+      },
+      avgOrderValue: Number(avgOrderAgg._avg.amount ?? 0),
+      avgTimeToHireHours,
+      avgDisputeResolutionHours,
+      subscriptionChurnRate,
       activeDisputes,
       ordersByStatus,
       newUsersThisWeek,
       activeSubscriptionsByTier,
     };
+  }
+
+  async getRevenueTimeseries(days = 30) {
+    const validDays = Math.min(Math.max(Number(days) || 30, 1), 365);
+    const now = new Date();
+    const systemWalletId = await this.walletService.getSystemWalletId();
+    const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - validDays + 1);
+
+    const [entries, paidInvoices, users, orders] = await Promise.all([
+      this.prisma.ledgerEntry.findMany({
+        where: { walletId: systemWalletId, direction: 'CREDIT', createdAt: { gte: startDate } },
+      }),
+      this.prisma.invoice.findMany({
+        where: { status: 'PAID', createdAt: { gte: startDate } },
+      }),
+      this.prisma.user.findMany({
+        where: { createdAt: { gte: startDate } },
+        select: { createdAt: true },
+      }),
+      this.prisma.order.findMany({
+        where: { createdAt: { gte: startDate } },
+        select: { createdAt: true },
+      }),
+    ]);
+
+    const resultMap = new Map<string, { date: string; revenue: number; gmv: number; newUsers: number; newOrders: number }>();
+
+    for (let i = 0; i < validDays; i++) {
+      const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+      resultMap.set(dateStr, { date: dateStr, revenue: 0, gmv: 0, newUsers: 0, newOrders: 0 });
+    }
+
+    for (const e of entries) {
+      const dateStr = e.createdAt.toISOString().split('T')[0];
+      const item = resultMap.get(dateStr);
+      if (item) item.revenue += Number(e.amount);
+    }
+
+    for (const inv of paidInvoices) {
+      const dateStr = (inv.paidAt ?? inv.createdAt).toISOString().split('T')[0];
+      const item = resultMap.get(dateStr);
+      if (item) item.gmv += Number(inv.amount);
+    }
+
+    for (const u of users) {
+      const dateStr = u.createdAt.toISOString().split('T')[0];
+      const item = resultMap.get(dateStr);
+      if (item) item.newUsers += 1;
+    }
+
+    for (const o of orders) {
+      const dateStr = o.createdAt.toISOString().split('T')[0];
+      const item = resultMap.get(dateStr);
+      if (item) item.newOrders += 1;
+    }
+
+    return Array.from(resultMap.values()).map((r) => ({
+      date: r.date,
+      revenue: Math.round(r.revenue * 100) / 100,
+      gmv: Math.round(r.gmv * 100) / 100,
+      newUsers: r.newUsers,
+      newOrders: r.newOrders,
+    }));
+  }
+
+  async getFunnel(days = 30) {
+    const validDays = Math.min(Math.max(Number(days) || 30, 1), 365);
+    const now = new Date();
+    const startDate = new Date(now.getTime() - validDays * 24 * 60 * 60 * 1000);
+
+    const cohortUsers = await this.prisma.user.findMany({
+      where: { createdAt: { gte: startDate } },
+      select: { id: true },
+    });
+    const registered = cohortUsers.length;
+    if (registered === 0) {
+      return { registered: 0, onboarded: 0, postedOrRespondedFirst: 0, paidOrEarnedFirst: 0 };
+    }
+
+    const userIds = cohortUsers.map((u) => u.id);
+
+    const onboardedCount = await this.prisma.profile.count({
+      where: { userId: { in: userIds } },
+    });
+
+    const [clientsWithOrders, freelancersWithBids] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { clientId: { in: userIds } },
+        select: { clientId: true },
+        distinct: ['clientId'],
+      }),
+      this.prisma.bid.findMany({
+        where: { freelancerId: { in: userIds } },
+        select: { freelancerId: true },
+        distinct: ['freelancerId'],
+      }),
+    ]);
+
+    const activeUserSet = new Set<string>();
+    for (const o of clientsWithOrders) activeUserSet.add(o.clientId);
+    for (const b of freelancersWithBids) activeUserSet.add(b.freelancerId);
+    const postedOrRespondedFirst = activeUserSet.size;
+
+    const [clientsWhoPaid, freelancersWithAcceptedBids] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where: { payerId: { in: userIds }, status: 'PAID' },
+        select: { payerId: true },
+        distinct: ['payerId'],
+      }),
+      this.prisma.bid.findMany({
+        where: { freelancerId: { in: userIds }, status: 'ACCEPTED' },
+        select: { freelancerId: true },
+        distinct: ['freelancerId'],
+      }),
+    ]);
+
+    const paidOrEarnedSet = new Set<string>();
+    for (const inv of clientsWhoPaid) paidOrEarnedSet.add(inv.payerId);
+    for (const b of freelancersWithAcceptedBids) paidOrEarnedSet.add(b.freelancerId);
+    const paidOrEarnedFirst = paidOrEarnedSet.size;
+
+    return {
+      registered,
+      onboarded: onboardedCount,
+      postedOrRespondedFirst,
+      paidOrEarnedFirst,
+    };
+  }
+
+  async getTopCategories(limit = 10) {
+    const validLimit = Math.min(Math.max(Number(limit) || 10, 1), 100);
+
+    const categories = await this.prisma.category.findMany({
+      include: {
+        orders: {
+          include: {
+            invoices: {
+              where: { status: 'PAID' },
+            },
+          },
+        },
+      },
+    });
+
+    const result = categories.map((cat) => {
+      const orderCount = cat.orders.length;
+      let gmv = 0;
+      for (const order of cat.orders) {
+        for (const inv of order.invoices) {
+          gmv += Number(inv.amount);
+        }
+      }
+      return {
+        categoryId: cat.id,
+        categoryName: cat.name,
+        orderCount,
+        gmv: Math.round(gmv * 100) / 100,
+      };
+    });
+
+    result.sort((a, b) => b.gmv - a.gmv);
+    return result.slice(0, validLimit);
+  }
+
+  async getTopFreelancers(limit = 10) {
+    const validLimit = Math.min(Math.max(Number(limit) || 10, 1), 100);
+
+    const freelancers = await this.prisma.user.findMany({
+      where: {
+        OR: [{ primaryRole: 'FREELANCER' }, { roles: { has: 'FREELANCER' } }],
+      },
+      include: {
+        profile: true,
+        wallet: {
+          include: {
+            entries: {
+              where: { balanceType: 'WITHDRAWABLE', direction: 'CREDIT' },
+            },
+          },
+        },
+        bids: {
+          where: { status: 'ACCEPTED', order: { status: 'COMPLETED' } },
+        },
+        reviewsReceived: {
+          select: { rating: true },
+        },
+      },
+    });
+
+    const result = freelancers.map((user) => {
+      let earnings = 0;
+      if (user.wallet?.entries) {
+        for (const e of user.wallet.entries) {
+          earnings += Number(e.amount);
+        }
+      }
+
+      const ordersCompleted = user.bids.length;
+      let avgRating: number | null = null;
+      if (user.reviewsReceived.length > 0) {
+        const sum = user.reviewsReceived.reduce((acc, r) => acc + r.rating, 0);
+        avgRating = Math.round((sum / user.reviewsReceived.length) * 100) / 100;
+      }
+
+      return {
+        userId: user.id,
+        displayName: user.profile?.displayName ?? user.id,
+        earnings: Math.round(earnings * 100) / 100,
+        ordersCompleted,
+        avgRating,
+      };
+    });
+
+    result.sort((a, b) => b.earnings - a.earnings);
+    return result.slice(0, validLimit);
   }
 }

@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { OrdersService } from '../orders.service';
+import { MatchingService } from '../../matching/matching.service';
 import { DomainEventName } from '@taskhunt/shared-types';
 
 describe('OrdersService', () => {
@@ -40,6 +41,9 @@ describe('OrdersService', () => {
       dispute: {
         create: jest.fn(),
       },
+      review: {
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
       $transaction: jest.fn(async (cb: any) => cb(prisma)),
     };
 
@@ -47,7 +51,25 @@ describe('OrdersService', () => {
       publish: jest.fn().mockResolvedValue(undefined),
     };
 
-    service = new OrdersService(prisma, eventBus as any);
+    service = new OrdersService(prisma, eventBus as any, new MatchingService(prisma));
+  });
+
+  describe('create', () => {
+    it('сохраняет заказ с тегами', async () => {
+      prisma.order.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 'order-tags-1', ...data, tags: data.tags ?? [] }),
+      );
+
+      const res = await service.create('client-1', {
+        categoryId: 'cat-1',
+        title: 'New Order Title',
+        description: 'New Order Description Long Enough',
+        budgetMin: 100,
+        tags: ['React', 'NestJS'],
+      });
+
+      expect(res.tags).toEqual(['React', 'NestJS']);
+    });
   });
 
   describe('findMany', () => {
@@ -277,6 +299,25 @@ describe('OrdersService', () => {
         }),
       );
       expect(result.id).toBe('dispute-123');
+    });
+  });
+
+  describe('findOne', () => {
+    it('обогащает отклики статистикой рейтинга фрилансера (avgRating и reviewsCount)', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 'order-1',
+        bids: [
+          { freelancerId: 'free-1', freelancer: { id: 'free-1' } },
+        ],
+      });
+      prisma.review.groupBy.mockResolvedValue([
+        { targetId: 'free-1', _avg: { rating: 4.8 }, _count: { id: 5 } },
+      ]);
+
+      const res: any = await service.findOne('order-1');
+
+      expect(res.bids[0].freelancer.avgRating).toBe(4.8);
+      expect(res.bids[0].freelancer.reviewsCount).toBe(5);
     });
   });
 });

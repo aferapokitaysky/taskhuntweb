@@ -6,13 +6,18 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 import { AuditLog } from '../../common/decorators/audit-log.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
+import { FraudService } from '../fraud/fraud.service';
 import { AdminService } from './admin.service';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
+import { UpdateFraudFlagDto } from './dto/update-fraud-flag.dto';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly fraudService: FraudService,
+  ) {}
 
   // --- Metrics ---
 
@@ -20,6 +25,30 @@ export class AdminController {
   @Get('metrics')
   getMetrics() {
     return this.adminService.getMetrics();
+  }
+
+  @RequirePermissions(PermissionCode.FinanceViewReports)
+  @Get('metrics/revenue-timeseries')
+  getRevenueTimeseries(@Query('days') days?: string) {
+    return this.adminService.getRevenueTimeseries(days ? Number(days) : 30);
+  }
+
+  @RequirePermissions(PermissionCode.FinanceViewReports)
+  @Get('metrics/funnel')
+  getFunnel(@Query('days') days?: string) {
+    return this.adminService.getFunnel(days ? Number(days) : 30);
+  }
+
+  @RequirePermissions(PermissionCode.FinanceViewReports)
+  @Get('metrics/top-categories')
+  getTopCategories(@Query('limit') limit?: string) {
+    return this.adminService.getTopCategories(limit ? Number(limit) : 10);
+  }
+
+  @RequirePermissions(PermissionCode.FinanceViewReports)
+  @Get('metrics/top-freelancers')
+  getTopFreelancers(@Query('limit') limit?: string) {
+    return this.adminService.getTopFreelancers(limit ? Number(limit) : 10);
   }
 
   // --- Users ---
@@ -154,5 +183,20 @@ export class AdminController {
   @Delete('skills/:id')
   deleteSkill(@Param('id') id: string) {
     return this.adminService.deleteSkill(id);
+  }
+
+  // --- Анти-фрод ---
+
+  @RequirePermissions(PermissionCode.FraudReview)
+  @Get('fraud-flags')
+  listFraudFlags(@Query('status') status?: string, @Query('severity') severity?: string) {
+    return this.fraudService.list({ status, severity });
+  }
+
+  @RequirePermissions(PermissionCode.FraudReview)
+  @AuditLog('FRAUD_FLAG_REVIEWED', 'FraudFlag')
+  @Patch('fraud-flags/:id')
+  updateFraudFlag(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdateFraudFlagDto) {
+    return this.fraudService.updateStatus(id, user.id, dto.status, dto.note);
   }
 }

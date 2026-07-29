@@ -35,6 +35,11 @@ export class WalletController {
     return this.walletService.getBalances(user.id);
   }
 
+  @Get('withdrawal-fee-info')
+  getWithdrawalFeeInfo() {
+    return this.walletService.getWithdrawalFeeInfo();
+  }
+
   @Post('withdraw')
   async withdraw(@CurrentUser() user: AuthenticatedUser, @Body() dto: WithdrawDto) {
     const { transaction, amount, fee, netAmount } = await this.walletService.requestWithdrawal(

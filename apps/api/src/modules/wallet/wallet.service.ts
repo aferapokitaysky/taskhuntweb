@@ -142,6 +142,20 @@ export class WalletService {
     });
   }
 
+  // Держим в синхроне с getWithdrawalFeePercent() ниже (та же проверка rule.active) —
+  // иначе калькулятор на фронте покажет процент, который по факту не спишется
+  // (или наоборот), если staff выключил правило через admin.
+  async getWithdrawalFeeInfo() {
+    const rule = await this.prisma.commissionRule.findUnique({ where: { type: 'WITHDRAWAL_FEE' } });
+    if (!rule || !rule.active) {
+      return { percentage: 1, fixedAmount: 0 };
+    }
+    return {
+      percentage: rule.percentage != null ? Number(rule.percentage) : 1,
+      fixedAmount: rule.fixedAmount != null ? Number(rule.fixedAmount) : 0,
+    };
+  }
+
   private async getWithdrawalFeePercent(): Promise<number> {
     const rule = await this.prisma.commissionRule.findUnique({ where: { type: 'WITHDRAWAL_FEE' } });
     if (!rule || !rule.active || rule.percentage == null) return 1;

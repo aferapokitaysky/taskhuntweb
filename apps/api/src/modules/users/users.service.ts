@@ -1,20 +1,75 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MatchingService } from '../matching/matching.service';
 import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly matching: MatchingService,
+  ) {}
 
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { profile: { include: { skills: { include: { skill: true } } } }, onboarding: true, wallet: true },
+      include: {
+        profile: { include: { skills: { include: { skill: true } } } },
+        onboarding: true,
+        wallet: true,
+        subscription: { include: { tier: true } },
+      },
     });
     if (!user) throw new NotFoundException('User not found');
-    return user;
+
+    const profile = user.profile;
+    const now = new Date();
+
+    const isAvatarDone = Boolean(profile?.avatarUrl);
+    const isBioDone = Boolean(profile?.bio && profile.bio.trim().length > 0);
+    const isSkillsDone = Boolean(profile?.skills && profile.skills.length > 0);
+    const isLinksDone = Boolean(profile?.githubUrl || profile?.websiteUrl);
+    const isLocationDone = Boolean(profile?.country && profile?.city);
+    const isEmailDone = user.status === 'ACTIVE';
+
+    let isSubDone = false;
+    if (user.subscription && user.subscription.status === 'ACTIVE' && user.subscription.expiresAt > now) {
+      const tierName = user.subscription.tier?.name;
+      if (tierName === 'PRO' || tierName === 'PREMIUM') {
+        isSubDone = true;
+      }
+    }
+
+    const steps = [
+      { done: isEmailDone, points: 20, label: 'Пройдите верификацию Email' },
+      { done: isBioDone, points: 15, label: 'Расскажите о себе' },
+      { done: isSkillsDone, points: 15, label: 'Добавьте навыки' },
+      { done: isLinksDone, points: 15, label: 'Добавьте ссылки на GitHub/Портфолио' },
+      { done: isLocationDone, points: 15, label: 'Укажите местоположение' },
+      { done: isAvatarDone, points: 10, label: 'Добавьте фото профиля' },
+      { done: isSubDone, points: 10, label: 'Оформите Pro-подписку' },
+    ];
+
+    let profileCompleteness = 0;
+    const missingSteps: { label: string; points: number }[] = [];
+
+    for (const step of steps) {
+      if (step.done) {
+        profileCompleteness += step.points;
+      } else {
+        missingSteps.push({ label: step.label, points: step.points });
+      }
+    }
+
+    missingSteps.sort((a, b) => b.points - a.points);
+
+    return {
+      ...user,
+      profileCompleteness,
+      missingSteps,
+    };
   }
 
   async getPublicProfile(id: string) {
@@ -144,16 +199,9 @@ export class UsersService {
 
     const now = new Date();
 
-    const result = freelancers.map((user) => {
-      const isPremium =
-        user.subscription?.status === 'ACTIVE' &&
-        user.subscription.expiresAt > now &&
-        user.subscription.tier?.name === 'PREMIUM';
-
-      const tierName =
-        user.subscription?.status === 'ACTIVE' && user.subscription.expiresAt > now
-          ? user.subscription.tier?.name
-          : 'STARTER';
+    const candidates = freelancers.map((user) => {
+      const isActiveSub = user.subscription?.status === 'ACTIVE' && user.subscription.expiresAt > now;
+      const tierName = isActiveSub ? user.subscription!.tier.name : 'STARTER';
 
       return {
         id: user.id,
@@ -171,20 +219,24 @@ export class UsersService {
                 name: s.skill.name,
                 slug: s.skill.slug,
               })),
+              successRate: user.profile.successRate,
+              completionRate: user.profile.completionRate,
+              avgResponseMins: user.profile.avgResponseMins,
+              disputesCount: user.profile.disputesCount,
+              lateDeliveries: user.profile.lateDeliveries,
             }
           : null,
         subscriptionTier: tierName,
-        isPremium,
+        isPremium: tierName === 'PREMIUM',
       };
     });
 
-    result.sort((a, b) => {
-      if (a.isPremium && !b.isPremium) return -1;
-      if (!a.isPremium && b.isPremium) return 1;
-      return 0;
-    });
+    return this.matching.rankFreelancers(candidates);
+  }
 
-    return result;
+  /** Персональная лента заказов для фрилансера — см. MatchingService.recommendOrdersForFreelancer. */
+  async getRecommendedOrders(freelancerId: string, limit = 20) {
+    return this.matching.recommendOrdersForFreelancer(freelancerId, limit);
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {

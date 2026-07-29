@@ -6,7 +6,8 @@
     "build": "prisma generate && tsc -p tsconfig.json",
     "dev": "ts-node src/main.ts",
     "start": "node dist/main.js",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "test": "jest"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
@@ -15,9 +16,21 @@
     "ioredis": "^5.4.1"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.12",
     "@types/node": "^20.14.0",
+    "jest": "^29.7.0",
     "prisma": "^5.20.0",
+    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.4"
+  },
+  "jest": {
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "testEnvironment": "node"
   }
 }
