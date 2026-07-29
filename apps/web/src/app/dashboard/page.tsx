@@ -5,6 +5,7 @@ import { BoostIcon } from '@/components/icons/BoostIcon';
 import { AppHeader } from '@/components/AppHeader';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
+import { PayoutAddressBook, type WithdrawTarget } from '@/components/PayoutAddressBook';
 import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
@@ -26,10 +27,13 @@ export default function DashboardPage() {
     budgetMin: '',
     budgetMax: '',
     deadline: '',
+    tags: [] as string[],
   });
+  const [tagInput, setTagInput] = useState('');
   const [bidForm, setBidForm] = useState({ amount: '', deliveryDays: '3', message: '' });
   const [showWithdrawForm, setShowWithdrawForm] = useState(false);
-  const [withdrawForm, setWithdrawForm] = useState({ amount: '', payoutAddress: '' });
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawTarget, setWithdrawTarget] = useState<WithdrawTarget | null>(null);
   const [withdrawResult, setWithdrawResult] = useState<{ fee: string | number; netAmount: string | number } | null>(
     null,
   );
@@ -84,9 +88,11 @@ export default function DashboardPage() {
           budgetMin: Number(orderForm.budgetMin),
           budgetMax: orderForm.budgetMax ? Number(orderForm.budgetMax) : undefined,
           deadline: orderForm.deadline || undefined,
+          tags: orderForm.tags,
         }),
       });
-      setOrderForm((current) => ({ ...current, title: '', description: '', budgetMin: '', budgetMax: '', deadline: '' }));
+      setOrderForm((current) => ({ ...current, title: '', description: '', budgetMin: '', budgetMax: '', deadline: '', tags: [] }));
+      setTagInput('');
       await refreshOrders();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать заказ');
@@ -116,18 +122,26 @@ export default function DashboardPage() {
 
   async function submitWithdraw(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!withdrawTarget) return;
     setError(null);
     setWithdrawing(true);
     try {
+      const body =
+        withdrawTarget.mode === 'saved'
+          ? { amount: Number(withdrawAmount), savedAddressId: withdrawTarget.savedAddressId }
+          : {
+              amount: Number(withdrawAmount),
+              payoutAddress: withdrawTarget.address,
+              network: withdrawTarget.network,
+              saveAddress: withdrawTarget.saveAddress,
+              label: withdrawTarget.label || undefined,
+            };
       const result = await api<{ fee: number; netAmount: number }>('/wallet/withdraw', {
         method: 'POST',
-        body: JSON.stringify({
-          amount: Number(withdrawForm.amount),
-          payoutAddress: withdrawForm.payoutAddress,
-        }),
+        body: JSON.stringify(body),
       });
       setWithdrawResult(result);
-      setWithdrawForm({ amount: '', payoutAddress: '' });
+      setWithdrawAmount('');
       const balance = await api<WalletBalance>('/wallet/balance');
       setWallet(balance);
     } catch (err) {
@@ -179,26 +193,20 @@ export default function DashboardPage() {
         </div>
 
         {showWithdrawForm && (
-          <form onSubmit={submitWithdraw} className="mt-4 flex flex-wrap items-end gap-3">
+          <form onSubmit={submitWithdraw} className="mt-4 space-y-4">
             <input
               required
               type="number"
               min="1"
               placeholder="Сумма, USD"
-              value={withdrawForm.amount}
-              onChange={(e) => setWithdrawForm((f) => ({ ...f, amount: e.target.value }))}
+              value={withdrawAmount}
+              onChange={(e) => setWithdrawAmount(e.target.value)}
               className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm"
             />
-            <input
-              required
-              placeholder="Адрес кошелька для выплаты"
-              value={withdrawForm.payoutAddress}
-              onChange={(e) => setWithdrawForm((f) => ({ ...f, payoutAddress: e.target.value }))}
-              className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
-            />
+            <PayoutAddressBook onChange={setWithdrawTarget} />
             <button
               type="submit"
-              disabled={withdrawing}
+              disabled={withdrawing || !withdrawTarget || !withdrawAmount}
               className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {withdrawing ? 'Отправляем…' : 'Запросить вывод'}
@@ -248,6 +256,15 @@ export default function DashboardPage() {
                       )}
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-stone-600">{order.description}</p>
+                    {order.tags && order.tags.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {order.tags.map((tag) => (
+                          <span key={tag} className="rounded-full bg-card-sand px-2 py-0.5 text-xs text-stone-700">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="font-semibold">{money(order.budgetMin, order.currency)}</p>
@@ -341,6 +358,37 @@ export default function DashboardPage() {
                   onChange={(e) => setOrderForm({ ...orderForm, deadline: e.target.value })}
                   className="w-full rounded-lg border border-stone-300 px-3 py-2"
                 />
+                <div>
+                  <input
+                    placeholder="Тэги/стек — Enter добавляет (React, Node.js…)"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' || !tagInput.trim()) return;
+                      e.preventDefault();
+                      const tag = tagInput.trim();
+                      if (!orderForm.tags.includes(tag)) {
+                        setOrderForm((f) => ({ ...f, tags: [...f.tags, tag] }));
+                      }
+                      setTagInput('');
+                    }}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                  />
+                  {orderForm.tags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {orderForm.tags.map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setOrderForm((f) => ({ ...f, tags: f.tags.filter((t) => t !== tag) }))}
+                          className="rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700 hover:line-through"
+                        >
+                          {tag} ×
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <button type="submit" className="w-full rounded-lg bg-brand px-4 py-3 font-medium text-white">
                   Опубликовать
                 </button>

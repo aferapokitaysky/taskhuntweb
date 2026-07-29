@@ -10,12 +10,13 @@
   },
   "dependencies": {
     "@taskhunt/shared-types": "workspace:*",
+    "@web3icons/react": "^4.1.19",
     "next": "^14.2.13",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "socket.io-client": "^4.7.5",
     "zod": "^3.23.8",
-    "zustand": "^4.5.5",
-    "socket.io-client": "^4.7.5"
+    "zustand": "^4.5.5"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

@@ -53,6 +53,7 @@ export interface Bid {
   deliveryDays: number;
   message: string;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN';
+  compatibilityPercent?: number | null;
   freelancer?: User & { profile?: Profile | null };
 }
 
@@ -96,14 +97,33 @@ export interface Order {
   budgetMax?: string | null;
   currency: string;
   deadline?: string | null;
+  tags?: string[];
   status: 'DRAFT' | 'OPEN' | 'IN_PROGRESS' | 'IN_REVIEW' | 'COMPLETED' | 'CANCELLED' | 'DISPUTED';
   acceptedBidId?: string | null;
   category?: Category;
   bids?: Bid[];
   milestones?: Milestone[];
-  chatThread?: { id: string } | null;
+  chatThreads?: { id: string; freelancerId: string }[];
   _count?: { bids: number };
   isPromoted?: boolean;
+}
+
+export interface ChatThreadSummary {
+  freelancerId: string;
+  threadId: string | null;
+  hasThread: boolean;
+  freelancer?: User & { profile?: Profile | null };
+  lastMessage?: ChatMessage | null;
+}
+
+export interface SavedPayoutAddress {
+  id: string;
+  label: string;
+  network: string;
+  address: string;
+  isDefault: boolean;
+  createdAt: string;
+  lastUsedAt?: string | null;
 }
 
 export interface Dispute {

@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { api, getStoredAccessToken } from '@/lib/api';
-import type { ChatMessage, Order, User } from '@/lib/types';
+import type { ChatMessage, ChatThreadSummary, Order, User } from '@/lib/types';
 import { money } from '@/lib/types';
 import { FileUpload, type UploadedFile } from '@/components/FileUpload';
 import { PaperclipIcon } from '@/components/icons/PaperclipIcon';
@@ -39,6 +39,9 @@ export default function OrderPage() {
   const [paymentAddress, setPaymentAddress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
+  const [activeFreelancerId, setActiveFreelancerId] = useState<string | null>(null);
+  const [compatibilityByBidId, setCompatibilityByBidId] = useState<Record<string, number | null>>({});
 
   // --- Milestones/сдача работы/приёмка ---
   const [milestoneForm, setMilestoneForm] = useState({ title: '', amount: '', dueDate: '' });
@@ -91,7 +94,13 @@ export default function OrderPage() {
   const acceptedBid = useMemo(() => order?.bids?.find((bid) => bid.status === 'ACCEPTED'), [order]);
   const isFreelancer = acceptedBid?.freelancerId === me?.id;
   const isClient = order?.clientId === me?.id;
-  const hasChat = Boolean(order?.chatThread ?? order?.acceptedBidId);
+  const hasAcceptedBid = Boolean(acceptedBid);
+  // Чат доступен раньше принятия отклика — заказчику с любым активным откликнувшимся, фрилансеру — если у него есть свой отклик.
+  const hasActiveBid = order?.bids?.some((b) => b.freelancerId === me?.id && (b.status === 'PENDING' || b.status === 'ACCEPTED')) ?? false;
+  const canChat = isClient
+    ? (order?.bids?.some((b) => b.status === 'PENDING' || b.status === 'ACCEPTED') ?? false)
+    : hasActiveBid;
+  const chatFreelancerId = isClient ? activeFreelancerId : (me?.id ?? null);
   const milestones = useMemo(() => [...(order?.milestones ?? [])].sort((a, b) => a.position - b.position), [order]);
   const hasMilestones = milestones.length > 0;
 
@@ -175,16 +184,29 @@ export default function OrderPage() {
     }
   }
 
+  // Список тредов — у клиента по одному на каждого активного откликнувшегося, у фрилансера свой.
   useEffect(() => {
-    if (!hasChat) return;
-    api<ChatMessage[]>(`/orders/${orderId}/chat/messages`)
+    if (!canChat) return;
+    api<ChatThreadSummary[]>(`/orders/${orderId}/chat/threads`)
+      .then((list) => {
+        setThreads(list);
+        if (isClient) {
+          setActiveFreelancerId((current) => current ?? list.find((t) => t.hasThread)?.freelancerId ?? list[0]?.freelancerId ?? null);
+        }
+      })
+      .catch(() => setThreads([]));
+  }, [canChat, orderId, isClient]);
+
+  useEffect(() => {
+    if (!canChat || !chatFreelancerId) return;
+    api<ChatMessage[]>(`/orders/${orderId}/chat/messages?freelancerId=${chatFreelancerId}`)
       .then(setMessages)
       .catch(() => setMessages([]));
 
     const token = getStoredAccessToken();
     if (!token) return;
     const nextSocket = io(`${API_URL}/chat`, { auth: { token } });
-    nextSocket.on('connect', () => nextSocket.emit('joinOrder', orderId));
+    nextSocket.on('connect', () => nextSocket.emit('joinOrder', { orderId, freelancerId: chatFreelancerId }));
     nextSocket.on('newMessage', (message: ChatMessage) => {
       setMessages((current) => (current.some((item) => item.id === message.id) ? current : [...current, message]));
     });
@@ -193,18 +215,30 @@ export default function OrderPage() {
     return () => {
       nextSocket.disconnect();
     };
-  }, [hasChat, orderId]);
+  }, [canChat, chatFreelancerId, orderId]);
+
+  // % совпадения тэгов заказа с навыками откликнувшихся — видно только заказчику.
+  useEffect(() => {
+    if (!isClient) return;
+    api<{ bidId: string; compatibilityPercent: number | null }[]>(`/orders/${orderId}/recommended-freelancers`)
+      .then((ranked) => {
+        const map: Record<string, number | null> = {};
+        for (const r of ranked) map[r.bidId] = r.compatibilityPercent;
+        setCompatibilityByBidId(map);
+      })
+      .catch(() => undefined);
+  }, [isClient, orderId]);
 
   async function sendMessage(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!body.trim()) return;
+    if (!body.trim() || !chatFreelancerId) return;
     const text = body.trim();
     setBody('');
     if (socket?.connected) {
-      socket.emit('sendMessage', { orderId, body: text });
+      socket.emit('sendMessage', { orderId, freelancerId: chatFreelancerId, body: text });
       return;
     }
-    const created = await api<ChatMessage>(`/orders/${orderId}/chat/messages`, {
+    const created = await api<ChatMessage>(`/orders/${orderId}/chat/messages?freelancerId=${chatFreelancerId}`, {
       method: 'POST',
       body: JSON.stringify({ body: text }),
     });
@@ -291,24 +325,56 @@ export default function OrderPage() {
 
       <section className="mb-6 rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
         <h2 className="mb-4 font-serif text-xl text-stone-900">Отклики</h2>
+        {order.tags && order.tags.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-1.5">
+            {order.tags.map((tag) => (
+              <span key={tag} className="rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700">
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="space-y-3">
-          {(order.bids ?? []).map((bid) => (
-            <div key={bid.id} className="rounded-lg border border-stone-200 p-3">
-              <div className="flex justify-between gap-3">
-                <p className="font-medium">{bid.freelancer?.profile?.displayName ?? bid.freelancer?.email ?? 'Фрилансер'}</p>
-                <p className="font-semibold">{money(bid.amount, order.currency)}</p>
+          {(order.bids ?? []).map((bid) => {
+            const compatibility = compatibilityByBidId[bid.id];
+            return (
+              <div key={bid.id} className="rounded-lg border border-stone-200 p-3">
+                <div className="flex justify-between gap-3">
+                  <p className="font-medium">{bid.freelancer?.profile?.displayName ?? bid.freelancer?.email ?? 'Фрилансер'}</p>
+                  <p className="font-semibold">{money(bid.amount, order.currency)}</p>
+                </div>
+                <p className="mt-1 text-sm text-stone-600">{bid.message}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-500">
+                  <span>
+                    {bid.deliveryDays} дн. · {bid.status}
+                  </span>
+                  {compatibility != null && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 font-medium ${
+                        compatibility >= 70 ? 'bg-card-sage text-stone-800' : compatibility >= 40 ? 'bg-card-sand text-stone-800' : 'bg-stone-100 text-stone-600'
+                      }`}
+                    >
+                      {compatibility}% совпадение
+                    </span>
+                  )}
+                  {isClient && (bid.status === 'PENDING' || bid.status === 'ACCEPTED') && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveFreelancerId(bid.freelancerId)}
+                      className="font-medium text-brand hover:underline"
+                    >
+                      Написать
+                    </button>
+                  )}
+                </div>
               </div>
-              <p className="mt-1 text-sm text-stone-600">{bid.message}</p>
-              <p className="mt-2 text-xs text-stone-500">
-                {bid.deliveryDays} дн. · {bid.status}
-              </p>
-            </div>
-          ))}
+            );
+          })}
           {(order.bids ?? []).length === 0 && <EmptyState icon={<MatchIcon />} title="Откликов пока нет" />}
         </div>
       </section>
 
-      {hasChat && (
+      {hasAcceptedBid && (
         <section className="mb-6 rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
           <h2 className="mb-4 font-serif text-xl text-stone-900">Этапы и сдача работы</h2>
 
@@ -473,37 +539,61 @@ export default function OrderPage() {
         </section>
       )}
 
-      {hasChat && (
+      {canChat && (
         <section className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
             <h2 className="mb-4 font-serif text-xl text-stone-900">Чат заказа</h2>
-            <div className="mb-4 max-h-[480px] space-y-3 overflow-y-auto rounded-lg bg-stone-50 p-3">
-              {messages.map((message) => (
-                <div key={message.id} className="rounded-lg bg-white p-3 shadow-sm">
-                  <p className="text-xs text-stone-500">{message.sender?.profile?.displayName ?? message.sender?.email ?? message.senderId}</p>
-                  {message.type === 'INVOICE' && message.invoice ? (
-                    <div className="mt-2 rounded-lg border border-brand/20 bg-brand/10 p-3">
-                      <p className="font-semibold">Счёт на оплату {money(message.invoice.amount, message.invoice.currency)}</p>
-                      <p className="text-sm text-stone-600">{message.invoice.status}</p>
+
+            {isClient && threads.length > 1 && (
+              <div className="mb-4 flex flex-wrap gap-1.5 border-b border-stone-100 pb-4">
+                {threads.map((t) => (
+                  <button
+                    key={t.freelancerId}
+                    type="button"
+                    onClick={() => setActiveFreelancerId(t.freelancerId)}
+                    className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                      activeFreelancerId === t.freelancerId ? 'bg-brand/10 text-brand' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                    }`}
+                  >
+                    {t.freelancer?.profile?.displayName ?? 'Фрилансер'}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!chatFreelancerId ? (
+              <p className="text-sm text-stone-500">Выберите отклик выше, чтобы начать переписку.</p>
+            ) : (
+              <>
+                <div className="mb-4 max-h-[480px] space-y-3 overflow-y-auto rounded-lg bg-stone-50 p-3">
+                  {messages.map((message) => (
+                    <div key={message.id} className="rounded-lg bg-white p-3 shadow-sm">
+                      <p className="text-xs text-stone-500">{message.sender?.profile?.displayName ?? message.sender?.email ?? message.senderId}</p>
+                      {message.type === 'INVOICE' && message.invoice ? (
+                        <div className="mt-2 rounded-lg border border-brand/20 bg-brand/10 p-3">
+                          <p className="font-semibold">Счёт на оплату {money(message.invoice.amount, message.invoice.currency)}</p>
+                          <p className="text-sm text-stone-600">{message.invoice.status}</p>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-sm text-stone-800">{message.body}</p>
+                      )}
                     </div>
-                  ) : (
-                    <p className="mt-1 text-sm text-stone-800">{message.body}</p>
-                  )}
+                  ))}
+                  {messages.length === 0 && <p className="text-sm text-stone-500">Сообщений пока нет.</p>}
                 </div>
-              ))}
-              {messages.length === 0 && <p className="text-sm text-stone-500">Сообщений пока нет.</p>}
-            </div>
-            <form onSubmit={sendMessage} className="flex gap-2">
-              <input
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="Сообщение"
-                className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2"
-              />
-              <button type="submit" className="rounded-lg bg-brand px-4 py-2 font-medium text-white">
-                Отправить
-              </button>
-            </form>
+                <form onSubmit={sendMessage} className="flex gap-2">
+                  <input
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="Сообщение"
+                    className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2"
+                  />
+                  <button type="submit" className="rounded-lg bg-brand px-4 py-2 font-medium text-white">
+                    Отправить
+                  </button>
+                </form>
+              </>
+            )}
           </div>
 
           {isFreelancer && (
