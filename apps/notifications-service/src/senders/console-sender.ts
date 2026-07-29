@@ -7,6 +7,8 @@ export interface NotificationPayload {
   title: string;
   message: string;
   metadata?: Record<string, string | number | null>;
+  actionUrl?: string;
+  actionLabel?: string;
 }
 
 export interface NotificationSender {

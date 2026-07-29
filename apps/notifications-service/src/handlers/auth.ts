@@ -6,7 +6,9 @@ export function handleEmailVerificationRequested(event: EmailVerificationRequest
   return notifyUser(context, event.payload.userId, {
     eventName: event.name,
     title: 'Подтвердите email на TaskHunt',
-    message: `Перейдите по ссылке, чтобы подтвердить email: ${event.payload.verificationUrl}\n\nСсылка действует 24 часа.`,
+    message: 'Осталось совсем немного — подтвердите адрес, и аккаунт станет активным. Ссылка действует 24 часа.',
+    actionUrl: event.payload.verificationUrl,
+    actionLabel: 'Подтвердить email',
     metadata: { email: event.payload.email },
   });
 }
@@ -15,7 +17,9 @@ export function handlePasswordResetRequested(event: PasswordResetRequestedEvent,
   return notifyUser(context, event.payload.userId, {
     eventName: event.name,
     title: 'Сброс пароля на TaskHunt',
-    message: `Перейдите по ссылке, чтобы задать новый пароль: ${event.payload.resetUrl}\n\nСсылка действует 1 час. Если вы не запрашивали сброс — проигнорируйте это письмо.`,
+    message: 'Запрошен сброс пароля. Ссылка действует 1 час — если это были не вы, просто проигнорируйте письмо.',
+    actionUrl: event.payload.resetUrl,
+    actionLabel: 'Задать новый пароль',
     metadata: { email: event.payload.email },
   });
 }

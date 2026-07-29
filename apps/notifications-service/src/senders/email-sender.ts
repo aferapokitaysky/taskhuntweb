@@ -5,6 +5,7 @@ import type {
   NotificationSender,
 } from './console-sender';
 import type { PrismaClient } from '../../generated/prisma-client';
+import { renderEmailHtml } from '../email-template';
 
 export class EmailNotificationSender implements NotificationSender {
   private readonly resend: Resend;
@@ -35,7 +36,13 @@ export class EmailNotificationSender implements NotificationSender {
         from: this.fromAddress,
         to: user.email,
         subject: payload.title,
-        text: payload.message,
+        text: payload.actionUrl ? `${payload.message}\n\n${payload.actionLabel ?? 'Ссылка'}: ${payload.actionUrl}` : payload.message,
+        html: renderEmailHtml({
+          title: payload.title,
+          message: payload.message,
+          actionUrl: payload.actionUrl,
+          actionLabel: payload.actionLabel,
+        }),
       });
       console.log(`[NOTIFY_EMAIL] Sent email to ${user.email} (${payload.eventName})`);
     } catch (err) {

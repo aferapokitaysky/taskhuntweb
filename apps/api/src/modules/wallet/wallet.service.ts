@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import * as PDFDocument from 'pdfkit';
+import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LedgerService } from './ledger.service';
 import { EventBusService } from '../../common/events/event-bus.service';
@@ -8,20 +9,35 @@ import { SYSTEM_ACCOUNT_EMAIL, DEFAULT_MARKETPLACE_FEE_PERCENT } from './constan
 
 // PDFKit-овские встроенные Standard-14 шрифты (Helvetica и т.п.) не
 // поддерживают кириллицу — без встраивания отдельного TTF-шрифта русский
-// текст рендерится битой кашей (проверено вживую). Библиотеку шрифтов
-// ради одного PDF-чека тащить не стали — чек на английском, это обычная
-// практика для авто-генерируемых финансовых документов.
-const TRANSACTION_TYPE_LABELS_EN: Record<string, string> = {
-  DEPOSIT: 'Deposit',
-  WITHDRAWAL: 'Withdrawal',
-  ESCROW_LOCK: 'Escrow lock',
-  ESCROW_RELEASE: 'Escrow release',
-  REFUND: 'Refund',
-  COMMISSION: 'Commission',
-  BONUS: 'Bonus',
-  REFERRAL: 'Referral reward',
-  PROMO: 'Promotion',
-  CHARGEBACK: 'Chargeback',
+// текст рендерится битой кашей (проверено вживую до фикса). Встраиваем
+// PT Sans/PT Serif (SIL OFL — свободно встраивать) — та же пара шрифтов
+// закрывает и подписи, и заголовки в стиле проекта (serif-заголовки, как
+// font-serif на фронте, только Georgia сама не лицензирована на встраивание).
+// assets/ лежит рядом с src/ на уровне apps/api — путь одинаково резолвится
+// что из src (ts-node в dev), что из dist (после nest build), т.к. и там,
+// и там до apps/api одинаковое число уровней вверх.
+const ASSETS_DIR = path.join(__dirname, '../../../assets');
+const FONT_REGULAR = path.join(ASSETS_DIR, 'fonts/PTSans-Regular.ttf');
+const FONT_BOLD = path.join(ASSETS_DIR, 'fonts/PTSans-Bold.ttf');
+const FONT_SERIF_BOLD = path.join(ASSETS_DIR, 'fonts/PTSerif-Bold.ttf');
+const LOGO_PATH = path.join(ASSETS_DIR, 'images/logo-full.png');
+
+const BRAND_TERRACOTTA = '#CC785C';
+const BRAND_INK = '#1c1917'; // stone-900
+const BRAND_MUTED = '#78716c'; // stone-500
+const BRAND_CREDIT = '#059669'; // emerald-600, как на дашборде
+
+const TRANSACTION_TYPE_LABELS_RU: Record<string, string> = {
+  DEPOSIT: 'Пополнение',
+  WITHDRAWAL: 'Вывод средств',
+  ESCROW_LOCK: 'Заморозка в эскроу',
+  ESCROW_RELEASE: 'Выплата из эскроу',
+  REFUND: 'Возврат',
+  COMMISSION: 'Комиссия',
+  BONUS: 'Бонус',
+  REFERRAL: 'Реферальное вознаграждение',
+  PROMO: 'Продвижение',
+  CHARGEBACK: 'Чарджбэк',
 };
 
 @Injectable()
@@ -297,30 +313,91 @@ export class WalletService {
       throw new ForbiddenException('This transaction does not belong to your wallet');
     }
 
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const doc = new PDFDocument({ size: 'A4', margin: 0 });
     const chunks: Buffer[] = [];
     doc.on('data', (chunk) => chunks.push(chunk));
     const done = new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
     });
 
-    doc.fontSize(20).text('TaskHunt', { continued: false });
-    doc.fontSize(10).fillColor('#888').text('Wallet transaction receipt').moveDown(1.5);
+    doc.registerFont('Sans', FONT_REGULAR);
+    doc.registerFont('Sans-Bold', FONT_BOLD);
+    doc.registerFont('Serif-Bold', FONT_SERIF_BOLD);
 
-    doc.fillColor('#000').fontSize(12);
-    doc.text(`Type: ${TRANSACTION_TYPE_LABELS_EN[entry.transaction.type] ?? entry.transaction.type}`);
-    doc.text(`Amount: ${entry.direction === 'CREDIT' ? '+' : '-'}${entry.amount.toString()} ${entry.currency}`);
-    doc.text(`Date: ${entry.createdAt.toISOString()}`);
-    // description может быть на русском — встроенный шрифт pdfkit его не
-    // отрендерит (см. комментарий у TRANSACTION_TYPE_LABELS_EN), поэтому
-    // сюда идут только ASCII-описания, остальные молча пропускаются, а не
-    // показываются битой кашей.
-    if (entry.transaction.description && /^[\x20-\x7E]*$/.test(entry.transaction.description)) {
-      doc.text(`Description: ${entry.transaction.description}`);
+    const pageWidth = doc.page.width;
+    const margin = 50;
+    const contentWidth = pageWidth - margin * 2;
+
+    // Верхняя терракотовая полоса — фирменный акцент, как в шапке сайта.
+    doc.rect(0, 0, pageWidth, 8).fill(BRAND_TERRACOTTA);
+
+    doc.image(LOGO_PATH, margin, 40, { width: 130 });
+
+    doc
+      .font('Serif-Bold')
+      .fontSize(20)
+      .fillColor(BRAND_INK)
+      .text('Чек по операции', margin, 100);
+    doc
+      .font('Sans')
+      .fontSize(10)
+      .fillColor(BRAND_MUTED)
+      .text(`Сформирован ${new Date().toLocaleString('ru-RU')}`, margin, 126);
+
+    // Карточка с крупной суммой — та же семантика цвета, что в истории
+    // операций на дашборде (зелёный только для CREDIT).
+    const cardTop = 165;
+    const cardHeight = 90;
+    const isCredit = entry.direction === 'CREDIT';
+    doc.roundedRect(margin, cardTop, contentWidth, cardHeight, 12).fill('#F7F4EE');
+
+    doc
+      .font('Sans')
+      .fontSize(10)
+      .fillColor(BRAND_MUTED)
+      .text(TRANSACTION_TYPE_LABELS_RU[entry.transaction.type] ?? entry.transaction.type, margin + 24, cardTop + 20);
+    doc
+      .font('Sans-Bold')
+      .fontSize(32)
+      .fillColor(isCredit ? BRAND_CREDIT : BRAND_INK)
+      .text(
+        `${isCredit ? '+' : '−'}${entry.amount.toString()} ${entry.currency}`,
+        margin + 24,
+        cardTop + 36,
+      );
+
+    // Таблица деталей — подписи слева приглушённым, значения справа тёмным.
+    let y = cardTop + cardHeight + 36;
+    const rowLabelX = margin;
+    const rowValueX = margin + 160;
+
+    const row = (label: string, value: string) => {
+      doc.font('Sans').fontSize(11).fillColor(BRAND_MUTED).text(label, rowLabelX, y, { width: 150 });
+      doc.font('Sans-Bold').fontSize(11).fillColor(BRAND_INK).text(value, rowValueX, y, { width: contentWidth - 160 });
+      y += 26;
+    };
+
+    row('Дата и время', entry.createdAt.toLocaleString('ru-RU'));
+    if (entry.transaction.description) {
+      row('Описание', entry.transaction.description);
     }
-    doc.text(`Transaction ID: ${entry.id}`);
+    row('Номер операции', entry.id);
+    row('Тип баланса', entry.balanceType);
 
-    doc.moveDown(2).fontSize(8).fillColor('#888').text('This is not a tax document.');
+    doc
+      .moveTo(margin, y + 10)
+      .lineTo(pageWidth - margin, y + 10)
+      .strokeColor('#E7E0D3')
+      .stroke();
+
+    doc
+      .font('Sans')
+      .fontSize(9)
+      .fillColor(BRAND_MUTED)
+      .text('Этот документ не является налоговым или бухгалтерским отчётом.', margin, y + 26, {
+        width: contentWidth,
+      });
+    doc.text('TaskHunt — фриланс-биржа со встроенным крипто-эскроу.', margin, y + 40, { width: contentWidth });
 
     doc.end();
     return done;
