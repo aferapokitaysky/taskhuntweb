@@ -16,16 +16,53 @@ function slugify(name: string): string {
 export class CatalogService {
   constructor(private readonly prisma: PrismaService) {}
 
-  listCategories() {
-    return this.prisma.category.findMany({
-      where: { parentId: null },
-      include: { children: true },
-      orderBy: { name: 'asc' },
-    });
+  async listCategories() {
+    const [categories, orderCounts] = await Promise.all([
+      this.prisma.category.findMany({
+        where: { parentId: null },
+        include: { children: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.order.groupBy({
+        by: ['categoryId'],
+        where: { status: 'OPEN' },
+        _count: { id: true },
+      }),
+    ]);
+
+    const countMap = new Map<string, number>();
+    for (const group of orderCounts) {
+      countMap.set(group.categoryId, group._count.id);
+    }
+
+    return categories.map((parent) => ({
+      ...parent,
+      orderCount: countMap.get(parent.id) ?? 0,
+      children: parent.children.map((child) => ({
+        ...child,
+        orderCount: countMap.get(child.id) ?? 0,
+      })),
+    }));
   }
 
-  listSkills() {
-    return this.prisma.skill.findMany({ orderBy: { name: 'asc' } });
+  async listSkills() {
+    const [skills, usageCounts] = await Promise.all([
+      this.prisma.skill.findMany({ orderBy: { name: 'asc' } }),
+      this.prisma.profileSkill.groupBy({
+        by: ['skillId'],
+        _count: { skillId: true },
+      }),
+    ]);
+
+    const countMap = new Map<string, number>();
+    for (const group of usageCounts) {
+      countMap.set(group.skillId, group._count.skillId);
+    }
+
+    return skills.map((skill) => ({
+      ...skill,
+      usageCount: countMap.get(skill.id) ?? 0,
+    }));
   }
 
   /**
