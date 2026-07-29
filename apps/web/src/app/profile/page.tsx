@@ -1,15 +1,23 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { api, API_URL, createSkill, uploadAvatar } from '@/lib/api';
 import type { PortfolioItem, Skill, User } from '@/lib/types';
 import { AppHeader } from '@/components/AppHeader';
+import { GithubIcon } from '@/components/icons/GithubIcon';
+import { GlobeIcon } from '@/components/icons/GlobeIcon';
+import { EyeIcon } from '@/components/icons/EyeIcon';
 
 const MAX_SKILLS = 25;
 
 const EMPTY_PORTFOLIO_FORM = { title: '', description: '', imageUrl: '', projectUrl: '', tags: [] as string[] };
 
 export default function ProfilePage() {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [availableForWork, setAvailableForWork] = useState(true);
+  const [availabilitySaving, setAvailabilitySaving] = useState(false);
+  const [viewsCount, setViewsCount] = useState(0);
   const [form, setForm] = useState({
     displayName: '',
     bio: '',
@@ -51,6 +59,7 @@ export default function ProfilePage() {
     Promise.all([api<User>('/users/me'), api<Skill[]>('/skills')])
       .then(([user, skills]) => {
         setAllSkills(skills);
+        setUserId(user.id);
         setForm({
           displayName: user.profile?.displayName ?? '',
           bio: user.profile?.bio ?? '',
@@ -60,6 +69,8 @@ export default function ProfilePage() {
           websiteUrl: user.profile?.websiteUrl ?? '',
         });
         setAvatarUrl(user.profile?.avatarUrl ?? null);
+        setAvailableForWork(user.profile?.availableForWork ?? true);
+        setViewsCount(user.profile?.viewsCount ?? 0);
         setSelectedSkillIds((user.profile?.skills ?? []).map((s) => s.skill.id));
         setPortfolioItems(user.profile?.portfolioItems ?? []);
       })
@@ -125,6 +136,19 @@ export default function ProfilePage() {
   async function deletePortfolio(id: string) {
     setPortfolioItems((current) => current.filter((i) => i.id !== id));
     await api(`/users/me/portfolio/${id}`, { method: 'DELETE' }).catch(() => undefined);
+  }
+
+  async function toggleAvailableForWork() {
+    const next = !availableForWork;
+    setAvailableForWork(next);
+    setAvailabilitySaving(true);
+    try {
+      await api('/users/me/profile', { method: 'PATCH', body: JSON.stringify({ availableForWork: next }) });
+    } catch {
+      setAvailableForWork(!next);
+    } finally {
+      setAvailabilitySaving(false);
+    }
   }
 
   async function submitPasswordChange(e: React.FormEvent<HTMLFormElement>) {
@@ -244,46 +268,121 @@ export default function ProfilePage() {
   }
 
   if (loading) {
-    return <main className="mx-auto max-w-2xl px-4 py-10 text-stone-500">Загружаем профиль…</main>;
+    return (
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <AppHeader />
+        <p className="text-stone-500">Загружаем профиль…</p>
+      </main>
+    );
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
+    <main className="mx-auto max-w-6xl px-4 py-8">
       <AppHeader />
       <h1 className="mb-6 font-serif text-2xl text-stone-900">Профиль</h1>
 
-      <div className="mb-6 flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={avatarUploading}
-          className="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-card-sand font-serif text-2xl text-stone-900 transition hover:opacity-90 disabled:opacity-60"
-          title="Загрузить фото"
-        >
-          {avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={`${API_URL}${avatarUrl}`} alt="Аватар" className="h-full w-full object-cover" />
-          ) : (
-            form.displayName.charAt(0).toUpperCase() || '?'
-          )}
-          <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100">
-            {avatarUploading ? '…' : 'Изменить'}
-          </span>
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
-          onChange={handleAvatarChange}
-          className="hidden"
-        />
-        <div>
-          <p className="font-serif text-lg text-stone-900">{form.displayName || 'Без имени'}</p>
-          <p className="text-sm text-stone-500">{[form.city, form.country].filter(Boolean).join(', ') || 'Локация не указана'}</p>
-          {avatarError && <p className="mt-1 text-xs text-red-600">{avatarError}</p>}
-        </div>
-      </div>
+      <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
+        <div className="space-y-6 lg:sticky lg:top-6">
+          <div className="rounded-3xl bg-white p-6 text-center shadow-sm">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={avatarUploading}
+              className="group relative mx-auto flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-card-sand font-serif text-3xl text-stone-900 transition hover:opacity-90 disabled:opacity-60"
+              title="Загрузить фото"
+            >
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`${API_URL}${avatarUrl}`} alt="Аватар" className="h-full w-full object-cover" />
+              ) : (
+                form.displayName.charAt(0).toUpperCase() || '?'
+              )}
+              <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100">
+                {avatarUploading ? '…' : 'Изменить'}
+              </span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
 
+            <p className="mt-4 font-serif text-lg text-stone-900">{form.displayName || 'Без имени'}</p>
+            <p className="text-sm text-stone-500">{[form.city, form.country].filter(Boolean).join(', ') || 'Локация не указана'}</p>
+            {avatarError && <p className="mt-1 text-xs text-red-600">{avatarError}</p>}
+
+            <button
+              type="button"
+              onClick={toggleAvailableForWork}
+              disabled={availabilitySaving}
+              className={`mt-4 flex w-full items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition disabled:opacity-60 ${
+                availableForWork ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-stone-300 text-stone-500'
+              }`}
+            >
+              <span className={`h-2 w-2 rounded-full ${availableForWork ? 'bg-emerald-500' : 'bg-stone-400'}`} />
+              {availableForWork ? 'Открыт для заказов' : 'Не ищу заказы'}
+            </button>
+
+            {userId && (
+              <Link
+                href={`/freelancers/${userId}`}
+                target="_blank"
+                className="mt-3 block text-sm font-medium text-brand hover:text-brand-dark"
+              >
+                Смотреть публичный профиль →
+              </Link>
+            )}
+
+            {(form.githubUrl || form.websiteUrl) && (
+              <div className="mt-5 flex flex-col gap-2 border-t border-stone-100 pt-4 text-left">
+                {form.githubUrl && (
+                  <a
+                    href={form.githubUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-sm text-stone-600 transition hover:text-brand"
+                  >
+                    <GithubIcon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{form.githubUrl.replace(/^https?:\/\//, '')}</span>
+                  </a>
+                )}
+                {form.websiteUrl && (
+                  <a
+                    href={form.websiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-sm text-stone-600 transition hover:text-brand"
+                  >
+                    <GlobeIcon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{form.websiteUrl.replace(/^https?:\/\//, '')}</span>
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 rounded-3xl bg-white p-5 text-center shadow-sm">
+            <div>
+              <p className="font-serif text-xl text-stone-900">{selectedSkillIds.length}</p>
+              <p className="text-xs text-stone-500">навыков</p>
+            </div>
+            <div>
+              <p className="font-serif text-xl text-stone-900">{portfolioItems.length}</p>
+              <p className="text-xs text-stone-500">кейсов</p>
+            </div>
+            <div>
+              <p className="flex items-center justify-center gap-1 font-serif text-xl text-stone-900">
+                <EyeIcon className="h-4 w-4 text-stone-400" />
+                {viewsCount}
+              </p>
+              <p className="text-xs text-stone-500">просмотров</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-6">
       <form onSubmit={handleSubmit} className="space-y-4 rounded-3xl bg-white p-6 shadow-sm">
         <div>
           <label className="mb-1 block text-sm font-medium text-stone-600">Имя</label>
@@ -323,26 +422,27 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-stone-600">GitHub</label>
-          <input
-            type="url"
-            placeholder="https://github.com/username"
-            value={form.githubUrl}
-            onChange={(e) => setForm((f) => ({ ...f, githubUrl: e.target.value }))}
-            className="w-full rounded-lg border border-stone-300 px-4 py-3"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-stone-600">Сайт/портфолио</label>
-          <input
-            type="url"
-            placeholder="https://..."
-            value={form.websiteUrl}
-            onChange={(e) => setForm((f) => ({ ...f, websiteUrl: e.target.value }))}
-            className="w-full rounded-lg border border-stone-300 px-4 py-3"
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-stone-600">GitHub</label>
+            <input
+              type="url"
+              placeholder="https://github.com/username"
+              value={form.githubUrl}
+              onChange={(e) => setForm((f) => ({ ...f, githubUrl: e.target.value }))}
+              className="w-full rounded-lg border border-stone-300 px-4 py-3"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-stone-600">Сайт/портфолио</label>
+            <input
+              type="url"
+              placeholder="https://..."
+              value={form.websiteUrl}
+              onChange={(e) => setForm((f) => ({ ...f, websiteUrl: e.target.value }))}
+              className="w-full rounded-lg border border-stone-300 px-4 py-3"
+            />
+          </div>
         </div>
 
         <div>
@@ -399,7 +499,7 @@ export default function ProfilePage() {
         </button>
       </form>
 
-      <section className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
+      <section className="rounded-3xl bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-serif text-xl text-stone-900">Портфолио</h2>
           {!showPortfolioForm && (
@@ -414,7 +514,7 @@ export default function ProfilePage() {
         </div>
 
         {portfolioItems.length > 0 && (
-          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {portfolioItems.map((item) => (
               <div key={item.id} className="rounded-2xl border border-stone-100 p-4">
                 {item.imageUrl && (
@@ -538,7 +638,7 @@ export default function ProfilePage() {
         )}
       </section>
 
-      <section className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
+      <section className="rounded-3xl bg-white p-6 shadow-sm">
         <h2 className="mb-4 font-serif text-xl text-stone-900">Безопасность</h2>
         <form onSubmit={submitPasswordChange} className="max-w-sm space-y-3">
           <div>
@@ -586,6 +686,8 @@ export default function ProfilePage() {
           </button>
         </form>
       </section>
+        </div>
+      </div>
     </main>
   );
 }

@@ -15,6 +15,7 @@ import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
+import { Mascot } from '@/components/Mascot';
 
 const MILESTONE_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Не оплачен',
@@ -616,7 +617,12 @@ export default function OrderPage() {
               </form>
             </div>
           )}
-          {reviewSubmitted && <p className="mt-6 text-sm text-emerald-600">Спасибо за отзыв!</p>}
+          {reviewSubmitted && (
+            <div className="mt-6 flex items-center gap-3 rounded-lg bg-emerald-50 px-4 py-3">
+              <Mascot name="love" size="h-12 w-12" />
+              <p className="text-sm font-medium text-emerald-700">Спасибо за отзыв! Заказ закрыт.</p>
+            </div>
+          )}
         </section>
       )}
 

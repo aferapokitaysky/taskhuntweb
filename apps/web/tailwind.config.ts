@@ -50,12 +50,18 @@ const config: Config = {
           '0%, 100%': { transform: 'scale(1)', opacity: '1' },
           '50%': { transform: 'scale(1.12)', opacity: '0.85' },
         },
+        'mascot-pop': {
+          '0%': { transform: 'scale(0.5) rotate(-8deg)', opacity: '0' },
+          '60%': { transform: 'scale(1.08) rotate(3deg)', opacity: '1' },
+          '100%': { transform: 'scale(1) rotate(0deg)', opacity: '1' },
+        },
       },
       animation: {
         wiggle: 'wiggle 0.5s ease-in-out',
         float: 'float 3s ease-in-out infinite',
         'loading-bar': 'loading-bar 1.1s ease-in-out infinite',
         'pulse-soft': 'pulse-soft 2.4s ease-in-out infinite',
+        'mascot-pop': 'mascot-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both',
       },
     },
   },

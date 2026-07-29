@@ -50,6 +50,8 @@ export interface Profile {
   websiteUrl?: string | null;
   skills?: { skill: Skill }[];
   portfolioItems?: PortfolioItem[];
+  availableForWork?: boolean;
+  viewsCount?: number;
 }
 
 export interface User {

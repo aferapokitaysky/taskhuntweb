@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { Category, MarketplaceRole } from '@/lib/types';
+import { Mascot } from '@/components/Mascot';
 
 export default function OnboardingPage() {
   return (
@@ -28,6 +29,7 @@ function OnboardingForm() {
   const [expectedRateMin, setExpectedRateMin] = useState('');
   const [primaryGoal, setPrimaryGoal] = useState('Найти исполнителя для задачи');
   const [expectedBudgetMin, setExpectedBudgetMin] = useState('');
+  const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -68,20 +70,33 @@ function OnboardingForm() {
 
     try {
       await api('/users/me/onboarding', { method: 'POST', body: JSON.stringify(body) });
-      router.push('/dashboard');
+      setDone(true);
+      setTimeout(() => router.push('/dashboard'), 1400);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось сохранить анкету');
-    } finally {
       setLoading(false);
     }
+  }
+
+  if (done) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-4 py-12 text-center">
+        <Mascot name="celebrate" size="h-28 w-28" />
+        <h1 className="mt-4 font-serif text-2xl text-stone-900">Готово!</h1>
+        <p className="mt-2 text-stone-600">Анкета сохранена, переносим вас в личный кабинет…</p>
+      </main>
+    );
   }
 
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-4 py-12">
       <div className="mb-6 flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-brand">{role === 'FREELANCER' ? 'Фрилансер' : 'Заказчик'}</p>
-          <h1 className="text-2xl font-bold">Быстрая анкета</h1>
+        <div className="flex items-center gap-3">
+          <Mascot name="wave" size="h-12 w-12" />
+          <div>
+            <p className="text-sm font-medium text-brand">{role === 'FREELANCER' ? 'Фрилансер' : 'Заказчик'}</p>
+            <h1 className="text-2xl font-bold">Быстрая анкета</h1>
+          </div>
         </div>
         <span className="text-sm text-stone-500">
           {step}/{lastStep}

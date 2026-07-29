@@ -7,6 +7,7 @@ import { api, saveTokens } from '@/lib/api';
 import type { AuthTokens } from '@/lib/types';
 import { OAuthButtons } from '@/components/OAuthButtons';
 import { Logo } from '@/components/Logo';
+import { Mascot } from '@/components/Mascot';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,7 +40,10 @@ export default function LoginPage() {
       <Link href="/" className="mb-8 inline-flex w-fit transition-transform hover:scale-105">
         <Logo className="h-9" />
       </Link>
-      <h1 className="mb-6 text-2xl font-bold">Вход</h1>
+      <div className="mb-6 flex items-center gap-3">
+        <Mascot name="hello" size="h-14 w-14" />
+        <h1 className="text-2xl font-bold">С возвращением</h1>
+      </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <input

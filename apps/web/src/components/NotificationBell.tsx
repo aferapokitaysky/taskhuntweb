@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import type { User } from '@/lib/types';
 import { BellIcon } from './icons/BellIcon';
 import { MatchIcon } from './icons/illustrated/MatchIcon';
+import { Mascot } from './Mascot';
 
 interface Notification {
   id: string;
@@ -176,7 +177,10 @@ export function NotificationBell() {
               </button>
             ))}
             {notifications.length === 0 && matches.length === 0 && (
-              <p className="px-4 py-6 text-center text-sm text-stone-400">Пока пусто</p>
+              <div className="flex flex-col items-center gap-2 px-4 py-6 text-center">
+                <Mascot name="tired" size="h-14 w-14" />
+                <p className="text-sm text-stone-400">Пока пусто — новости появятся тут</p>
+              </div>
             )}
           </div>
         </div>

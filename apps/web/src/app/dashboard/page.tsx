@@ -1,23 +1,33 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { BoostIcon } from '@/components/icons/BoostIcon';
 import { BellIcon } from '@/components/icons/BellIcon';
 import { AppHeader } from '@/components/AppHeader';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
-import { PayoutAddressBook, type WithdrawTarget } from '@/components/PayoutAddressBook';
+import type { WithdrawTarget } from '@/components/PayoutAddressBook';
 import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
 import { WalletIcon } from '@/components/icons/WalletIcon';
 import { ShieldIcon } from '@/components/icons/ShieldIcon';
 import { PadlockIcon } from '@/components/icons/PadlockIcon';
 import { WithdrawIcon } from '@/components/icons/WithdrawIcon';
 import { ClockIcon } from '@/components/icons/ClockIcon';
+import { Mascot } from '@/components/Mascot';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { Category, LedgerEntryItem, Order, SavedSearch, User, WalletBalance } from '@/lib/types';
 import { money } from '@/lib/types';
+
+// Тянет @web3icons/react (лого сетей) — тяжёлый пакет, нужен только когда
+// реально открыта форма вывода, поэтому грузим его отдельным чанком,
+// а не в основной бандл дашборда.
+const PayoutAddressBook = dynamic(
+  () => import('@/components/PayoutAddressBook').then((m) => m.PayoutAddressBook),
+  { ssr: false, loading: () => <p className="text-sm text-stone-400">Загружаем сети…</p> },
+);
 
 const TRANSACTION_TYPE_LABELS: Record<LedgerEntryItem['type'], string> = {
   DEPOSIT: 'Пополнение',
@@ -358,10 +368,13 @@ function DashboardContent() {
         )}
 
         {withdrawResult && (
-          <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-            Заявка на вывод принята. Комиссия: {money(withdrawResult.fee, wallet?.currency)}, к выплате:{' '}
-            {money(withdrawResult.netAmount, wallet?.currency)}.
-          </p>
+          <div className="mt-3 flex items-center gap-3 rounded-lg bg-emerald-50 px-3 py-2">
+            <Mascot name="thumbsup" size="h-10 w-10" />
+            <p className="text-sm text-emerald-700">
+              Заявка на вывод принята. Комиссия: {money(withdrawResult.fee, wallet?.currency)}, к выплате:{' '}
+              {money(withdrawResult.netAmount, wallet?.currency)}.
+            </p>
+          </div>
         )}
       </section>
 
