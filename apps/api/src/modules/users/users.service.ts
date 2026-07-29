@@ -4,6 +4,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MatchingService } from '../matching/matching.service';
 import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { CreatePortfolioItemDto } from './dto/create-portfolio-item.dto';
+import { UpdatePortfolioItemDto } from './dto/update-portfolio-item.dto';
 
 const MAX_SKILLS_PER_PROFILE = 25;
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2MB — этого достаточно для фото профиля
@@ -34,7 +36,12 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        profile: { include: { skills: { include: { skill: true } } } },
+        profile: {
+          include: {
+            skills: { include: { skill: true } },
+            portfolioItems: { orderBy: { createdAt: 'desc' } },
+          },
+        },
         onboarding: true,
         wallet: true,
         subscription: { include: { tier: true } },
@@ -90,7 +97,9 @@ export class UsersService {
     };
   }
 
-  async getPublicProfile(id: string) {
+  async getPublicProfile(id: string, viewerUserId?: string) {
+    await this.recordProfileView(id, viewerUserId);
+
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
@@ -100,6 +109,9 @@ export class UsersService {
               include: {
                 skill: true,
               },
+            },
+            portfolioItems: {
+              orderBy: { createdAt: 'desc' },
             },
           },
         },
@@ -329,5 +341,61 @@ export class UsersService {
     });
 
     return onboarding;
+  }
+
+  async recordProfileView(targetUserId: string, viewerUserId?: string) {
+    if (viewerUserId && viewerUserId === targetUserId) {
+      return;
+    }
+    const profile = await this.prisma.profile.findUnique({ where: { userId: targetUserId } });
+    if (profile) {
+      await this.prisma.profile.update({
+        where: { id: profile.id },
+        data: { viewsCount: { increment: 1 } },
+      });
+    }
+  }
+
+  async addPortfolioItem(userId: string, dto: CreatePortfolioItemDto) {
+    let profile = await this.prisma.profile.findUnique({ where: { userId } });
+    if (!profile) {
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (!user) throw new NotFoundException('User not found');
+      profile = await this.prisma.profile.create({
+        data: { userId, displayName: user.email.split('@')[0] },
+      });
+    }
+    return this.prisma.portfolioItem.create({
+      data: {
+        profileId: profile.id,
+        title: dto.title,
+        description: dto.description,
+        imageUrl: dto.imageUrl,
+        projectUrl: dto.projectUrl,
+        tags: dto.tags ?? [],
+      },
+    });
+  }
+
+  async updatePortfolioItem(userId: string, itemId: string, dto: UpdatePortfolioItemDto) {
+    const item = await this.prisma.portfolioItem.findFirst({
+      where: { id: itemId, profile: { userId } },
+    });
+    if (!item) throw new NotFoundException('Portfolio item not found');
+
+    return this.prisma.portfolioItem.update({
+      where: { id: itemId },
+      data: dto,
+    });
+  }
+
+  async deletePortfolioItem(userId: string, itemId: string) {
+    const item = await this.prisma.portfolioItem.findFirst({
+      where: { id: itemId, profile: { userId } },
+    });
+    if (!item) throw new NotFoundException('Portfolio item not found');
+
+    await this.prisma.portfolioItem.delete({ where: { id: itemId } });
+    return { success: true };
   }
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
@@ -8,6 +8,8 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { OnboardingDto } from './dto/onboarding.dto';
+import { CreatePortfolioItemDto } from './dto/create-portfolio-item.dto';
+import { UpdatePortfolioItemDto } from './dto/update-portfolio-item.dto';
 
 @Controller('users')
 export class UsersController {
@@ -31,14 +33,34 @@ export class UsersController {
     return this.usersService.submitOnboarding(user.id, dto);
   }
 
-  // Отдельный throttle сверх глобального — загрузка декодирует буфер и пишет
-  // в БД, дороже обычного JSON-запроса, поэтому лимит жёстче.
   @UseGuards(JwtAuthGuard)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('me/avatar')
   @UseInterceptors(FileInterceptor('avatar'))
   uploadAvatar(@CurrentUser() user: AuthenticatedUser, @UploadedFile() file: Express.Multer.File) {
     return this.usersService.uploadAvatar(user.id, file);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('me/portfolio')
+  addPortfolioItem(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePortfolioItemDto) {
+    return this.usersService.addPortfolioItem(user.id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('me/portfolio/:id')
+  updatePortfolioItem(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdatePortfolioItemDto,
+  ) {
+    return this.usersService.updatePortfolioItem(user.id, id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('me/portfolio/:id')
+  deletePortfolioItem(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.usersService.deletePortfolioItem(user.id, id);
   }
 
   @Get(':id/avatar')
@@ -50,7 +72,7 @@ export class UsersController {
   }
 
   @Get(':id')
-  getPublicProfile(@Param('id') id: string) {
-    return this.usersService.getPublicProfile(id);
+  getPublicProfile(@Param('id') id: string, @CurrentUser() user?: AuthenticatedUser) {
+    return this.usersService.getPublicProfile(id, user?.id);
   }
 }

@@ -32,6 +32,13 @@ describe('UsersService', () => {
       profile: {
         update: jest.fn(),
         findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+      portfolioItem: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
       },
     };
     matching = {};
@@ -124,6 +131,50 @@ describe('UsersService', () => {
 
       expect(res.profileCompleteness).toBe(100);
       expect(res.missingSteps).toHaveLength(0);
+    });
+  });
+
+  describe('addPortfolioItem', () => {
+    it('добавляет работу в портфолио фрилансера', async () => {
+      prisma.profile.findUnique.mockResolvedValue({ id: 'prof-1', userId: 'user-1' });
+      prisma.portfolioItem.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 'item-1', ...data }),
+      );
+
+      const item = await service.addPortfolioItem('user-1', {
+        title: 'E-commerce App',
+        tags: ['Next.js', 'Stripe'],
+      });
+
+      expect(item.title).toBe('E-commerce App');
+      expect(item.tags).toEqual(['Next.js', 'Stripe']);
+    });
+  });
+
+  describe('deletePortfolioItem', () => {
+    it('бросает NotFoundException если работа не принадлежит пользователю', async () => {
+      prisma.portfolioItem.findFirst.mockResolvedValue(null);
+
+      await expect(service.deletePortfolioItem('user-1', 'item-999')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('recordProfileView', () => {
+    it('инкрементирует viewsCount если просмотрщик не является владельцем профиля', async () => {
+      prisma.profile.findUnique.mockResolvedValue({ id: 'prof-1', userId: 'user-target' });
+
+      await service.recordProfileView('user-target', 'user-viewer');
+
+      expect(prisma.profile.update).toHaveBeenCalledWith({
+        where: { id: 'prof-1' },
+        data: { viewsCount: { increment: 1 } },
+      });
+    });
+
+    it('не инкрементирует viewsCount при просмотре собственного профиля', async () => {
+      await service.recordProfileView('user-self', 'user-self');
+
+      expect(prisma.profile.update).not.toHaveBeenCalled();
     });
   });
 });
