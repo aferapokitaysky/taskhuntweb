@@ -8,6 +8,11 @@ import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { PayoutAddressBook, type WithdrawTarget } from '@/components/PayoutAddressBook';
 import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
+import { WalletIcon } from '@/components/icons/WalletIcon';
+import { ShieldIcon } from '@/components/icons/ShieldIcon';
+import { PadlockIcon } from '@/components/icons/PadlockIcon';
+import { WithdrawIcon } from '@/components/icons/WithdrawIcon';
+import { ClockIcon } from '@/components/icons/ClockIcon';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -301,18 +306,19 @@ function DashboardContent() {
 
       <section className="mb-8 grid gap-3 md:grid-cols-5">
         {wallet &&
-          (
-            [
-              ['Main', wallet.mainBalance, 'bg-card-sand'],
-              ['Escrow', wallet.escrowBalance, 'bg-card-sage'],
-              ['Locked', wallet.lockedBalance, 'bg-card-rose'],
-              ['Withdrawable', wallet.withdrawableBalance, 'bg-card-lavender'],
-              ['Pending', wallet.pendingBalance, 'bg-cream-200'],
-            ] as const
-          ).map(([label, value, colorClass]) => (
-            <div key={label} className={`rounded-2xl ${colorClass} p-4`}>
-              <p className="text-xs uppercase text-stone-600">{label}</p>
-              <p className="mt-1 font-serif text-lg text-stone-900">{money(value, wallet.currency)}</p>
+          [
+            { label: 'Main', value: wallet.mainBalance, colorClass: 'bg-card-sand', Icon: WalletIcon },
+            { label: 'Escrow', value: wallet.escrowBalance, colorClass: 'bg-card-sage', Icon: ShieldIcon },
+            { label: 'Locked', value: wallet.lockedBalance, colorClass: 'bg-card-rose', Icon: PadlockIcon },
+            { label: 'Withdrawable', value: wallet.withdrawableBalance, colorClass: 'bg-card-lavender', Icon: WithdrawIcon },
+            { label: 'Pending', value: wallet.pendingBalance, colorClass: 'bg-cream-200', Icon: ClockIcon },
+          ].map(({ label, value, colorClass, Icon }) => (
+            <div key={label} className={`rounded-2xl ${colorClass} p-4 transition-transform duration-200 hover:-translate-y-0.5`}>
+              <div className="flex items-center gap-1.5 text-stone-600">
+                <Icon className="h-4 w-4" />
+                <p className="text-xs uppercase">{label}</p>
+              </div>
+              <p className="mt-1.5 font-serif text-lg text-stone-900">{money(value, wallet.currency)}</p>
             </div>
           ))}
       </section>
