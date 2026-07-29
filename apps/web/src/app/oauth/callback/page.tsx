@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { saveTokens } from '@/lib/api';
+import { Logo } from '@/components/Logo';
 
 function OAuthCallbackInner() {
   const router = useRouter();
@@ -23,13 +24,19 @@ function OAuthCallbackInner() {
     }
   }, [params, router]);
 
-  return <p className="text-sm text-slate-500">Входим…</p>;
+  return <p className="text-sm text-stone-500">Входим…</p>;
 }
 
 export default function OAuthCallbackPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center">
-      <Suspense fallback={<p className="text-sm text-slate-500">Входим…</p>}>
+    <main className="flex min-h-screen flex-col items-center justify-center gap-6">
+      <div className="animate-float">
+        <Logo withWordmark={false} className="h-12 w-12" />
+      </div>
+      <div className="h-1.5 w-40 overflow-hidden rounded-full bg-stone-200">
+        <div className="h-full w-1/3 animate-loading-bar rounded-full bg-brand" />
+      </div>
+      <Suspense fallback={<p className="text-sm text-stone-500">Входим…</p>}>
         <OAuthCallbackInner />
       </Suspense>
     </main>

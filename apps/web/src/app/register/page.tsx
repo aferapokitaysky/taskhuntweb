@@ -1,9 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, saveTokens } from '@/lib/api';
 import { OAuthButtons } from '@/components/OAuthButtons';
+import { Logo } from '@/components/Logo';
+import { ClientIcon } from '@/components/icons/illustrated/ClientIcon';
+import { FreelancerIcon } from '@/components/icons/illustrated/FreelancerIcon';
 
 type Role = 'CLIENT' | 'FREELANCER';
 
@@ -38,31 +42,42 @@ export default function RegisterPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
-      <h1 className="mb-6 text-2xl font-bold">Регистрация на TaskHunt</h1>
+      <Link href="/" className="mb-8 inline-flex w-fit transition-transform hover:scale-105">
+        <Logo className="h-9" />
+      </Link>
+      <h1 className="mb-6 font-serif text-2xl text-stone-900">Регистрация на TaskHunt</h1>
 
       {/* Шаг 1: выбор роли — определяет дальнейшую анкету/квиз */}
       <div className="mb-6 grid grid-cols-2 gap-3">
         <button
           type="button"
           onClick={() => setRole('CLIENT')}
-          className={`rounded-xl border p-4 text-left transition ${
-            role === 'CLIENT' ? 'border-brand bg-indigo-50 ring-2 ring-brand' : 'border-slate-300 hover:border-brand'
+          className={`group flex flex-col items-start gap-2 rounded-2xl bg-card-sand p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+            role === 'CLIENT' ? 'ring-2 ring-brand ring-offset-2 ring-offset-cream' : ''
           }`}
         >
-          <div className="text-lg font-semibold">Я заказчик</div>
-          <div className="text-sm text-slate-500">Хочу найти исполнителя для задачи</div>
+          <div
+            className={`flex h-14 w-14 items-center justify-center transition-transform duration-300 ${role === 'CLIENT' ? 'animate-wiggle' : 'group-hover:animate-wiggle'}`}
+          >
+            <ClientIcon className="h-14 w-14" />
+          </div>
+          <div className="text-base font-semibold text-stone-900">Я заказчик</div>
+          <div className="text-xs text-stone-600">Хочу найти исполнителя для задачи</div>
         </button>
         <button
           type="button"
           onClick={() => setRole('FREELANCER')}
-          className={`rounded-xl border p-4 text-left transition ${
-            role === 'FREELANCER'
-              ? 'border-brand bg-indigo-50 ring-2 ring-brand'
-              : 'border-slate-300 hover:border-brand'
+          className={`group flex flex-col items-start gap-2 rounded-2xl bg-card-sage p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+            role === 'FREELANCER' ? 'ring-2 ring-brand ring-offset-2 ring-offset-cream' : ''
           }`}
         >
-          <div className="text-lg font-semibold">Я фрилансер</div>
-          <div className="text-sm text-slate-500">Хочу брать заказы и зарабатывать</div>
+          <div
+            className={`flex h-14 w-14 items-center justify-center transition-transform duration-300 ${role === 'FREELANCER' ? 'animate-wiggle' : 'group-hover:animate-wiggle'}`}
+          >
+            <FreelancerIcon className="h-14 w-14" />
+          </div>
+          <div className="text-base font-semibold text-stone-900">Я фрилансер</div>
+          <div className="text-xs text-stone-600">Хочу брать заказы и зарабатывать</div>
         </button>
       </div>
 
@@ -73,7 +88,7 @@ export default function RegisterPage() {
           required
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          className="rounded-lg border border-slate-300 px-4 py-3"
+          className="rounded-lg border border-stone-300 px-4 py-3"
         />
         <input
           type="email"
@@ -81,7 +96,7 @@ export default function RegisterPage() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="rounded-lg border border-slate-300 px-4 py-3"
+          className="rounded-lg border border-stone-300 px-4 py-3"
         />
         <input
           type="password"
@@ -90,7 +105,7 @@ export default function RegisterPage() {
           minLength={8}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded-lg border border-slate-300 px-4 py-3"
+          className="rounded-lg border border-stone-300 px-4 py-3"
         />
 
         {error && <p className="text-sm text-red-600">{error}</p>}

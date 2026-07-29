@@ -7,7 +7,7 @@ import type { Category, MarketplaceRole } from '@/lib/types';
 
 export default function OnboardingPage() {
   return (
-    <Suspense fallback={<main className="mx-auto max-w-2xl px-4 py-12 text-slate-500">Загружаем анкету...</main>}>
+    <Suspense fallback={<main className="mx-auto max-w-2xl px-4 py-12 text-stone-500">Загружаем анкету...</main>}>
       <OnboardingForm />
     </Suspense>
   );
@@ -83,12 +83,12 @@ function OnboardingForm() {
           <p className="text-sm font-medium text-brand">{role === 'FREELANCER' ? 'Фрилансер' : 'Заказчик'}</p>
           <h1 className="text-2xl font-bold">Быстрая анкета</h1>
         </div>
-        <span className="text-sm text-slate-500">
+        <span className="text-sm text-stone-500">
           {step}/{lastStep}
         </span>
       </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
         {step === 1 && (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">Выберите интересные категории</h2>
@@ -100,8 +100,8 @@ function OnboardingForm() {
                   onClick={() => toggleCategory(category.id)}
                   className={`rounded-lg border px-3 py-2 text-left text-sm ${
                     selectedCategories.includes(category.id)
-                      ? 'border-brand bg-indigo-50 text-brand'
-                      : 'border-slate-200 hover:border-brand'
+                      ? 'border-brand bg-brand/10 text-brand'
+                      : 'border-stone-200 hover:border-brand'
                   }`}
                 >
                   {category.name}
@@ -117,7 +117,7 @@ function OnboardingForm() {
             <select
               value={primaryGoal}
               onChange={(e) => setPrimaryGoal(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-4 py-3"
+              className="w-full rounded-lg border border-stone-300 px-4 py-3"
             >
               <option>Найти исполнителя для задачи</option>
               <option>Нанять команду</option>
@@ -129,7 +129,7 @@ function OnboardingForm() {
               placeholder="Обычный бюджет заказа, USD"
               value={expectedBudgetMin}
               onChange={(e) => setExpectedBudgetMin(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-4 py-3"
+              className="w-full rounded-lg border border-stone-300 px-4 py-3"
             />
           </div>
         )}
@@ -144,7 +144,7 @@ function OnboardingForm() {
                   type="button"
                   onClick={() => setExperienceLevel(level)}
                   className={`rounded-lg border px-3 py-3 text-sm font-medium ${
-                    experienceLevel === level ? 'border-brand bg-indigo-50 text-brand' : 'border-slate-200'
+                    experienceLevel === level ? 'border-brand bg-brand/10 text-brand' : 'border-stone-200'
                   }`}
                 >
                   {level}
@@ -163,12 +163,12 @@ function OnboardingForm() {
               placeholder="Минимальная ставка, USD"
               value={expectedRateMin}
               onChange={(e) => setExpectedRateMin(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-4 py-3"
+              className="w-full rounded-lg border border-stone-300 px-4 py-3"
             />
             <select
               value={availability}
               onChange={(e) => setAvailability(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-4 py-3"
+              className="w-full rounded-lg border border-stone-300 px-4 py-3"
             >
               <option value="full_time">Full-time</option>
               <option value="part_time">Part-time</option>
@@ -184,7 +184,7 @@ function OnboardingForm() {
             type="button"
             onClick={() => setStep((current) => Math.max(1, current - 1))}
             disabled={step === 1 || loading}
-            className="rounded-lg border border-slate-300 px-4 py-3 font-medium disabled:opacity-40"
+            className="rounded-lg border border-stone-300 px-4 py-3 font-medium disabled:opacity-40"
           >
             Назад
           </button>

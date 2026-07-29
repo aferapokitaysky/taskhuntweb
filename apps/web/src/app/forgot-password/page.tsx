@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { Logo } from '@/components/Logo';
+import { AccessIcon } from '@/components/icons/illustrated/AccessIcon';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -26,11 +28,17 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
-      <Link href="/login" className="mb-8 text-sm font-medium text-slate-500 hover:text-slate-900">
+      <Link href="/" className="mb-6 inline-flex w-fit transition-transform hover:scale-105">
+        <Logo className="h-9" />
+      </Link>
+      <Link href="/login" className="mb-6 text-sm font-medium text-stone-500 hover:text-stone-900">
         ← Назад ко входу
       </Link>
-      <h1 className="mb-2 text-2xl font-bold">Восстановление пароля</h1>
-      <p className="mb-6 text-sm text-slate-500">Пришлём ссылку для сброса пароля на указанный email.</p>
+      <div className="mb-4 flex h-16 w-16 animate-float items-center justify-center">
+        <AccessIcon className="h-16 w-16" />
+      </div>
+      <h1 className="mb-2 font-serif text-2xl text-stone-900">Восстановление пароля</h1>
+      <p className="mb-6 text-sm text-stone-500">Пришлём ссылку для сброса пароля на указанный email.</p>
 
       {sent ? (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
@@ -44,7 +52,7 @@ export default function ForgotPasswordPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="rounded-lg border border-slate-300 px-4 py-3"
+            className="rounded-lg border border-stone-300 px-4 py-3"
           />
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button

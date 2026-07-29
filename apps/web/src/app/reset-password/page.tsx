@@ -4,6 +4,8 @@ import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { Logo } from '@/components/Logo';
+import { AccessIcon } from '@/components/icons/illustrated/AccessIcon';
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -34,9 +36,12 @@ function ResetPasswordForm() {
   if (!token) {
     return (
       <div className="text-center">
-        <h1 className="mb-3 text-2xl font-bold">Ссылка недействительна</h1>
-        <p className="mb-6 text-slate-600">В ссылке нет токена сброса — запросите новую.</p>
-        <Link href="/forgot-password" className="rounded-lg border border-slate-300 px-6 py-3 font-medium hover:bg-slate-50">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center opacity-60">
+          <AccessIcon className="h-16 w-16" />
+        </div>
+        <h1 className="mb-3 font-serif text-2xl text-stone-900">Ссылка недействительна</h1>
+        <p className="mb-6 text-stone-600">В ссылке нет токена сброса — запросите новую.</p>
+        <Link href="/forgot-password" className="rounded-lg border border-stone-300 px-6 py-3 font-medium hover:bg-stone-50">
           Запросить снова
         </Link>
       </div>
@@ -49,7 +54,10 @@ function ResetPasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4">
-      <h1 className="mb-2 text-2xl font-bold">Новый пароль</h1>
+      <div className="mx-auto flex h-16 w-16 animate-float items-center justify-center">
+        <AccessIcon className="h-16 w-16" />
+      </div>
+      <h1 className="mb-2 text-center font-serif text-2xl text-stone-900">Новый пароль</h1>
       <input
         type="password"
         placeholder="Новый пароль (мин. 8 символов)"
@@ -57,7 +65,7 @@ function ResetPasswordForm() {
         minLength={8}
         value={newPassword}
         onChange={(e) => setNewPassword(e.target.value)}
-        className="rounded-lg border border-slate-300 px-4 py-3"
+        className="rounded-lg border border-stone-300 px-4 py-3"
       />
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button
@@ -73,8 +81,11 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <Suspense fallback={<p className="text-slate-500">Загрузка…</p>}>
+    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
+      <Link href="/" className="mb-8 inline-flex w-fit self-center transition-transform hover:scale-105">
+        <Logo className="h-9" />
+      </Link>
+      <Suspense fallback={<p className="text-center text-stone-500">Загрузка…</p>}>
         <ResetPasswordForm />
       </Suspense>
     </main>

@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { api, saveTokens } from '@/lib/api';
 import type { AuthTokens } from '@/lib/types';
 import { OAuthButtons } from '@/components/OAuthButtons';
+import { Logo } from '@/components/Logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,8 +36,8 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
-      <Link href="/" className="mb-8 text-sm font-medium text-slate-500 hover:text-slate-900">
-        TaskHunt
+      <Link href="/" className="mb-8 inline-flex w-fit transition-transform hover:scale-105">
+        <Logo className="h-9" />
       </Link>
       <h1 className="mb-6 text-2xl font-bold">Вход</h1>
 
@@ -47,7 +48,7 @@ export default function LoginPage() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="rounded-lg border border-slate-300 px-4 py-3"
+          className="rounded-lg border border-stone-300 px-4 py-3"
         />
         <input
           type="password"
@@ -55,10 +56,10 @@ export default function LoginPage() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded-lg border border-slate-300 px-4 py-3"
+          className="rounded-lg border border-stone-300 px-4 py-3"
         />
 
-        <Link href="/forgot-password" className="text-right text-sm text-slate-500 hover:text-brand">
+        <Link href="/forgot-password" className="text-right text-sm text-stone-500 hover:text-brand">
           Забыли пароль?
         </Link>
 
@@ -77,7 +78,7 @@ export default function LoginPage() {
         <OAuthButtons />
       </div>
 
-      <p className="mt-6 text-sm text-slate-500">
+      <p className="mt-6 text-sm text-stone-500">
         Нет аккаунта?{' '}
         <Link href="/register" className="font-medium text-brand hover:text-brand-dark">
           Зарегистрироваться
