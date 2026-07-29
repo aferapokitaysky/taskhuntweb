@@ -62,7 +62,7 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="relative rounded-lg border border-slate-300 p-2.5 hover:bg-white"
+        className="relative rounded-lg border border-stone-300 p-2.5 hover:bg-white"
         aria-label="Уведомления"
       >
         <BellIcon />
@@ -74,8 +74,8 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-10 mt-2 w-80 rounded-lg border border-slate-200 bg-white shadow-lg">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+        <div className="absolute right-0 z-10 mt-2 w-80 rounded-lg border border-stone-200 bg-white shadow-lg">
+          <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
             <p className="font-semibold">Уведомления</p>
             {unreadCount > 0 && (
               <button type="button" onClick={markAllRead} className="text-xs font-medium text-brand hover:underline">
@@ -89,15 +89,15 @@ export function NotificationBell() {
                 key={n.id}
                 type="button"
                 onClick={() => !n.read && markRead(n.id)}
-                className={`block w-full border-b border-slate-50 px-4 py-3 text-left text-sm hover:bg-slate-50 ${
-                  n.read ? 'opacity-60' : 'bg-indigo-50/40'
+                className={`block w-full border-b border-stone-50 px-4 py-3 text-left text-sm hover:bg-stone-50 ${
+                  n.read ? 'opacity-60' : 'bg-brand/10'
                 }`}
               >
                 <p className="font-medium">{n.title}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{n.message}</p>
+                <p className="mt-0.5 text-xs text-stone-500">{n.message}</p>
               </button>
             ))}
-            {notifications.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Пока пусто</p>}
+            {notifications.length === 0 && <p className="px-4 py-6 text-center text-sm text-stone-400">Пока пусто</p>}
           </div>
         </div>
       )}

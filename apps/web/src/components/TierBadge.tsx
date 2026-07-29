@@ -6,7 +6,7 @@ export function TierBadge({ tier }: { tier: 'STARTER' | 'PRO' | 'PREMIUM' }) {
   const styles =
     tier === 'PREMIUM'
       ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-white'
-      : 'bg-indigo-100 text-brand';
+      : 'bg-brand/15 text-brand';
 
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${styles}`}>

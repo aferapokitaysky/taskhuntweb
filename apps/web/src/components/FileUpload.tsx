@@ -54,8 +54,8 @@ export function FileUpload({ onUploaded, multiple = false, label = 'Прикре
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
-        className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium
-          text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 disabled:opacity-50"
+        className="flex items-center gap-2 rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium
+          text-stone-600 transition hover:border-stone-400 hover:bg-stone-50 disabled:opacity-50"
       >
         <PaperclipIcon />
         {uploading ? 'Загрузка…' : label}
