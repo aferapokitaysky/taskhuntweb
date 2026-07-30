@@ -578,4 +578,119 @@ export class AdminService {
 
     return { success: true };
   }
+
+  // --- Модерация (CodexTZ 021) ---
+
+  /**
+   * Единая очередь на review — источники: открытые FraudFlag (риск-скоринг
+   * fraud-service, см. FraudService) с orderId → тип ORDER, без orderId
+   * (только userId) → тип PROFILE; заражённые файлы (антивирус, ClamAV) →
+   * тип FILE; отзывы с низким рейтингом и текстом, ещё не разобранные —
+   * тип REVIEW (эвристика, а не report-система: жалоб на отзывы в продукте
+   * пока нет, но абьюзивный низкий отзыв — разумный сигнал для ручной проверки).
+   */
+  async getModerationQueue() {
+    const [orderFlags, profileFlags, infectedFiles, flaggedReviews] = await Promise.all([
+      this.prisma.fraudFlag.findMany({
+        where: { status: 'OPEN', orderId: { not: null } },
+        include: { order: { select: { id: true, title: true } }, user: { include: { profile: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.fraudFlag.findMany({
+        where: { status: 'OPEN', orderId: null },
+        include: { user: { include: { profile: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.fileAsset.findMany({
+        where: { scanStatus: 'INFECTED', moderatedAt: null },
+        include: { owner: { include: { profile: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.review.findMany({
+        where: { hiddenAt: null, moderatedAt: null, rating: { lte: 2 }, comment: { not: null } },
+        include: { author: { include: { profile: true } }, target: { include: { profile: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+    ]);
+
+    const orders = orderFlags.map((f) => ({
+      type: 'ORDER' as const,
+      id: f.id,
+      severity: f.severity,
+      reasons: f.reasons,
+      riskScore: f.riskScore,
+      order: f.order,
+      user: f.user ? { id: f.user.id, displayName: f.user.profile?.displayName ?? f.user.email } : null,
+      createdAt: f.createdAt,
+    }));
+
+    const profiles = profileFlags.map((f) => ({
+      type: 'PROFILE' as const,
+      id: f.id,
+      severity: f.severity,
+      reasons: f.reasons,
+      riskScore: f.riskScore,
+      user: f.user ? { id: f.user.id, displayName: f.user.profile?.displayName ?? f.user.email } : null,
+      createdAt: f.createdAt,
+    }));
+
+    const files = infectedFiles.map((file) => ({
+      type: 'FILE' as const,
+      id: file.id,
+      url: file.url,
+      mimeType: file.mimeType,
+      kind: file.kind,
+      owner: { id: file.owner.id, displayName: file.owner.profile?.displayName ?? file.owner.email },
+      createdAt: file.createdAt,
+    }));
+
+    const reviews = flaggedReviews.map((r) => ({
+      type: 'REVIEW' as const,
+      id: r.id,
+      rating: r.rating,
+      comment: r.comment,
+      author: { id: r.author.id, displayName: r.author.profile?.displayName ?? r.author.email },
+      target: { id: r.target.id, displayName: r.target.profile?.displayName ?? r.target.email },
+      createdAt: r.createdAt,
+    }));
+
+    return { orders, profiles, files, reviews };
+  }
+
+  private fraudActionToStatus(action: 'APPROVE' | 'REJECT' | 'REQUEST_EDITS'): 'DISMISSED' | 'CONFIRMED' | 'REVIEWED' {
+    if (action === 'APPROVE') return 'DISMISSED';
+    if (action === 'REJECT') return 'CONFIRMED';
+    return 'REVIEWED';
+  }
+
+  async resolveOrderOrProfileModeration(staffId: string, flagId: string, action: 'APPROVE' | 'REJECT' | 'REQUEST_EDITS', note?: string) {
+    const flag = await this.prisma.fraudFlag.findUnique({ where: { id: flagId } });
+    if (!flag) throw new NotFoundException('Moderation item not found');
+
+    return this.prisma.fraudFlag.update({
+      where: { id: flagId },
+      data: { status: this.fraudActionToStatus(action), reviewNote: note, reviewedById: staffId, reviewedAt: new Date() },
+    });
+  }
+
+  async resolveFileModeration(fileId: string) {
+    const file = await this.prisma.fileAsset.findUnique({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('File not found');
+
+    return this.prisma.fileAsset.update({ where: { id: fileId }, data: { moderatedAt: new Date() } });
+  }
+
+  async resolveReviewModeration(reviewId: string, action: 'APPROVE' | 'REJECT' | 'REQUEST_EDITS') {
+    const review = await this.prisma.review.findUnique({ where: { id: reviewId } });
+    if (!review) throw new NotFoundException('Review not found');
+
+    return this.prisma.review.update({
+      where: { id: reviewId },
+      data: { moderatedAt: new Date(), hiddenAt: action === 'REJECT' ? new Date() : null },
+    });
+  }
 }

@@ -235,6 +235,7 @@ export class UsersService {
           },
         },
         reviewsReceived: {
+          where: { hiddenAt: null },
           include: {
             author: {
               include: {

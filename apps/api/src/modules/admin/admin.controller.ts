@@ -10,6 +10,7 @@ import { FraudService } from '../fraud/fraud.service';
 import { AdminService } from './admin.service';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
 import { UpdateFraudFlagDto } from './dto/update-fraud-flag.dto';
+import { ResolveModerationDto } from './dto/resolve-moderation.dto';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('admin')
@@ -211,6 +212,42 @@ export class AdminController {
   @Patch('fraud-flags/:id')
   updateFraudFlag(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdateFraudFlagDto) {
     return this.fraudService.updateStatus(id, user.id, dto.status, dto.note);
+  }
+
+  // --- Модерация (CodexTZ 021) ---
+
+  @RequirePermissions(PermissionCode.ContentModerate)
+  @Get('moderation-queue')
+  getModerationQueue() {
+    return this.adminService.getModerationQueue();
+  }
+
+  @RequirePermissions(PermissionCode.OrderModerate)
+  @AuditLog('ORDER_FLAG_MODERATED', 'FraudFlag')
+  @Patch('moderation-queue/orders/:id')
+  resolveOrderModeration(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: ResolveModerationDto) {
+    return this.adminService.resolveOrderOrProfileModeration(user.id, id, dto.action, dto.note);
+  }
+
+  @RequirePermissions(PermissionCode.ContentModerate)
+  @AuditLog('PROFILE_FLAG_MODERATED', 'FraudFlag')
+  @Patch('moderation-queue/profiles/:id')
+  resolveProfileModeration(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: ResolveModerationDto) {
+    return this.adminService.resolveOrderOrProfileModeration(user.id, id, dto.action, dto.note);
+  }
+
+  @RequirePermissions(PermissionCode.ContentModerate)
+  @AuditLog('FILE_MODERATED', 'FileAsset')
+  @Patch('moderation-queue/files/:id')
+  resolveFileModeration(@Param('id') id: string) {
+    return this.adminService.resolveFileModeration(id);
+  }
+
+  @RequirePermissions(PermissionCode.ContentModerate)
+  @AuditLog('REVIEW_MODERATED', 'Review')
+  @Patch('moderation-queue/reviews/:id')
+  resolveReviewModeration(@Param('id') id: string, @Body() dto: ResolveModerationDto) {
+    return this.adminService.resolveReviewModeration(id, dto.action);
   }
 
   @RequirePermissions(PermissionCode.UserBan)

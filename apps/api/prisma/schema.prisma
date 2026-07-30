@@ -745,6 +745,10 @@ model FileAsset {
   sizeBytes  Int
   kind       FileKind
   scanStatus ScanStatus @default(PENDING)
+  // Снимает файл с /admin/moderation-queue после того, как модератор его
+  // просмотрел — scanStatus остаётся фактом антивируса (не переписываем
+  // его вручную), а это поле — только "уже разобрано человеком".
+  moderatedAt DateTime?
 
   chatMessages    ChatMessage[]
   supportMessages SupportMessage[]
@@ -797,6 +801,12 @@ model Review {
   rating    Int // 1..5
   comment   String?
   createdAt DateTime @default(now())
+
+  // Модерация (CodexTZ 017.017/021) — hiddenAt скрывает отзыв из публичного
+  // профиля, moderatedAt снимает его с /admin/moderation-queue независимо
+  // от решения (в т.ч. когда модератор оставил отзыв видимым).
+  hiddenAt    DateTime?
+  moderatedAt DateTime?
 
   @@unique([orderId, authorId])
   @@map("reviews")
