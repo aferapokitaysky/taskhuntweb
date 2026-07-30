@@ -11,7 +11,7 @@ import { CodeIcon } from '@/components/icons/illustrated/CodeIcon';
 import { CheckCircleIcon } from '@/components/icons/CheckCircleIcon';
 import { WalletIcon } from '@/components/icons/WalletIcon';
 import { EmptySearchIcon } from '@/components/icons/illustrated/EmptySearchIcon';
-import type { Category, Order } from '@/lib/types';
+import type { Category, Order, PaginatedOrders } from '@/lib/types';
 import { money } from '@/lib/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -35,10 +35,10 @@ async function fetchStats(): Promise<PublicStats | null> {
 
 async function fetchOpenOrders(): Promise<Order[]> {
   try {
-    const res = await fetch(`${API_URL}/orders?status=OPEN`, { next: { revalidate: 60 } });
+    const res = await fetch(`${API_URL}/orders?status=OPEN&limit=6`, { next: { revalidate: 60 } });
     if (!res.ok) return [];
-    const orders: Order[] = await res.json();
-    return orders.slice(0, 6);
+    const page: PaginatedOrders = await res.json();
+    return page.items;
   } catch {
     return [];
   }

@@ -23,7 +23,7 @@ import { NextLevelWidget } from '@/components/NextLevelWidget';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api, API_URL, downloadFile } from '@/lib/api';
-import type { BidTemplate, Category, LedgerEntryItem, Order, PreviousFreelancer, SavedPayoutAddress, SavedSearch, User, WalletBalance } from '@/lib/types';
+import type { BidTemplate, Category, LedgerEntryItem, Order, PaginatedOrders, PreviousFreelancer, SavedPayoutAddress, SavedSearch, User, WalletBalance } from '@/lib/types';
 import { money } from '@/lib/types';
 
 // Тянет @web3icons/react (лого сетей) — тяжёлый пакет, нужен только когда
@@ -113,15 +113,15 @@ function DashboardContent() {
     // применяем фильтр сразу в первом запросе, а не ждём отдельного
     // дебаунса (тот на первом рендере намеренно не стреляет, см. ниже).
     const initialOrdersUrl = filterCategoryId ? `/orders?categoryId=${filterCategoryId}` : '/orders';
-    Promise.all([api<User>('/users/me'), api<WalletBalance>('/wallet/balance'), api<Order[]>(initialOrdersUrl), api<Category[]>('/categories')])
-      .then(([user, balance, orderList, categoryList]) => {
+    Promise.all([api<User>('/users/me'), api<WalletBalance>('/wallet/balance'), api<PaginatedOrders>(initialOrdersUrl), api<Category[]>('/categories')])
+      .then(([user, balance, orderPage, categoryList]) => {
         setMe(user);
         setWallet(balance);
         if (balance.autoWithdrawThreshold) {
           setAutoWithdrawThreshold(balance.autoWithdrawThreshold);
           setAutoWithdrawAddressId(balance.autoWithdrawAddressId ?? '');
         }
-        setOrders(orderList);
+        setOrders(orderPage.items);
         setCategories(categoryList);
         const firstCategory = categoryList.flatMap((category) => [category, ...(category.children ?? [])])[0];
         setOrderForm((current) => ({ ...current, categoryId: firstCategory?.id ?? '' }));
@@ -192,8 +192,8 @@ function DashboardContent() {
     if (filterCategoryId) params.set('categoryId', filterCategoryId);
     if (filterTags.length > 0) params.set('tags', filterTags.join(','));
     if (filterMinBudget) params.set('minBudget', filterMinBudget);
-    const nextOrders = await api<Order[]>(`/orders${params.toString() ? `?${params}` : ''}`);
-    setOrders(nextOrders);
+    const nextOrders = await api<PaginatedOrders>(`/orders${params.toString() ? `?${params}` : ''}`);
+    setOrders(nextOrders.items);
   }
 
   // Дебаунс — не дёргаем API на каждое нажатие клавиши/клик по фильтру

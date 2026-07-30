@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api, API_URL } from '@/lib/api';
-import type { Order, PortfolioItem, User } from '@/lib/types';
+import type { Order, PaginatedOrders, PortfolioItem, User } from '@/lib/types';
 import { money } from '@/lib/types';
 import { TierBadge } from '@/components/TierBadge';
 import { FreelancerLevelBadge, type FreelancerLevel } from '@/components/FreelancerLevelBadge';
@@ -70,8 +70,10 @@ export default function FreelancerProfileClient() {
     setShowInviteModal(true);
     setInviteError(null);
     if (!myOpenOrders && me) {
-      const orders = await api<Order[]>(`/orders?clientId=${me.id}&status=OPEN`).catch(() => []);
-      setMyOpenOrders(orders);
+      const orderPage = await api<PaginatedOrders>(`/orders?clientId=${me.id}&status=OPEN`).catch(
+        () => ({ items: [] }) as Pick<PaginatedOrders, 'items'>,
+      );
+      setMyOpenOrders(orderPage.items);
     }
   }
 

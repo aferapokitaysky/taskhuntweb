@@ -172,6 +172,14 @@ export interface Order {
   client?: { id: string; verifiedPayer?: boolean } | null;
 }
 
+export interface PaginatedOrders {
+  items: Order[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
 export interface OrderInvite {
   id: string;
   orderId: string;

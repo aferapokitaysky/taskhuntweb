@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import type { Category, Order, User } from '@/lib/types';
+import type { Category, Order, PaginatedOrders, User } from '@/lib/types';
 import { money } from '@/lib/types';
 import { AppHeader } from '@/components/AppHeader';
 import { EmptyState } from '@/components/EmptyState';
@@ -73,8 +73,8 @@ export default function CategoryOrdersPage() {
       const params = new URLSearchParams({ categoryId });
       if (search) params.set('search', search);
       if (minBudget) params.set('minBudget', minBudget);
-      api<Order[]>(`/orders?${params.toString()}`)
-        .then(setOrders)
+      api<PaginatedOrders>(`/orders?${params.toString()}`)
+        .then((page) => setOrders(page.items))
         .catch(() => undefined)
         .finally(() => setLoading(false));
     }, 350);

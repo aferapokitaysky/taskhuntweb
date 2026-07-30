@@ -11,6 +11,10 @@ interface OrderListItem {
   id: string;
 }
 
+interface PaginatedOrdersResponse {
+  items: OrderListItem[];
+}
+
 async function fetchFreelancerIds(): Promise<string[]> {
   try {
     const res = await fetch(`${API_URL}/freelancers`, { next: { revalidate: 3600 } });
@@ -22,17 +26,19 @@ async function fetchFreelancerIds(): Promise<string[]> {
   }
 }
 
+// limit=300 — потолок пула ранжирования на бэкенде (OrdersService.FEED_CANDIDATE_POOL_SIZE),
+// запрашивать больше нет смысла, всё равно не наберётся.
 async function fetchPublicOrderIds(): Promise<string[]> {
   try {
     const [openRes, completedRes] = await Promise.all([
-      fetch(`${API_URL}/orders?status=OPEN`, { next: { revalidate: 3600 } }),
-      fetch(`${API_URL}/orders?status=COMPLETED`, { next: { revalidate: 3600 } }),
+      fetch(`${API_URL}/orders?status=OPEN&limit=300`, { next: { revalidate: 3600 } }),
+      fetch(`${API_URL}/orders?status=COMPLETED&limit=300`, { next: { revalidate: 3600 } }),
     ]);
-    const [open, completed]: [OrderListItem[], OrderListItem[]] = await Promise.all([
-      openRes.ok ? openRes.json() : [],
-      completedRes.ok ? completedRes.json() : [],
+    const [open, completed]: [PaginatedOrdersResponse, PaginatedOrdersResponse] = await Promise.all([
+      openRes.ok ? openRes.json() : { items: [] },
+      completedRes.ok ? completedRes.json() : { items: [] },
     ]);
-    return [...open, ...completed].map((o) => o.id);
+    return [...open.items, ...completed.items].map((o) => o.id);
   } catch {
     return [];
   }

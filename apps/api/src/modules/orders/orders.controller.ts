@@ -36,12 +36,17 @@ export class OrdersController {
     @Query('tags') tagsParam?: string,
     @Query('minBudget') minBudgetParam?: string,
     @Query('clientId') clientId?: string,
+    @Query('page') pageParam?: string,
+    @Query('limit') limitParam?: string,
   ) {
     const tags = tagsParam
       ?.split(',')
       .map((t) => t.trim())
       .filter(Boolean);
     const minBudget = minBudgetParam !== undefined ? parseFloat(minBudgetParam) : undefined;
+    const page = pageParam ? parseInt(pageParam, 10) : undefined;
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+
     return this.ordersService.findMany({
       categoryId,
       status,
@@ -50,6 +55,8 @@ export class OrdersController {
       minBudget,
       clientId,
       requesterId: user?.id,
+      page,
+      limit,
     });
   }
 

@@ -25,13 +25,13 @@ export class SearchService {
       })
       .catch(() => undefined);
 
-    const [orders, freelancers] = await Promise.all([
-      this.ordersService.findMany({ search: trimmed }),
+    const [ordersPage, freelancers] = await Promise.all([
+      this.ordersService.findMany({ search: trimmed, limit: 10 }),
       this.usersService.findFreelancers({ search: trimmed }),
     ]);
 
     return {
-      orders: orders.slice(0, 10),
+      orders: ordersPage.items,
       freelancers: freelancers.slice(0, 10),
     };
   }

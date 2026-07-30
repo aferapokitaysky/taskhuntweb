@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import type { Order } from '@/lib/types';
+import type { Order, PaginatedOrders } from '@/lib/types';
 import { AppHeader } from '@/components/AppHeader';
 import { OrderCard } from '@/components/OrderCard';
 import { FreelancerCard, type FreelancerListItem } from '@/components/FreelancerCard';
@@ -25,11 +25,13 @@ async function fetchSearchResults(query: string): Promise<SearchResult> {
   try {
     return await api<SearchResult>(`/search?q=${encodeURIComponent(query)}`);
   } catch {
-    const [orders, freelancers] = await Promise.all([
-      api<Order[]>(`/orders?search=${encodeURIComponent(query)}`).catch(() => []),
+    const [ordersPage, freelancers] = await Promise.all([
+      api<PaginatedOrders>(`/orders?search=${encodeURIComponent(query)}&limit=10`).catch(
+        () => ({ items: [] }) as Pick<PaginatedOrders, 'items'>,
+      ),
       api<FreelancerListItem[]>(`/freelancers?search=${encodeURIComponent(query)}`).catch(() => []),
     ]);
-    return { orders: orders.slice(0, 10), freelancers: freelancers.slice(0, 10) };
+    return { orders: ordersPage.items.slice(0, 10), freelancers: freelancers.slice(0, 10) };
   }
 }
 

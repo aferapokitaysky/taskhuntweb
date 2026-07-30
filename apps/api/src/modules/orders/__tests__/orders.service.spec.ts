@@ -85,6 +85,7 @@ describe('OrdersService', () => {
 
   describe('findMany', () => {
     it('возвращает заказы с isPromoted: true на первых местах', async () => {
+      prisma.order.count.mockResolvedValue(2);
       prisma.order.findMany.mockResolvedValue([
         { id: 'order-normal', title: 'Normal Order', createdAt: new Date() },
         { id: 'order-promoted', title: 'Promoted Order', createdAt: new Date() },
@@ -95,13 +96,16 @@ describe('OrdersService', () => {
 
       const result = await service.findMany({});
 
-      expect(result[0].id).toBe('order-promoted');
-      expect(result[0].isPromoted).toBe(true);
-      expect(result[1].id).toBe('order-normal');
-      expect(result[1].isPromoted).toBe(false);
+      expect(result.items[0].id).toBe('order-promoted');
+      expect(result.items[0].isPromoted).toBe(true);
+      expect(result.items[1].id).toBe('order-normal');
+      expect(result.items[1].isPromoted).toBe(false);
+      expect(result.total).toBe(2);
+      expect(result.page).toBe(1);
     });
 
     it('фильтрует по тэгам через hasSome, не ломая текстовый поиск', async () => {
+      prisma.order.count.mockResolvedValue(0);
       prisma.order.findMany.mockResolvedValue([]);
 
       await service.findMany({ search: 'сайт', tags: ['React', 'Node.js'] });
@@ -116,6 +120,7 @@ describe('OrdersService', () => {
     });
 
     it('фильтр по минимальному бюджету учитывает заказы без верхней границы', async () => {
+      prisma.order.count.mockResolvedValue(0);
       prisma.order.findMany.mockResolvedValue([]);
 
       await service.findMany({ minBudget: 100 });

@@ -98,6 +98,18 @@ export class OrdersService {
     return order;
   }
 
+  // Лента ранжируется в памяти составным скором (свежесть с экспоненциальным
+  // затуханием, срочность дедлайна, буст продвижения — см.
+  // MatchingService.rankOrdersForFeed), это нельзя выразить SQL ORDER BY.
+  // Поэтому не тащим из БД весь таблицу целиком на каждый запрос: берём
+  // ограниченный пул кандидатов (последние по дате, с запасом на неточность
+  // ranking), ранжируем его в памяти, страницы режем уже по готовому
+  // отранжированному списку. Тот же паттерн, что у Reddit/HN — "hot"-лента
+  // не поддерживает бесконечную глубокую пагинацию, только разумные первые
+  // страницы, что для ленты заказов ожидаемо (никто не листает до конца).
+  private static readonly FEED_CANDIDATE_POOL_SIZE = 300;
+  private static readonly FEED_DEFAULT_PAGE_SIZE = 20;
+
   async findMany(filters: {
     categoryId?: string;
     status?: string;
@@ -106,6 +118,8 @@ export class OrdersService {
     minBudget?: number;
     clientId?: string;
     requesterId?: string;
+    page?: number;
+    limit?: number;
   }) {
     const and: Prisma.OrderWhereInput[] = [];
 
@@ -137,11 +151,21 @@ export class OrdersService {
       ...(and.length > 0 && { AND: and }),
     };
 
-    const orders = await this.prisma.order.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: { category: true, _count: { select: { bids: true } } },
-    });
+    const page = filters.page && filters.page > 0 ? Number(filters.page) : 1;
+    const limit =
+      filters.limit && filters.limit > 0
+        ? Math.min(Number(filters.limit), OrdersService.FEED_CANDIDATE_POOL_SIZE)
+        : OrdersService.FEED_DEFAULT_PAGE_SIZE;
+
+    const [total, orders] = await Promise.all([
+      this.prisma.order.count({ where }),
+      this.prisma.order.findMany({
+        where,
+        take: OrdersService.FEED_CANDIDATE_POOL_SIZE,
+        orderBy: { createdAt: 'desc' },
+        include: { category: true, _count: { select: { bids: true } } },
+      }),
+    ]);
 
     const now = new Date();
     const activeOrderPromotions = await this.prisma.promotion.findMany({
@@ -161,10 +185,7 @@ export class OrdersService {
 
     const ranked = this.matching.rankOrdersForFeed(withPromotion);
 
-    // % совпадения с навыками — только для залогиненного фрилансера
-    // (OptionalJwtAuthGuard на контроллере), считаем один раз здесь,
-    // не в персональной ленте (см. MatchingService.recommendOrdersForFreelancer,
-    // тот путь остаётся отдельным — там ранжирование, тут просто отображение).
+    let processed: any[] = ranked;
     if (filters.requesterId) {
       const requesterProfile = await this.prisma.profile.findUnique({
         where: { userId: filters.requesterId },
@@ -172,14 +193,28 @@ export class OrdersService {
       });
       const skillNames = requesterProfile?.skills.map((s) => s.skill.name) ?? [];
       if (skillNames.length > 0) {
-        return ranked.map((order) => ({
+        processed = ranked.map((order) => ({
           ...order,
           compatibilityPercent: compatibilityPercent(order.tags, skillNames),
         }));
+      } else {
+        processed = ranked.map((order) => ({ ...order, compatibilityPercent: null as number | null }));
       }
+    } else {
+      processed = ranked.map((order) => ({ ...order, compatibilityPercent: null as number | null }));
     }
 
-    return ranked.map((order) => ({ ...order, compatibilityPercent: null as number | null }));
+    const skip = (page - 1) * limit;
+    const items = processed.slice(skip, skip + limit);
+    const hasMore = skip + items.length < total;
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      hasMore,
+    };
   }
 
   async getRankedBids(clientId: string, orderId: string) {
