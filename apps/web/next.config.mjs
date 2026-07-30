@@ -19,7 +19,9 @@ const csp = [
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: ${apiOrigin} https:`,
   `font-src 'self' data:`,
-  `connect-src 'self' ${apiOrigin} ${apiWsOrigin}`,
+  // api.github.com — публичный readonly GitHub API, дёргается напрямую с
+  // клиента в GithubRepos.tsx (профиль фрилансера, вкладка GitHub).
+  `connect-src 'self' ${apiOrigin} ${apiWsOrigin} https://api.github.com`,
   `frame-ancestors 'none'`,
   `object-src 'none'`,
   `base-uri 'self'`,

@@ -21,6 +21,7 @@ import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 import { Mascot } from '@/components/Mascot';
 import { OrderStatusBadge } from '@/components/OrderStatusBadge';
 import { OrderTimeline } from '@/components/OrderTimeline';
+import { BID_STATUS_LABELS } from '@/lib/bidStatus';
 
 const MILESTONE_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Не оплачен',
@@ -499,7 +500,7 @@ export default function OrderDetailClient() {
                 <p className="mt-1 text-sm text-stone-600">{bid.message}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-500">
                   <span>
-                    {bid.deliveryDays} дн. · {bid.status}
+                    {bid.deliveryDays} дн. · {BID_STATUS_LABELS[bid.status] ?? bid.status}
                   </span>
                   {compatibility != null && (
                     <span

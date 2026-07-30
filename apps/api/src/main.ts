@@ -4,6 +4,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
 import { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
+import { SanitizeResponseInterceptor } from './common/interceptors/sanitize-response.interceptor';
 
 async function bootstrap() {
   const webPublicUrl = process.env.WEB_PUBLIC_URL;
@@ -62,6 +63,7 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+  app.useGlobalInterceptors(new SanitizeResponseInterceptor());
 
   process.on('SIGTERM', async () => {
     app.get(Logger).log('SIGTERM signal received. Closing Nest application gracefully...');
