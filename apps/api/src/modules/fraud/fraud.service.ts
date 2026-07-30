@@ -63,18 +63,32 @@ export class FraudService {
     });
   }
 
-  async list(filters: { status?: string; severity?: string }) {
-    return this.prisma.fraudFlag.findMany({
+  async list(filters: { status?: string; severity?: string; userId?: string; cursor?: string; limit?: number }) {
+    const take = filters.limit ? Number(filters.limit) : 20;
+
+    const items = await this.prisma.fraudFlag.findMany({
       where: {
         status: (filters.status as any) ?? undefined,
         severity: (filters.severity as any) ?? undefined,
+        userId: filters.userId ?? undefined,
       },
       include: {
         user: { include: { profile: true } },
         order: { select: { id: true, title: true } },
       },
-      orderBy: [{ severity: 'desc' }, { createdAt: 'desc' }],
+      take: take + 1,
+      cursor: filters.cursor ? { id: filters.cursor } : undefined,
+      skip: filters.cursor ? 1 : 0,
+      orderBy: [{ createdAt: 'desc' }],
     });
+
+    let nextCursor: string | null = null;
+    if (items.length > take) {
+      const nextItem = items.pop();
+      nextCursor = nextItem?.id ?? null;
+    }
+
+    return { items, nextCursor };
   }
 
   async updateStatus(id: string, staffId: string, status: 'REVIEWED' | 'DISMISSED' | 'CONFIRMED', note?: string) {

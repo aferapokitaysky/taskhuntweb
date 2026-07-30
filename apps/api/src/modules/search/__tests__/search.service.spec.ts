@@ -13,7 +13,14 @@ describe('SearchService', () => {
       findFreelancers: jest.fn().mockResolvedValue([]),
     };
 
-    service = new SearchService(ordersService, usersService);
+    const prisma = {
+      searchLog: {
+        create: jest.fn().mockResolvedValue({ id: '1' }),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
+    };
+
+    service = new SearchService(prisma as any, ordersService, usersService);
   });
 
   it('возвращает пустые массивы без запросов к сервисам, если поисковая строка короче 2 символов', async () => {

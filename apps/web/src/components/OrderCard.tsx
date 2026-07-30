@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Order } from '@/lib/types';
 import { money } from '@/lib/types';
 import { BoostIcon } from '@/components/icons/BoostIcon';
+import { OrderStatusBadge } from '@/components/OrderStatusBadge';
 
 /** Карточка заказа для read-only контекстов (поиск, витрины) — без
  * действий вроде "Откликнуться"/избранного, только просмотр и переход. */
@@ -34,7 +35,7 @@ export function OrderCard({ order }: { order: Order }) {
         </div>
         <div className="text-right">
           <p className="font-semibold">{money(order.budgetMin, order.currency)}</p>
-          <p className="text-xs text-stone-500">{order.status}</p>
+          <OrderStatusBadge status={order.status} className="mt-1" />
         </div>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">

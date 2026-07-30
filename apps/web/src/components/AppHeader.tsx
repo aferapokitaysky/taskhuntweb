@@ -8,6 +8,7 @@ import type { User } from '@/lib/types';
 import { Logo } from './Logo';
 import { NotificationBell } from './NotificationBell';
 import { HeaderSearch } from './HeaderSearch';
+import { ThemeToggle } from './ThemeToggle';
 
 const NAV_LINKS = [
   { href: '/dashboard', label: 'Заказы' },
@@ -40,7 +41,7 @@ export function AppHeader() {
     // своего максимума — так все страницы получают одинаковую шапку
     // независимо от ширины собственного контента.
     <div className="relative left-1/2 right-1/2 -mx-[50vw] mb-8 w-screen px-4">
-      <header className="mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-4 overflow-x-auto rounded-3xl bg-white px-5 py-4 shadow-sm">
+      <header className="mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-4 overflow-x-auto rounded-3xl bg-white px-5 py-4 shadow-sm dark:bg-stone-900">
         <Link href="/dashboard" className="shrink-0 transition-transform hover:scale-105">
           <Logo className="h-11" />
         </Link>
@@ -50,7 +51,9 @@ export function AppHeader() {
               key={link.href}
               href={link.href}
               className={`whitespace-nowrap rounded-full px-3.5 py-2 transition ${
-                pathname === link.href ? 'bg-brand/10 text-brand' : 'text-stone-600 hover:bg-stone-100'
+                pathname === link.href
+                  ? 'bg-brand/10 text-brand'
+                  : 'text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800'
               }`}
             >
               {link.label}
@@ -59,11 +62,14 @@ export function AppHeader() {
         </nav>
         <div className="flex shrink-0 items-center gap-2">
           <HeaderSearch />
+          <ThemeToggle />
           <NotificationBell />
           <Link
             href="/profile"
             className={`flex items-center gap-2 whitespace-nowrap rounded-full border py-1.5 pl-1.5 pr-3.5 text-sm font-medium transition ${
-              pathname === '/profile' ? 'border-brand bg-brand/10 text-brand' : 'border-stone-300 text-stone-700 hover:bg-stone-50'
+              pathname === '/profile'
+                ? 'border-brand bg-brand/10 text-brand'
+                : 'border-stone-300 text-stone-700 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-200 dark:hover:bg-stone-800'
             }`}
           >
             <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-card-sand font-serif text-xs text-stone-900">

@@ -196,8 +196,14 @@ export class AdminController {
 
   @RequirePermissions(PermissionCode.FraudReview)
   @Get('fraud-flags')
-  listFraudFlags(@Query('status') status?: string, @Query('severity') severity?: string) {
-    return this.fraudService.list({ status, severity });
+  listFraudFlags(
+    @Query('status') status?: string,
+    @Query('severity') severity?: string,
+    @Query('userId') userId?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.fraudService.list({ status, severity, userId, cursor, limit: limit ? Number(limit) : undefined });
   }
 
   @RequirePermissions(PermissionCode.FraudReview)
@@ -205,5 +211,23 @@ export class AdminController {
   @Patch('fraud-flags/:id')
   updateFraudFlag(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdateFraudFlagDto) {
     return this.fraudService.updateStatus(id, user.id, dto.status, dto.note);
+  }
+
+  @RequirePermissions(PermissionCode.UserBan)
+  @AuditLog('USERS_BULK_SUSPENDED', 'User')
+  @Post('users/bulk-suspend')
+  bulkSuspend(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body('userIds') userIds: string[],
+    @Body('reason') reason: string,
+  ) {
+    return this.adminService.bulkSuspendUsers(user.id, userIds ?? [], reason ?? '');
+  }
+
+  @RequirePermissions(PermissionCode.UserBan)
+  @AuditLog('USER_2FA_RESET', 'User')
+  @Post('users/:id/reset-2fa')
+  reset2FA(@Param('id') id: string) {
+    return this.adminService.resetUser2FA(id);
   }
 }

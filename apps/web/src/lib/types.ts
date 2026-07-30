@@ -50,6 +50,13 @@ export interface BidTemplate {
   createdAt: string;
 }
 
+export interface PreviousFreelancer {
+  id: string;
+  hireCount: number;
+  myAvgRating: number | null;
+  profile: { displayName: string; avatarUrl?: string | null } | null;
+}
+
 export interface SessionItem {
   id: string;
   userAgent?: string | null;
@@ -70,7 +77,9 @@ export interface Profile {
   skills?: { skill: Skill }[];
   portfolioItems?: PortfolioItem[];
   availableForWork?: boolean;
+  vacationUntil?: string | null;
   viewsCount?: number;
+  successRate?: string | null;
 }
 
 export interface User {
@@ -80,7 +89,10 @@ export interface User {
   roles: MarketplaceRole[];
   isStaff: boolean;
   totpEnabled?: boolean;
+  digestFrequency?: 'NONE' | 'DAILY' | 'WEEKLY';
   profile?: Profile | null;
+  level?: 'TOP_RATED' | 'RISING_TALENT' | 'NEW';
+  completedOrders?: number;
 }
 
 export interface WalletBalance {
@@ -90,6 +102,8 @@ export interface WalletBalance {
   withdrawableBalance: string;
   pendingBalance: string;
   currency: string;
+  autoWithdrawThreshold?: string | null;
+  autoWithdrawAddressId?: string | null;
 }
 
 export interface Bid {
@@ -155,6 +169,7 @@ export interface Order {
   disputes?: Dispute[];
   viewsCount?: number;
   compatibilityPercent?: number | null;
+  client?: { id: string; verifiedPayer?: boolean } | null;
 }
 
 export interface OrderInvite {

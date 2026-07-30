@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NowPaymentsService } from './nowpayments.service';
 import { WalletService } from './wallet.service';
@@ -96,5 +96,42 @@ export class InvoiceService {
     });
 
     return paid;
+  }
+
+  async exportOrderInvoicesCsv(userId: string, orderId: string): Promise<string> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { bids: { where: { status: 'ACCEPTED' } } },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    const acceptedFreelancerId = order.bids[0]?.freelancerId;
+    if (order.clientId !== userId && acceptedFreelancerId !== userId) {
+      throw new ForbiddenException('Not a participant of this order');
+    }
+
+    const invoices = await this.prisma.invoice.findMany({
+      where: { orderId },
+      include: { milestone: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const escapeCsv = (str: string) => {
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const header = 'Date,Amount,Currency,Status,Milestone\n';
+    const rows = invoices.map((inv) => {
+      const date = inv.createdAt.toISOString();
+      const amount = inv.amount.toString();
+      const currency = inv.currency;
+      const status = inv.status;
+      const milestone = escapeCsv(inv.milestone?.title ?? '—');
+      return `${date},${amount},${currency},${status},${milestone}`;
+    });
+
+    return header + rows.join('\n');
   }
 }

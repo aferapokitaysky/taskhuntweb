@@ -107,6 +107,15 @@ export class UsersService {
 
     missingSteps.sort((a, b) => b.points - a.points);
 
+    let freelancerLevel: FreelancerLevel | undefined;
+    let completedOrders: number | undefined;
+    if (user.roles.includes('FREELANCER')) {
+      completedOrders = await this.prisma.bid.count({
+        where: { freelancerId: userId, status: 'ACCEPTED', order: { status: 'COMPLETED' } },
+      });
+      freelancerLevel = computeFreelancerLevel(completedOrders, profile?.successRate ?? null);
+    }
+
     // Никогда не отдаём секреты наружу — passwordHash/totpSecret/токены
     // верификации-сброса раньше утекали целиком через `...user` (реальный
     // баг, найден при добавлении 2FA: секрет TOTP через этот же спред
@@ -124,6 +133,8 @@ export class UsersService {
       ...safeUser,
       profileCompleteness,
       missingSteps,
+      level: freelancerLevel,
+      completedOrders,
     };
   }
 

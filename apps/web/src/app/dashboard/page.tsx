@@ -17,10 +17,13 @@ import { ClockIcon } from '@/components/icons/ClockIcon';
 import { Mascot } from '@/components/Mascot';
 import { TargetIcon } from '@/components/icons/TargetIcon';
 import { DownloadIcon } from '@/components/icons/DownloadIcon';
+import { OrderStatusBadge } from '@/components/OrderStatusBadge';
+import { Skeleton, OrderCardSkeleton } from '@/components/Skeleton';
+import { NextLevelWidget } from '@/components/NextLevelWidget';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { api, downloadFile } from '@/lib/api';
-import type { BidTemplate, Category, LedgerEntryItem, Order, SavedSearch, User, WalletBalance } from '@/lib/types';
+import { api, API_URL, downloadFile } from '@/lib/api';
+import type { BidTemplate, Category, LedgerEntryItem, Order, PreviousFreelancer, SavedPayoutAddress, SavedSearch, User, WalletBalance } from '@/lib/types';
 import { money } from '@/lib/types';
 
 // Тянет @web3icons/react (лого сетей) — тяжёлый пакет, нужен только когда
@@ -75,6 +78,12 @@ function DashboardContent() {
   const [showWithdrawForm, setShowWithdrawForm] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawTarget, setWithdrawTarget] = useState<WithdrawTarget | null>(null);
+  const [showAutoWithdraw, setShowAutoWithdraw] = useState(false);
+  const [autoWithdrawThreshold, setAutoWithdrawThreshold] = useState('');
+  const [autoWithdrawAddressId, setAutoWithdrawAddressId] = useState('');
+  const [savedAddresses, setSavedAddresses] = useState<SavedPayoutAddress[]>([]);
+  const [autoWithdrawSaving, setAutoWithdrawSaving] = useState(false);
+  const [autoWithdrawSaved, setAutoWithdrawSaved] = useState(false);
   const [withdrawResult, setWithdrawResult] = useState<{ fee: string | number; netAmount: string | number } | null>(
     null,
   );
@@ -95,6 +104,7 @@ function DashboardContent() {
   const [filterMinBudget, setFilterMinBudget] = useState('');
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [bidTemplates, setBidTemplates] = useState<BidTemplate[]>([]);
+  const [previousFreelancers, setPreviousFreelancers] = useState<PreviousFreelancer[]>([]);
   const [savingSearch, setSavingSearch] = useState(false);
   const [savedSearchError, setSavedSearchError] = useState<string | null>(null);
 
@@ -107,6 +117,10 @@ function DashboardContent() {
       .then(([user, balance, orderList, categoryList]) => {
         setMe(user);
         setWallet(balance);
+        if (balance.autoWithdrawThreshold) {
+          setAutoWithdrawThreshold(balance.autoWithdrawThreshold);
+          setAutoWithdrawAddressId(balance.autoWithdrawAddressId ?? '');
+        }
         setOrders(orderList);
         setCategories(categoryList);
         const firstCategory = categoryList.flatMap((category) => [category, ...(category.children ?? [])])[0];
@@ -132,6 +146,14 @@ function DashboardContent() {
 
     api<BidTemplate[]>('/users/me/bid-templates')
       .then(setBidTemplates)
+      .catch(() => undefined);
+
+    api<SavedPayoutAddress[]>('/wallet/payout-addresses')
+      .then(setSavedAddresses)
+      .catch(() => undefined);
+
+    api<typeof previousFreelancers>('/users/me/previous-freelancers')
+      .then(setPreviousFreelancers)
       .catch(() => undefined);
   }, []);
 
@@ -264,6 +286,39 @@ function DashboardContent() {
     }
   }
 
+  async function submitAutoWithdraw(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setAutoWithdrawSaving(true);
+    setAutoWithdrawSaved(false);
+    try {
+      await api('/wallet/auto-withdraw', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          threshold: autoWithdrawThreshold ? Number(autoWithdrawThreshold) : null,
+          savedAddressId: autoWithdrawAddressId || undefined,
+        }),
+      });
+      setAutoWithdrawSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось сохранить настройку автовывода');
+    } finally {
+      setAutoWithdrawSaving(false);
+    }
+  }
+
+  async function disableAutoWithdraw() {
+    setAutoWithdrawThreshold('');
+    setAutoWithdrawAddressId('');
+    setAutoWithdrawSaving(true);
+    try {
+      await api('/wallet/auto-withdraw', { method: 'PATCH', body: JSON.stringify({ threshold: null }) });
+    } catch {
+      // тихо
+    } finally {
+      setAutoWithdrawSaving(false);
+    }
+  }
+
   async function submitWithdraw(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!withdrawTarget) return;
@@ -316,7 +371,22 @@ function DashboardContent() {
   }
 
   if (loading) {
-    return <main className="mx-auto max-w-7xl px-4 py-10 text-stone-500">Загружаем dashboard...</main>;
+    return (
+      <main className="mx-auto max-w-7xl px-4 py-8">
+        <AppHeader />
+        <Skeleton className="mb-8 h-9 w-48" />
+        <div className="mb-8 grid gap-3 md:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-2xl" />
+          ))}
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <OrderCardSkeleton key={i} />
+          ))}
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -388,18 +458,85 @@ function DashboardContent() {
             </p>
           </div>
         )}
+
+        <div className="mt-4 border-t border-stone-100 pt-4">
+          <button
+            type="button"
+            onClick={() => setShowAutoWithdraw((v) => !v)}
+            className="text-sm font-medium text-stone-500 hover:text-stone-700"
+          >
+            {showAutoWithdraw ? 'Скрыть автовывод' : 'Настроить автовывод'}
+          </button>
+          {showAutoWithdraw && (
+            <form onSubmit={submitAutoWithdraw} className="mt-3 space-y-3">
+              <p className="text-sm text-stone-500">
+                Когда доступный баланс превышает порог — заявка на вывод создастся автоматически на выбранный
+                сохранённый адрес.
+              </p>
+              <input
+                type="number"
+                min="1"
+                placeholder="Порог, USD"
+                value={autoWithdrawThreshold}
+                onChange={(e) => setAutoWithdrawThreshold(e.target.value)}
+                className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              />
+              <select
+                value={autoWithdrawAddressId}
+                onChange={(e) => setAutoWithdrawAddressId(e.target.value)}
+                className="w-full max-w-xs rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              >
+                <option value="">Выберите адрес…</option>
+                {savedAddresses.map((addr) => (
+                  <option key={addr.id} value={addr.id}>
+                    {addr.label} ({addr.network})
+                  </option>
+                ))}
+              </select>
+              {autoWithdrawSaved && <p className="text-sm text-emerald-600">Сохранено.</p>}
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={autoWithdrawSaving || !autoWithdrawThreshold || !autoWithdrawAddressId}
+                  className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {autoWithdrawSaving ? 'Сохраняем…' : 'Включить'}
+                </button>
+                {autoWithdrawThreshold && (
+                  <button
+                    type="button"
+                    onClick={disableAutoWithdraw}
+                    disabled={autoWithdrawSaving}
+                    className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                  >
+                    Выключить
+                  </button>
+                )}
+              </div>
+            </form>
+          )}
+        </div>
       </section>
 
       <section className="mb-8 rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">История операций</h2>
-          <button
-            type="button"
-            onClick={toggleHistory}
-            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
-          >
-            {showHistory ? 'Скрыть' : 'Показать'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => downloadFile('/wallet/transactions/export.csv', 'transactions.csv')}
+              className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
+            >
+              Скачать CSV
+            </button>
+            <button
+              type="button"
+              onClick={toggleHistory}
+              className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
+            >
+              {showHistory ? 'Скрыть' : 'Показать'}
+            </button>
+          </div>
         </div>
 
         {showHistory && (
@@ -453,6 +590,16 @@ function DashboardContent() {
           </div>
         )}
       </section>
+
+      {isFreelancer && me?.level && (
+        <div className="mb-8">
+          <NextLevelWidget
+            level={me.level}
+            completedOrders={me.completedOrders ?? 0}
+            successRate={me.profile?.successRate ? Number(me.profile.successRate) : null}
+          />
+        </div>
+      )}
 
       <div className={`grid gap-6 ${hasAside ? 'lg:grid-cols-[1fr_360px]' : ''}`}>
         <section>
@@ -608,7 +755,7 @@ function DashboardContent() {
                   <div className="flex items-start gap-2">
                     <div className="text-right">
                       <p className="font-semibold">{money(order.budgetMin, order.currency)}</p>
-                      <p className="text-xs text-stone-500">{order.status}</p>
+                      <OrderStatusBadge status={order.status} className="mt-1" />
                     </div>
                     <button
                       type="button"
@@ -678,6 +825,37 @@ function DashboardContent() {
 
         {hasAside && (
         <aside className="space-y-6">
+          {isClient && previousFreelancers.length > 0 && (
+            <section className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+              <h2 className="mb-3 text-lg font-semibold">Нанимали раньше</h2>
+              <div className="space-y-2">
+                {previousFreelancers.map((f) => (
+                  <Link
+                    key={f.id}
+                    href={`/freelancers/${f.id}`}
+                    className="flex items-center gap-3 rounded-lg p-2 text-sm transition hover:bg-stone-50"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-card-sand font-serif text-sm text-stone-900">
+                      {f.profile?.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={`${API_URL}${f.profile.avatarUrl}`} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        f.profile?.displayName?.charAt(0).toUpperCase() ?? '?'
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-stone-900">{f.profile?.displayName ?? 'Фрилансер'}</span>
+                      <span className="block text-xs text-stone-500">
+                        {f.hireCount} {f.hireCount === 1 ? 'заказ' : 'заказа'}
+                        {f.myAvgRating !== null && ` · рейтинг ${f.myAvgRating}`}
+                      </span>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
           {isClient && (
             <section className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold">Создать заказ</h2>

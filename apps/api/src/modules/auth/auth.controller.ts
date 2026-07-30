@@ -65,6 +65,7 @@ export class AuthController {
     return { message: 'Если такой email зарегистрирован, на него отправлена ссылка для сброса пароля' };
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.newPassword);

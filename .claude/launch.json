@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["pnpm", "--filter", "@taskhunt/web", "exec", "next", "dev", "-p", "3050"],
+      "port": 3050
+    }
+  ]
+}

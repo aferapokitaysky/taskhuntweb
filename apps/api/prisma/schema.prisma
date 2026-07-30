@@ -117,7 +117,11 @@ model User {
   sentInvites     OrderInvite[] @relation("OrderInviteClient")
   receivedInvites OrderInvite[] @relation("OrderInviteFreelancer")
 
-  bidTemplates BidTemplate[]
+  bidTemplates   BidTemplate[]
+  orderTemplates OrderTemplate[]
+
+  blocksCreated    ClientBlock[] @relation("ClientBlockOwner")
+  blockedByClients ClientBlock[] @relation("ClientBlockTarget")
 
   fraudFlags         FraudFlag[] @relation("FraudFlagSubject")
   fraudFlagsReviewed FraudFlag[] @relation("FraudFlagReviewer")
@@ -275,6 +279,7 @@ model Category {
   children      Category[]    @relation("CategoryTree")
   orders        Order[]
   savedSearches SavedSearch[]
+  orderTemplates OrderTemplate[]
 
   @@index([parentId])
   @@map("categories")
@@ -311,21 +316,23 @@ model Order {
   deadline    DateTime?
   tags        String[]  @default([])
 
-  status        OrderStatus @default(OPEN)
-  acceptedBidId String?     @unique
-  viewsCount    Int         @default(0)
+  status                OrderStatus @default(OPEN)
+  acceptedBidId         String?     @unique
+  viewsCount            Int         @default(0)
+  deadlineWarningSentAt DateTime?
 
-  bids              Bid[]
-  milestones        Milestone[]
-  versions          OrderVersion[]
-  chatThreads       ChatThread[]
-  deliveries        Delivery[]
-  disputes          Dispute[]
-  invoices          Invoice[]
-  fraudFlags        FraudFlag[]
-  savedBy           SavedOrder[]
-  skillEndorsements SkillEndorsement[]
-  invites           OrderInvite[]
+  bids                      Bid[]
+  milestones                Milestone[]
+  versions                  OrderVersion[]
+  chatThreads               ChatThread[]
+  deliveries                Delivery[]
+  disputes                  Dispute[]
+  invoices                  Invoice[]
+  fraudFlags                FraudFlag[]
+  savedBy                   SavedOrder[]
+  skillEndorsements         SkillEndorsement[]
+  invites                   OrderInvite[]
+  deadlineExtensionRequests DeadlineExtensionRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -432,7 +439,8 @@ model Bid {
   amount       Decimal   @db.Decimal(12, 2)
   deliveryDays Int
   message      String
-  status       BidStatus @default(PENDING)
+  status          BidStatus @default(PENDING)
+  rejectionReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -741,6 +749,7 @@ model FileAsset {
   chatMessages    ChatMessage[]
   supportMessages SupportMessage[]
   deliveryFiles   DeliveryFile[]
+  disputeFiles    DisputeFile[]
 
   createdAt DateTime @default(now())
 
@@ -815,6 +824,8 @@ model Dispute {
   reason          String
   status          DisputeStatus @default(OPEN)
   resolutionNotes String?
+
+  files DisputeFile[]
 
   createdAt  DateTime  @default(now())
   resolvedAt DateTime?
@@ -1104,4 +1115,67 @@ model SkillEndorsement {
 
   @@unique([endorserId, targetId, skillId, orderId])
   @@map("skill_endorsements")
+}
+
+model DisputeFile {
+  disputeId String
+  fileId    String
+  dispute   Dispute   @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  file      FileAsset @relation(fields: [fileId], references: [id])
+
+  @@id([disputeId, fileId])
+  @@map("dispute_files")
+}
+
+model DeadlineExtensionRequest {
+  id          String   @id @default(uuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  requestedBy String
+  newDeadline DateTime
+  reason      String?
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+
+  @@map("deadline_extension_requests")
+}
+
+model OrderTemplate {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      User     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  title       String
+  description String
+  budgetMin   Decimal  @db.Decimal(12, 2)
+  budgetMax   Decimal? @db.Decimal(12, 2)
+  tags        String[] @default([])
+  frequency   String
+  nextRunAt   DateTime
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@map("order_templates")
+}
+
+model SearchLog {
+  id        String   @id @default(uuid())
+  query     String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("search_logs")
+}
+
+model ClientBlock {
+  id           String   @id @default(uuid())
+  clientId     String
+  client       User     @relation("ClientBlockOwner", fields: [clientId], references: [id], onDelete: Cascade)
+  freelancerId String
+  freelancer   User     @relation("ClientBlockTarget", fields: [freelancerId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([clientId, freelancerId])
+  @@map("client_blocks")
 }

@@ -539,4 +539,39 @@ export class AdminService {
 
     return { success: true };
   }
+
+  async bulkSuspendUsers(staffUserId: string, userIds: string[], reason: string) {
+    const validIds = userIds.filter((id) => id !== staffUserId);
+
+    const staffUsers = await this.prisma.user.findMany({
+      where: { id: { in: validIds }, isStaff: true },
+      select: { id: true },
+    });
+    const staffIdSet = new Set(staffUsers.map((u) => u.id));
+    const targetIds = validIds.filter((id) => !staffIdSet.has(id));
+
+    if (targetIds.length > 0) {
+      await this.prisma.user.updateMany({
+        where: { id: { in: targetIds } },
+        data: { status: 'SUSPENDED' },
+      });
+    }
+
+    return { suspendedCount: targetIds.length };
+  }
+
+  async resetUser2FA(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { totpSecret: null, totpEnabled: false },
+      });
+      await (tx as any).totpBackupCode.deleteMany({ where: { userId } });
+    });
+
+    return { success: true };
+  }
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { api, getStoredAccessToken } from '@/lib/api';
@@ -10,12 +11,16 @@ import { FileUpload, type UploadedFile } from '@/components/FileUpload';
 import { PaperclipIcon } from '@/components/icons/PaperclipIcon';
 import { StarIcon } from '@/components/icons/StarIcon';
 import { BoostIcon } from '@/components/icons/BoostIcon';
+import { ShieldIcon } from '@/components/icons/ShieldIcon';
+import { CheckIcon } from '@/components/icons/CheckIcon';
 import { AppHeader } from '@/components/AppHeader';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 import { Mascot } from '@/components/Mascot';
+import { OrderStatusBadge } from '@/components/OrderStatusBadge';
+import { OrderTimeline } from '@/components/OrderTimeline';
 
 const MILESTONE_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Не оплачен',
@@ -49,7 +54,9 @@ function rememberRecentlyViewed(id: string, title: string) {
 
 export default function OrderDetailClient() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const orderId = params.id;
+  const [cloning, setCloning] = useState(false);
   const [me, setMe] = useState<User | null>(null);
   const [order, setOrder] = useState<Order | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -62,6 +69,7 @@ export default function OrderDetailClient() {
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
   const [activeFreelancerId, setActiveFreelancerId] = useState<string | null>(null);
   const [compatibilityByBidId, setCompatibilityByBidId] = useState<Record<string, number | null>>({});
+  const [similarOrders, setSimilarOrders] = useState<Order[]>([]);
 
   // --- Milestones/сдача работы/приёмка ---
   const [milestoneForm, setMilestoneForm] = useState({ title: '', amount: '', dueDate: '' });
@@ -75,6 +83,7 @@ export default function OrderDetailClient() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [endorsedSkillIds, setEndorsedSkillIds] = useState<Set<string>>(new Set());
 
   // --- Продвижение заказа ---
   const [boosting, setBoosting] = useState(false);
@@ -119,6 +128,23 @@ export default function OrderDetailClient() {
     }
   }
 
+  async function endorseSkill(skillId: string) {
+    setEndorsedSkillIds((current) => new Set(current).add(skillId));
+    await api(`/orders/${orderId}/endorse`, { method: 'POST', body: JSON.stringify({ skillId }) }).catch(() => undefined);
+  }
+
+  async function cloneOrder() {
+    setCloning(true);
+    setError(null);
+    try {
+      const cloned = await api<Order>(`/orders/${orderId}/clone`, { method: 'POST' });
+      router.push(`/orders/${cloned.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось создать копию заказа');
+      setCloning(false);
+    }
+  }
+
   async function refreshOrder() {
     const fresh = await api<Order>(`/orders/${orderId}`);
     setOrder(fresh);
@@ -132,6 +158,10 @@ export default function OrderDetailClient() {
         rememberRecentlyViewed(orderDetails.id, orderDetails.title);
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Не удалось загрузить заказ'));
+
+    api<Order[]>(`/orders/${orderId}/similar`)
+      .then(setSimilarOrders)
+      .catch(() => undefined);
   }, [orderId]);
 
   const acceptedBid = useMemo(() => order?.bids?.find((bid) => bid.status === 'ACCEPTED'), [order]);
@@ -326,7 +356,15 @@ export default function OrderDetailClient() {
       <section className="mb-6 rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm text-stone-500">{order.category?.name}</p>
+            <div className="flex items-center gap-2 text-sm text-stone-500">
+              <span>{order.category?.name}</span>
+              {order.client?.verifiedPayer && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                  <ShieldIcon className="h-3 w-3" />
+                  Проверенный плательщик
+                </span>
+              )}
+            </div>
             <div className="mt-1 flex items-center gap-2">
               <h1 className="font-serif text-3xl text-stone-900">{order.title}</h1>
               {order.isPromoted && (
@@ -339,10 +377,24 @@ export default function OrderDetailClient() {
           </div>
           <div className="text-right">
             <p className="text-xl font-semibold">{money(order.budgetMin, order.currency)}</p>
-            <p className="text-sm text-stone-500">{order.status}</p>
+            <OrderStatusBadge status={order.status} className="mt-1" />
+            {isClient && ['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(order.status) && (
+              <button
+                type="button"
+                onClick={cloneOrder}
+                disabled={cloning}
+                className="mt-2 rounded-full border border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-600 hover:border-brand hover:text-brand disabled:opacity-50"
+              >
+                {cloning ? 'Создаём…' : 'Повторить заказ'}
+              </button>
+            )}
           </div>
         </div>
         <p className="mt-4 whitespace-pre-wrap text-stone-700">{order.description}</p>
+
+        <div className="mt-5 border-t border-stone-100 pt-4">
+          <OrderTimeline status={order.status} />
+        </div>
 
         {isClient && order.status === 'OPEN' && !order.isPromoted && (
           <div className="mt-4 border-t border-stone-100 pt-4">
@@ -642,6 +694,31 @@ export default function OrderDetailClient() {
               <p className="text-sm font-medium text-emerald-700">Спасибо за отзыв! Заказ закрыт.</p>
             </div>
           )}
+
+          {order.status === 'COMPLETED' && isClient && acceptedBid?.freelancer?.profile?.skills && acceptedBid.freelancer.profile.skills.length > 0 && (
+            <div className="mt-6 rounded-lg border border-stone-200 p-4">
+              <h3 className="mb-3 font-semibold">Подтвердить навыки исполнителя</h3>
+              <div className="flex flex-wrap gap-2">
+                {acceptedBid.freelancer.profile.skills.map(({ skill }) => {
+                  const done = endorsedSkillIds.has(skill.id);
+                  return (
+                    <button
+                      key={skill.id}
+                      type="button"
+                      disabled={done}
+                      onClick={() => endorseSkill(skill.id)}
+                      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                        done ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-stone-300 text-stone-600 hover:border-brand hover:text-brand'
+                      }`}
+                    >
+                      {done && <CheckIcon className="h-3.5 w-3.5" />}
+                      {skill.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -748,6 +825,24 @@ export default function OrderDetailClient() {
               )}
             </aside>
           )}
+        </section>
+      )}
+
+      {similarOrders.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-3 font-serif text-lg text-stone-900">Похожие заказы</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {similarOrders.map((similar) => (
+              <Link
+                key={similar.id}
+                href={`/orders/${similar.id}`}
+                className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <p className="line-clamp-2 font-medium text-stone-900">{similar.title}</p>
+                <p className="mt-2 text-sm font-semibold text-stone-700">{money(similar.budgetMin, similar.currency)}</p>
+              </Link>
+            ))}
+          </div>
         </section>
       )}
     </main>

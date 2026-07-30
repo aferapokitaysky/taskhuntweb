@@ -64,6 +64,9 @@ jobs:
       - name: Type check
         run: pnpm --filter @taskhunt/web exec tsc --noEmit
 
+      - name: Test
+        run: pnpm --filter @taskhunt/web test
+
       - name: Build
         run: pnpm --filter @taskhunt/web build
 

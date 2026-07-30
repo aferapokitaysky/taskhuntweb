@@ -30,6 +30,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { SavedSearchesModule } from './modules/saved-searches/saved-searches.module';
 import { FraudModule } from './modules/fraud/fraud.module';
 import { SearchModule } from './modules/search/search.module';
+import { StatsModule } from './modules/stats/stats.module';
 import { PAYOUT_QUEUE } from './modules/wallet/payout.processor';
 import { FILE_SCAN_QUEUE } from './modules/files/files.service';
 import { SUBSCRIPTION_EXPIRATION_QUEUE } from './modules/subscriptions/subscription-expiration.processor';
@@ -99,6 +100,7 @@ import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
     SavedSearchesModule,
     FraudModule,
     SearchModule,
+    StatsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

@@ -376,8 +376,31 @@ export default function AdminPage() {
             </form>
             <div className="space-y-2">
               {skills.map((s) => (
-                <div key={s.id} className="flex items-center justify-between rounded-xl border border-stone-100 bg-white p-3 text-sm">
-                  <span>{s.name}</span>
+                <div key={s.id} className="flex items-center justify-between gap-2 rounded-xl border border-stone-100 bg-white p-3 text-sm">
+                  <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const targetId = e.target.value;
+                      if (!targetId) return;
+                      const target = skills.find((sk) => sk.id === targetId);
+                      if (!confirm(`Объединить «${s.name}» в «${target?.name}»? «${s.name}» будет удалён.`)) {
+                        e.target.value = '';
+                        return;
+                      }
+                      mutate(() => api(`/admin/skills/${s.id}/merge-into/${targetId}`, { method: 'POST' }));
+                    }}
+                    className="rounded-lg border border-stone-300 px-2 py-1.5 text-xs text-stone-600"
+                  >
+                    <option value="">Объединить с…</option>
+                    {skills
+                      .filter((sk) => sk.id !== s.id)
+                      .map((sk) => (
+                        <option key={sk.id} value={sk.id}>
+                          {sk.name}
+                        </option>
+                      ))}
+                  </select>
                   <button
                     type="button"
                     onClick={() => mutate(() => api(`/admin/skills/${s.id}`, { method: 'DELETE' }))}

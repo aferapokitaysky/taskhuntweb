@@ -103,6 +103,7 @@ describe('UsersService', () => {
       prisma.user.findUnique.mockResolvedValue({
         id: 'user-1',
         status: 'PENDING',
+        roles: ['CLIENT'],
         profile: null,
       });
 
@@ -117,6 +118,7 @@ describe('UsersService', () => {
       prisma.user.findUnique.mockResolvedValue({
         id: 'user-1',
         status: 'ACTIVE',
+        roles: ['CLIENT'],
         profile: {
           avatarUrl: 'https://example.com/avatar.jpg',
           bio: 'Fullstack Dev',

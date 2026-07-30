@@ -21,6 +21,8 @@ export enum DomainEventName {
   EmailVerificationRequested = 'EmailVerificationRequested',
   PasswordResetRequested = 'PasswordResetRequested',
   SubscriptionExpiringSoon = 'SubscriptionExpiringSoon',
+  DeadlineExtensionRequested = 'DeadlineExtensionRequested',
+  DeadlineExtensionResponded = 'DeadlineExtensionResponded',
 }
 
 export interface BaseDomainEvent<TName extends DomainEventName, TPayload> {
@@ -102,6 +104,16 @@ export type SubscriptionExpiringSoonEvent = BaseDomainEvent<
   { userId: string; tierName: string; expiresAt: string }
 >;
 
+export type DeadlineExtensionRequestedEvent = BaseDomainEvent<
+  DomainEventName.DeadlineExtensionRequested,
+  { requestId: string; orderId: string; freelancerId: string; clientId: string; newDeadline: string }
+>;
+
+export type DeadlineExtensionRespondedEvent = BaseDomainEvent<
+  DomainEventName.DeadlineExtensionResponded,
+  { requestId: string; orderId: string; clientId: string; freelancerId: string; approved: boolean }
+>;
+
 export type DomainEvent =
   | UserRegisteredEvent
   | OrderCreatedEvent
@@ -116,4 +128,6 @@ export type DomainEvent =
   | OrderInviteCreatedEvent
   | EmailVerificationRequestedEvent
   | PasswordResetRequestedEvent
-  | SubscriptionExpiringSoonEvent;
+  | SubscriptionExpiringSoonEvent
+  | DeadlineExtensionRequestedEvent
+  | DeadlineExtensionRespondedEvent;

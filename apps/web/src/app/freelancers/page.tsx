@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { Category, Skill } from '@/lib/types';
@@ -8,6 +8,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { EmptySearchIcon } from '@/components/icons/illustrated/EmptySearchIcon';
 import { FreelancerCard, type FreelancerListItem } from '@/components/FreelancerCard';
+import { FreelancerCardSkeleton } from '@/components/Skeleton';
 
 function FreelancersPageContent() {
   const searchParams = useSearchParams();
@@ -17,6 +18,7 @@ function FreelancersPageContent() {
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [skillId, setSkillId] = useState(searchParams.get('skillId') ?? '');
+  const [sortBy, setSortBy] = useState<'default' | 'rating' | 'activity'>('default');
   const [loading, setLoading] = useState(true);
 
   const flatCategories = categories.flatMap((c) => [c, ...(c.children ?? [])]);
@@ -48,6 +50,18 @@ function FreelancersPageContent() {
   }, [search, categoryId, skillId]);
 
   const activeSkillName = skillId ? skills.find((s) => s.id === skillId)?.name : null;
+
+  const sortedFreelancers = useMemo(() => {
+    if (sortBy === 'default') return freelancers;
+    const list = [...freelancers];
+    if (sortBy === 'rating') {
+      list.sort((a, b) => Number(b.profile.successRate ?? 0) - Number(a.profile.successRate ?? 0));
+    } else {
+      const rank: Record<string, number> = { TOP_RATED: 2, RISING_TALENT: 1 };
+      list.sort((a, b) => (rank[b.level ?? ''] ?? 0) - (rank[a.level ?? ''] ?? 0));
+    }
+    return list;
+  }, [freelancers, sortBy]);
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -96,11 +110,37 @@ function FreelancersPageContent() {
         </select>
       </div>
 
+      <div className="mb-4 flex items-center gap-2 text-sm">
+        <span className="text-stone-500">Сортировка:</span>
+        {(
+          [
+            ['default', 'По умолчанию'],
+            ['rating', 'По рейтингу'],
+            ['activity', 'По активности'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setSortBy(value)}
+            className={`rounded-full border px-3 py-1.5 font-medium transition ${
+              sortBy === value ? 'border-brand bg-brand/10 text-brand' : 'border-stone-300 text-stone-600 hover:border-stone-400'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
-        <p className="text-stone-500">Загружаем…</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <FreelancerCardSkeleton key={i} />
+          ))}
+        </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
-          {freelancers.map((freelancer) => (
+          {sortedFreelancers.map((freelancer) => (
             <FreelancerCard key={freelancer.id} freelancer={freelancer} />
           ))}
           {freelancers.length === 0 && (

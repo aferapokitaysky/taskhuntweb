@@ -316,6 +316,15 @@ export class OrdersService {
     if (order.status !== 'OPEN') throw new BadRequestException('Order is not accepting bids');
     if (order.clientId === freelancerId) throw new BadRequestException('Cannot bid on your own order');
 
+    const block = this.prisma.clientBlock?.findUnique
+      ? await this.prisma.clientBlock.findUnique({
+          where: { clientId_freelancerId: { clientId: order.clientId, freelancerId } },
+        })
+      : null;
+    if (block) {
+      throw new ForbiddenException('Вы не можете откликаться на заказы этого клиента');
+    }
+
     await this.checkBidSubmissionLimit(freelancerId);
 
     const bid = await this.prisma.bid.create({
@@ -569,5 +578,152 @@ export class OrdersService {
         orderId,
       },
     });
+  }
+
+  async attachFileToDispute(userId: string, orderId: string, disputeId: string, fileId: string) {
+    const dispute = await this.prisma.dispute.findUnique({
+      where: { id: disputeId },
+      include: { order: { include: { bids: { where: { status: 'ACCEPTED' } } } } },
+    });
+    if (!dispute || dispute.orderId !== orderId) {
+      throw new NotFoundException('Dispute not found');
+    }
+
+    const acceptedFreelancerId = dispute.order.bids[0]?.freelancerId;
+    const isParticipant = dispute.openedById === userId || dispute.order.clientId === userId || acceptedFreelancerId === userId;
+    if (!isParticipant) {
+      throw new ForbiddenException('Вы не являетесь участником спора');
+    }
+
+    const fileAsset = await this.prisma.fileAsset.findUnique({ where: { id: fileId } });
+    if (!fileAsset) throw new NotFoundException('File asset not found');
+    if (fileAsset.scanStatus !== 'CLEAN') {
+      throw new BadRequestException('Файл еще не прошёл проверку антивирусом или заблокирован');
+    }
+
+    return this.prisma.disputeFile.create({
+      data: {
+        disputeId,
+        fileId,
+      },
+    });
+  }
+
+  async listDisputeFiles(userId: string, disputeId: string) {
+    const dispute = await this.prisma.dispute.findUnique({
+      where: { id: disputeId },
+      include: { order: { include: { bids: { where: { status: 'ACCEPTED' } } } } },
+    });
+    if (!dispute) throw new NotFoundException('Dispute not found');
+
+    const acceptedFreelancerId = dispute.order.bids[0]?.freelancerId;
+    const isParticipant = dispute.openedById === userId || dispute.order.clientId === userId || acceptedFreelancerId === userId;
+    if (!isParticipant) {
+      throw new ForbiddenException('Вы не являетесь участником спора');
+    }
+
+    const disputeFiles = await this.prisma.disputeFile.findMany({
+      where: { disputeId },
+      include: { file: true },
+    });
+
+    return disputeFiles.map((df) => df.file);
+  }
+
+  async requestDeadlineExtension(freelancerId: string, orderId: string, dto: { newDeadline: string; reason?: string }) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { bids: { where: { status: 'ACCEPTED' } } },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.status !== 'IN_PROGRESS') {
+      throw new BadRequestException('Продление дедлайна возможно только для выполняющихся заказов');
+    }
+    const acceptedFreelancerId = order.bids[0]?.freelancerId;
+    if (acceptedFreelancerId !== freelancerId) {
+      throw new ForbiddenException('Только выбранный исполнитель может просить продление дедлайна');
+    }
+
+    const request = await this.prisma.deadlineExtensionRequest.create({
+      data: {
+        orderId,
+        requestedBy: freelancerId,
+        newDeadline: new Date(dto.newDeadline),
+        reason: dto.reason,
+      },
+    });
+
+    await this.eventBus.publish(DomainEventName.DeadlineExtensionRequested as any, {
+      requestId: request.id,
+      orderId,
+      freelancerId,
+      clientId: order.clientId,
+      newDeadline: dto.newDeadline,
+    });
+
+    return request;
+  }
+
+  async respondDeadlineExtension(clientId: string, orderId: string, requestId: string, approve: boolean) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.clientId !== clientId) throw new ForbiddenException('Not your order');
+
+    const request = await this.prisma.deadlineExtensionRequest.findUnique({ where: { id: requestId } });
+    if (!request || request.orderId !== orderId) throw new NotFoundException('Request not found');
+    if (request.status !== 'PENDING') throw new BadRequestException('Request is already processed');
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const reqStatus = approve ? 'APPROVED' : 'DECLINED';
+      const updatedReq = await tx.deadlineExtensionRequest.update({
+        where: { id: requestId },
+        data: { status: reqStatus },
+      });
+
+      if (approve) {
+        await tx.order.update({
+          where: { id: orderId },
+          data: { deadline: request.newDeadline },
+        });
+      }
+
+      return updatedReq;
+    });
+
+    await this.eventBus.publish(DomainEventName.DeadlineExtensionResponded as any, {
+      requestId,
+      orderId,
+      clientId,
+      freelancerId: request.requestedBy,
+      approved: approve,
+    });
+
+    return updated;
+  }
+
+  async rejectBid(clientId: string, orderId: string, bidId: string, reason?: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.clientId !== clientId) throw new ForbiddenException('Not your order');
+
+    const bid = await this.prisma.bid.findUnique({ where: { id: bidId } });
+    if (!bid || bid.orderId !== orderId) throw new NotFoundException('Bid not found');
+    if (bid.status !== 'PENDING') throw new BadRequestException('Bid is not pending');
+
+    const updated = await this.prisma.bid.update({
+      where: { id: bidId },
+      data: { status: 'REJECTED', rejectionReason: reason ?? null },
+    });
+
+    await this.prisma.notification.create({
+      data: {
+        userId: bid.freelancerId,
+        title: 'Отклик отклонён',
+        message: `Ваш отклик на заказ «${order.title}» отклонён.${reason ? ` Причина: ${reason}` : ''}`,
+        eventName: 'BidRejected',
+      },
+    });
+
+    return updated;
   }
 }

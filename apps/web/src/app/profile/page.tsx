@@ -9,6 +9,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { GithubIcon } from '@/components/icons/GithubIcon';
 import { GlobeIcon } from '@/components/icons/GlobeIcon';
 import { EyeIcon } from '@/components/icons/EyeIcon';
+import { useToast } from '@/components/Toast';
 
 const MAX_SKILLS = 25;
 
@@ -16,10 +17,14 @@ const EMPTY_PORTFOLIO_FORM = { title: '', description: '', imageUrl: '', project
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
   const [isFreelancer, setIsFreelancer] = useState(false);
   const [availableForWork, setAvailableForWork] = useState(true);
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
+  const [onVacation, setOnVacation] = useState(false);
+  const [vacationUntil, setVacationUntil] = useState('');
+  const [vacationSaving, setVacationSaving] = useState(false);
   const [viewsCount, setViewsCount] = useState(0);
   const [form, setForm] = useState({
     displayName: '',
@@ -77,6 +82,9 @@ export default function ProfilePage() {
   const [sessions, setSessions] = useState<SessionItem[] | null>(null);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
 
+  const [digestFrequency, setDigestFrequency] = useState<'NONE' | 'DAILY' | 'WEEKLY'>('NONE');
+  const [digestSaving, setDigestSaving] = useState(false);
+
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
@@ -99,10 +107,15 @@ export default function ProfilePage() {
         });
         setAvatarUrl(user.profile?.avatarUrl ?? null);
         setAvailableForWork(user.profile?.availableForWork ?? true);
+        if (user.profile?.vacationUntil && new Date(user.profile.vacationUntil) > new Date()) {
+          setOnVacation(true);
+          setVacationUntil(user.profile.vacationUntil.slice(0, 10));
+        }
         setViewsCount(user.profile?.viewsCount ?? 0);
         setSelectedSkillIds((user.profile?.skills ?? []).map((s) => s.skill.id));
         setPortfolioItems(user.profile?.portfolioItems ?? []);
         setTotpEnabled(user.totpEnabled ?? false);
+        setDigestFrequency(user.digestFrequency ?? 'NONE');
         loadSessions();
         setIsFreelancer(user.roles.includes('FREELANCER'));
         if (user.roles.includes('FREELANCER')) {
@@ -170,7 +183,9 @@ export default function ProfilePage() {
 
   async function deletePortfolio(id: string) {
     setPortfolioItems((current) => current.filter((i) => i.id !== id));
-    await api(`/users/me/portfolio/${id}`, { method: 'DELETE' }).catch(() => undefined);
+    await api(`/users/me/portfolio/${id}`, { method: 'DELETE' })
+      .then(() => showToast('Кейс удалён', 'success'))
+      .catch(() => showToast('Не удалось удалить кейс', 'error'));
   }
 
   function startAddBidTemplate() {
@@ -225,7 +240,9 @@ export default function ProfilePage() {
 
   async function deleteBidTemplate(id: string) {
     setBidTemplates((current) => current.filter((t) => t.id !== id));
-    await api(`/users/me/bid-templates/${id}`, { method: 'DELETE' }).catch(() => undefined);
+    await api(`/users/me/bid-templates/${id}`, { method: 'DELETE' })
+      .then(() => showToast('Шаблон удалён', 'success'))
+      .catch(() => showToast('Не удалось удалить шаблон', 'error'));
   }
 
   async function toggleAvailableForWork() {
@@ -238,6 +255,20 @@ export default function ProfilePage() {
       setAvailableForWork(!next);
     } finally {
       setAvailabilitySaving(false);
+    }
+  }
+
+  async function saveVacation(nextOnVacation: boolean, nextDate: string) {
+    setVacationSaving(true);
+    try {
+      await api('/users/me/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({ vacationUntil: nextOnVacation && nextDate ? nextDate : null }),
+      });
+    } catch {
+      // тихо — поле не критичное, повторно откроет форму и попробует снова
+    } finally {
+      setVacationSaving(false);
     }
   }
 
@@ -319,6 +350,18 @@ export default function ProfilePage() {
     }
   }
 
+  async function changeDigestFrequency(frequency: 'NONE' | 'DAILY' | 'WEEKLY') {
+    setDigestFrequency(frequency);
+    setDigestSaving(true);
+    try {
+      await api('/notifications/preferences/digest', { method: 'PATCH', body: JSON.stringify({ frequency }) });
+    } catch {
+      // тихо — не критично, юзер увидит актуальное значение при следующей загрузке страницы
+    } finally {
+      setDigestSaving(false);
+    }
+  }
+
   function loadSessions() {
     setSessionsError(null);
     api<SessionItem[]>('/auth/sessions')
@@ -328,12 +371,16 @@ export default function ProfilePage() {
 
   async function revokeSession(id: string) {
     setSessions((current) => current?.filter((s) => s.id !== id) ?? null);
-    await api(`/auth/sessions/${id}`, { method: 'DELETE' }).catch(() => undefined);
+    await api(`/auth/sessions/${id}`, { method: 'DELETE' })
+      .then(() => showToast('Сессия завершена', 'success'))
+      .catch(() => showToast('Не удалось завершить сессию', 'error'));
   }
 
   async function revokeOtherSessions() {
     setSessions((current) => current?.filter((s) => s.isCurrent) ?? null);
-    await api('/auth/sessions/revoke-others', { method: 'POST' }).catch(() => undefined);
+    await api('/auth/sessions/revoke-others', { method: 'POST' })
+      .then(() => showToast('Остальные сессии завершены', 'success'))
+      .catch(() => showToast('Не удалось завершить сессии', 'error'));
   }
 
   function deviceLabel(userAgent?: string | null): string {
@@ -517,6 +564,33 @@ export default function ProfilePage() {
               <span className={`h-2 w-2 rounded-full ${availableForWork ? 'bg-emerald-500' : 'bg-stone-400'}`} />
               {availableForWork ? 'Открыт для заказов' : 'Не ищу заказы'}
             </button>
+
+            <div className="mt-3 text-left">
+              <label className="flex items-center gap-2 text-sm text-stone-600">
+                <input
+                  type="checkbox"
+                  checked={onVacation}
+                  disabled={vacationSaving}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setOnVacation(checked);
+                    saveVacation(checked, vacationUntil);
+                  }}
+                />
+                Я в отпуске
+              </label>
+              {onVacation && (
+                <input
+                  type="date"
+                  value={vacationUntil}
+                  onChange={(e) => {
+                    setVacationUntil(e.target.value);
+                    saveVacation(true, e.target.value);
+                  }}
+                  className="mt-2 w-full rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
+                />
+              )}
+            </div>
 
             {userId && (
               <Link
@@ -1112,6 +1186,34 @@ export default function ProfilePage() {
                   </button>
                 )}
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl bg-white p-6 shadow-sm">
+        <h2 className="mb-4 font-serif text-xl text-stone-900">Уведомления</h2>
+        <div className="max-w-sm">
+          <p className="mb-2 text-sm text-stone-600">Сводка непрочитанных уведомлений на email:</p>
+          <div className="flex gap-2">
+            {(
+              [
+                ['NONE', 'Не присылать'],
+                ['DAILY', 'Раз в день'],
+                ['WEEKLY', 'Раз в неделю'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                disabled={digestSaving}
+                onClick={() => changeDigestFrequency(value)}
+                className={`rounded-full border px-3 py-1.5 text-sm font-medium transition disabled:opacity-60 ${
+                  digestFrequency === value ? 'border-brand bg-brand/10 text-brand' : 'border-stone-300 text-stone-600 hover:border-stone-400'
+                }`}
+              >
+                {label}
+              </button>
             ))}
           </div>
         </div>
