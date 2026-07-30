@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 
 export const metadata = {
-  title: 'Условия использования — TaskHunt',
+  title: 'Условия использования',
   description: 'Условия использования платформы TaskHunt',
 };
 

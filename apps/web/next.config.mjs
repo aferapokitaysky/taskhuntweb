@@ -8,9 +8,14 @@ const apiWsOrigin = apiOrigin.replace(/^http/, 'ws');
 // (layout.tsx, no-flash) и инлайн style={{}} у прогресс-баров/порталов
 // (OrderTimeline, NextLevelWidget, NotificationBell) — без nonce/hash-CSP
 // строже не сделать, не усложняем этим раундом.
+// unsafe-eval — ТОЛЬКО для dev: webpack в режиме разработки (eval-source-map)
+// гидратирует чанки через eval(), без этого React молча не гидратируется
+// (клиентские страницы с useEffect зависают на loading-состоянии). В проде
+// (next build) eval не используется — там эта директива не нужна и не даётся.
+const scriptSrc = process.env.NODE_ENV === 'production' ? `'self' 'unsafe-inline'` : `'self' 'unsafe-inline' 'unsafe-eval'`;
 const csp = [
   `default-src 'self'`,
-  `script-src 'self' 'unsafe-inline'`,
+  `script-src ${scriptSrc}`,
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: ${apiOrigin} https:`,
   `font-src 'self' data:`,
