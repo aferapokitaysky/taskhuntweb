@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
+import { sanitizeUser } from '../../common/utils/sanitize-user';
 
 @Injectable()
 export class AdminService {
@@ -13,20 +14,23 @@ export class AdminService {
   // --- Пользователи ---
 
   async banUser(userId: string) {
-    return this.prisma.user.update({ where: { id: userId }, data: { status: 'BANNED' } });
+    const user = await this.prisma.user.update({ where: { id: userId }, data: { status: 'BANNED' } });
+    return sanitizeUser(user);
   }
 
   async suspendUser(userId: string) {
-    return this.prisma.user.update({ where: { id: userId }, data: { status: 'SUSPENDED' } });
+    const user = await this.prisma.user.update({ where: { id: userId }, data: { status: 'SUSPENDED' } });
+    return sanitizeUser(user);
   }
 
   async listUsers(status?: string) {
-    return this.prisma.user.findMany({
+    const users = await this.prisma.user.findMany({
       where: status ? { status: status as any } : undefined,
       include: { profile: true },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
+    return users.map(sanitizeUser);
   }
 
   // --- Споры ---

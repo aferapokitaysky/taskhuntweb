@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MatchingService } from '../matching/matching.service';
+import { sanitizeUser } from '../../common/utils/sanitize-user';
 import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { CreatePortfolioItemDto } from './dto/create-portfolio-item.dto';
@@ -121,16 +122,11 @@ export class UsersService {
     // баг, найден при добавлении 2FA: секрет TOTP через этот же спред
     // сделал бы саму двухфакторку бессмысленной — любой с access-токеном
     // мог бы прочитать totpSecret и сам генерировать валидные коды).
-    const {
-      passwordHash: _passwordHash,
-      totpSecret: _totpSecret,
-      emailVerificationToken: _emailVerificationToken,
-      passwordResetToken: _passwordResetToken,
-      ...safeUser
-    } = user;
-
+    // См. sanitizeUser — тот же баг позже нашёлся в admin.service.ts
+    // (listUsers/banUser/suspendUser), поэтому список полей теперь один
+    // на оба места, не дублируется руками.
     return {
-      ...safeUser,
+      ...sanitizeUser(user),
       profileCompleteness,
       missingSteps,
       level: freelancerLevel,
@@ -751,17 +747,9 @@ export class UsersService {
         })
       : [];
 
-    const {
-      passwordHash: _passwordHash,
-      totpSecret: _totpSecret,
-      emailVerificationToken: _emailVerificationToken,
-      passwordResetToken: _passwordResetToken,
-      ...safeUser
-    } = user;
-
     return {
       exportedAt: new Date().toISOString(),
-      user: safeUser,
+      user: sanitizeUser(user),
       ledgerEntries,
     };
   }
