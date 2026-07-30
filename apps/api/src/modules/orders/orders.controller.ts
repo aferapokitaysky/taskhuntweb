@@ -11,6 +11,7 @@ import { MilestonesService } from './milestones.service';
 import { ReviewsService } from './reviews.service';
 import { InvoiceService } from '../wallet/invoice.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDraftDto } from './dto/create-order-draft.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { CreateBidDto } from './dto/create-bid.dto';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
@@ -72,6 +73,35 @@ export class OrdersController {
   @Get('saved/mine')
   listSaved(@CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.listSavedOrders(user.id);
+  }
+
+  // Тоже до ':id' — тот же приём, что 'saved/mine' строкой выше.
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Get('drafts/mine')
+  listMyDrafts(@CurrentUser() user: AuthenticatedUser) {
+    return this.ordersService.listMyDrafts(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Post('drafts')
+  createDraft(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateOrderDraftDto) {
+    return this.ordersService.createDraft(user.id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Post('drafts/:id/publish')
+  publishDraft(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.ordersService.publishDraft(user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Delete('drafts/:id')
+  deleteDraft(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.ordersService.deleteDraft(user.id, id);
   }
 
   // Тоже до ':id' — тот же приём, что 'saved/mine' строкой выше.

@@ -5,6 +5,7 @@ import { EventBusService } from '../../common/events/event-bus.service';
 import { DomainEventName } from '@taskhunt/shared-types';
 import { MatchingService, compatibilityPercent } from '../matching/matching.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDraftDto } from './dto/create-order-draft.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { CreateBidDto } from './dto/create-bid.dto';
 
@@ -96,6 +97,77 @@ export class OrdersService {
     });
 
     return order;
+  }
+
+  /**
+   * Черновик (CodexTZ 023.011) — сохраняется уже после заполнения одной
+   * категории, остальные поля дозаполняются автосейвом через update().
+   * Не считается против checkOrderCreationLimit и не публикует OrderCreated
+   * — это ещё не заказ, который видят фрилансеры, событие уйдёт при publish().
+   */
+  async createDraft(clientId: string, dto: CreateOrderDraftDto) {
+    return this.prisma.order.create({
+      data: {
+        categoryId: dto.categoryId,
+        title: dto.title ?? 'Черновик заказа',
+        description: dto.description ?? '',
+        budgetMin: dto.budgetMin ?? 0,
+        budgetMax: dto.budgetMax,
+        deadline: dto.deadline ? new Date(dto.deadline) : undefined,
+        tags: dto.tags ?? [],
+        clientId,
+        status: 'DRAFT',
+      },
+    });
+  }
+
+  async listMyDrafts(clientId: string) {
+    return this.prisma.order.findMany({
+      where: { clientId, status: 'DRAFT' },
+      include: { category: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  /**
+   * DRAFT -> OPEN. Черновик мог быть создан с пустыми title/description/
+   * budgetMin (см. createDraft) — то, что сходило с рук черновику, не
+   * годится для реального заказа, поэтому здесь та же валидация по сути,
+   * что и в CreateOrderDto, только выполняется вручную (DTO уже не при чём,
+   * данные читаются из БД, а не из тела запроса).
+   */
+  async publishDraft(clientId: string, orderId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.clientId !== clientId) throw new ForbiddenException('Not your order');
+    if (order.status !== 'DRAFT') throw new BadRequestException('Order is not a draft');
+
+    if (order.title.length < 5) throw new BadRequestException('Заполните заголовок заказа (минимум 5 символов)');
+    if (order.description.length < 20) throw new BadRequestException('Заполните описание заказа (минимум 20 символов)');
+    if (Number(order.budgetMin) <= 0) throw new BadRequestException('Укажите бюджет заказа');
+
+    await this.checkOrderCreationLimit(clientId);
+
+    const published = await this.prisma.order.update({ where: { id: orderId }, data: { status: 'OPEN' } });
+
+    await this.eventBus.publish(DomainEventName.OrderCreated, {
+      orderId: published.id,
+      clientId: published.clientId,
+      categoryId: published.categoryId,
+      budgetMin: Number(published.budgetMin),
+      budgetMax: published.budgetMax ? Number(published.budgetMax) : null,
+    });
+
+    return published;
+  }
+
+  async deleteDraft(clientId: string, orderId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.clientId !== clientId) throw new ForbiddenException('Not your order');
+    if (order.status !== 'DRAFT') throw new BadRequestException('Order is not a draft');
+
+    await this.prisma.order.delete({ where: { id: orderId } });
   }
 
   // Лента ранжируется в памяти составным скором (свежесть с экспоненциальным
