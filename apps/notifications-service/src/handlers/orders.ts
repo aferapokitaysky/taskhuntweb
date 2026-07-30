@@ -8,6 +8,7 @@ import type {
   InvoicePaidEvent,
   OrderCreatedEvent,
   OrderInviteCreatedEvent,
+  OrderInviteRespondedEvent,
   WorkSubmittedEvent,
 } from '@taskhunt/shared-types';
 import type { HandlerContext } from './shared';
@@ -139,6 +140,17 @@ export function handleOrderInviteCreated(event: OrderInviteCreatedEvent, context
     title: 'Вас пригласили на заказ',
     message: `Заказчик пригласил вас откликнуться на заказ «${event.payload.orderTitle}».`,
     metadata: event.payload,
+  });
+}
+
+export function handleOrderInviteResponded(event: OrderInviteRespondedEvent, context: HandlerContext) {
+  return notifyUser(context, event.payload.clientId, {
+    eventName: event.name,
+    title: event.payload.accepted ? 'Приглашение принято' : 'Приглашение отклонено',
+    message: event.payload.accepted
+      ? `Фрилансер принял приглашение на заказ «${event.payload.orderTitle}».`
+      : `Фрилансер отклонил приглашение на заказ «${event.payload.orderTitle}».`,
+    metadata: { ...event.payload, accepted: String(event.payload.accepted) },
   });
 }
 

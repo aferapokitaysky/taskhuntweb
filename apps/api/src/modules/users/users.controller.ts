@@ -25,6 +25,12 @@ export class UsersController {
     return this.usersService.getMe(user.id);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('me/completeness')
+  getCompleteness(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.getCompleteness(user.id);
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CLIENT')
   @Get('me/previous-freelancers')

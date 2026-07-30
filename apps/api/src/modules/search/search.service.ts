@@ -36,6 +36,50 @@ export class SearchService {
     };
   }
 
+  /**
+   * Для автокомплита в шапке (Codex, CODEX_CLAUDE_SYNC.md Request 003) —
+   * лёгкий запрос без searchLog-записи (иначе лог засорялся бы на каждый
+   * keystroke) и с маленькими лимитами на группу, чтобы укладываться в
+   * бюджет ~150мс на локальных данных.
+   */
+  async suggest(query: string) {
+    const trimmed = query.trim();
+    if (trimmed.length < 1) {
+      return { orders: [], skills: [], categories: [], freelancers: [] };
+    }
+
+    const [orders, skills, categories, freelancers] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { status: 'OPEN', title: { contains: trimmed, mode: 'insensitive' } },
+        select: { id: true, title: true },
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.skill.findMany({
+        where: { name: { contains: trimmed, mode: 'insensitive' } },
+        select: { id: true, name: true, slug: true },
+        take: 5,
+      }),
+      this.prisma.category.findMany({
+        where: { name: { contains: trimmed, mode: 'insensitive' } },
+        select: { id: true, name: true, slug: true },
+        take: 5,
+      }),
+      this.usersService.findFreelancers({ search: trimmed }),
+    ]);
+
+    return {
+      orders: orders.map((o) => ({ id: o.id, title: o.title })),
+      skills,
+      categories,
+      freelancers: freelancers.slice(0, 5).map((f: any) => ({
+        id: f.id,
+        displayName: f.profile?.displayName ?? f.email,
+        avatarUrl: f.profile?.avatarUrl ?? null,
+      })),
+    };
+  }
+
   async getTrending() {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const logs = (await (this.prisma.searchLog as any).groupBy({

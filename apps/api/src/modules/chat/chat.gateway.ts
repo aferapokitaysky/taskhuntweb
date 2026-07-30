@@ -9,6 +9,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ChatService } from './chat.service';
+import { getAllowedOrigins } from '../../common/config/allowed-origins';
 
 interface AuthenticatedSocket extends Socket {
   data: { userId: string };
@@ -25,9 +26,7 @@ function roomName(orderId: string, freelancerId: string) {
  * Live presence (online/typing/last seen) реализуется поверх этих же
  * комнат события `presence:*` — вынесено в Phase 2, тут заложен только гейтвей.
  */
-const corsOrigin = process.env.WEB_PUBLIC_URL ?? 'http://localhost:3000';
-
-@WebSocketGateway({ namespace: '/chat', cors: { origin: corsOrigin, credentials: true } })
+@WebSocketGateway({ namespace: '/chat', cors: { origin: getAllowedOrigins(), credentials: true } })
 export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
   server!: Server;

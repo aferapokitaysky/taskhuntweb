@@ -425,6 +425,32 @@ export class OrdersService {
     });
   }
 
+  async respondToInvite(freelancerId: string, inviteId: string, accept: boolean) {
+    const invite = await this.prisma.orderInvite.findUnique({
+      where: { id: inviteId },
+      include: { order: { select: { title: true } } },
+    });
+    if (!invite) throw new NotFoundException('Invite not found');
+    if (invite.freelancerId !== freelancerId) throw new ForbiddenException('Not your invite');
+    if (invite.status !== 'PENDING') throw new BadRequestException('Приглашение уже обработано');
+
+    const updated = await this.prisma.orderInvite.update({
+      where: { id: inviteId },
+      data: { status: accept ? 'ACCEPTED' : 'DECLINED' },
+    });
+
+    await this.eventBus.publish(DomainEventName.OrderInviteResponded, {
+      inviteId,
+      orderId: invite.orderId,
+      orderTitle: invite.order.title,
+      freelancerId,
+      clientId: invite.clientId,
+      accepted: accept,
+    });
+
+    return updated;
+  }
+
   async acceptBid(clientId: string, orderId: string, bidId: string) {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Order not found');

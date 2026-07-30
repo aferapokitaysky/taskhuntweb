@@ -5,6 +5,7 @@ import { Logger } from 'nestjs-pino';
 import { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
 import { SanitizeResponseInterceptor } from './common/interceptors/sanitize-response.interceptor';
+import { createCorsOriginValidator } from './common/config/allowed-origins';
 
 async function bootstrap() {
   const webPublicUrl = process.env.WEB_PUBLIC_URL;
@@ -53,8 +54,10 @@ async function bootstrap() {
   app.enableShutdownHooks();
   app.useLogger(app.get(Logger));
 
-  const corsOrigin = webPublicUrl ?? 'http://localhost:3000';
-  app.enableCors({ origin: corsOrigin, credentials: true });
+  app.enableCors({
+    origin: createCorsOriginValidator(),
+    credentials: true,
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

@@ -81,6 +81,18 @@ export class OrdersController {
     return this.ordersService.listMyInvites(user.id);
   }
 
+  // 3-сегментный путь — не конфликтует с ':id/invite' (POST, 2 сегмента)
+  // выше и с ':id' catch-all роутами дальше.
+  @UseGuards(JwtAuthGuard)
+  @Patch('invites/:inviteId/respond')
+  respondToInvite(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('inviteId') inviteId: string,
+    @Body('accept') accept: boolean,
+  ) {
+    return this.ordersService.respondToInvite(user.id, inviteId, Boolean(accept));
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CLIENT')
   @Post(':id/invite')

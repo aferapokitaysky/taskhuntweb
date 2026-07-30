@@ -50,6 +50,88 @@ export class UsersService {
     private readonly matching: MatchingService,
   ) {}
 
+  /**
+   * CodexTZ 020 / CODEX_CLAUDE_SYNC.md — процент заполненности профиля,
+   * зависит от роли (клиент/фрилансер собирают разные поля). Возвращает
+   * ближайшее недостающее поле как nextAction, чтобы фронт мог показать
+   * одну конкретную подсказку, а не список из десяти пунктов сразу.
+   */
+  async getCompleteness(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        profile: { include: { skills: true, portfolioItems: true } },
+        onboarding: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const isClient = user.primaryRole === 'CLIENT';
+    const profile = user.profile;
+    const onboarding = user.onboarding;
+
+    const checklist = isClient
+      ? [
+          { done: Boolean(profile?.bio), field: 'bio', label: 'Расскажите о компании или о себе', action: 'Заполните описание в профиле' },
+          {
+            done: Boolean(onboarding?.interestedCategoryIds?.length),
+            field: 'categories',
+            label: 'Интересующие категории заказов',
+            action: 'Отметьте категории, с которыми обычно работаете',
+          },
+          {
+            done: onboarding?.expectedBudgetMin != null,
+            field: 'budget',
+            label: 'Типичный бюджет заказа',
+            action: 'Укажите примерный бюджет — так фрилансеры лучше поймут ваши заказы',
+          },
+          {
+            done: await this.prisma.invoice.count({ where: { payerId: userId, status: 'PAID' } }).then((n) => n > 0),
+            field: 'payment',
+            label: 'Готовность к оплате',
+            action: 'Пополните кошелёк или оплатите первый счёт',
+          },
+        ]
+      : [
+          { done: Boolean(profile?.bio), field: 'headline', label: 'Заголовок/описание профиля', action: 'Опишите себя в двух предложениях' },
+          {
+            done: Boolean(profile?.skills?.length),
+            field: 'skills',
+            label: 'Навыки',
+            action: 'Добавьте навыки — по ним вас находят заказчики',
+          },
+          {
+            done: onboarding?.expectedRateMin != null,
+            field: 'rate',
+            label: 'Ожидаемая ставка',
+            action: 'Укажите ставку, чтобы попадать в подходящие по бюджету заказы',
+          },
+          {
+            done: Boolean(onboarding?.availability),
+            field: 'availability',
+            label: 'Занятость',
+            action: 'Укажите, сколько времени готовы уделять заказам',
+          },
+          {
+            done: Boolean(profile?.portfolioItems?.length),
+            field: 'portfolio',
+            label: 'Портфолио',
+            action: 'Добавьте примеры работ — это сильно повышает доверие',
+          },
+        ];
+
+    const done = checklist.filter((item) => item.done);
+    const missing = checklist.filter((item) => !item.done);
+    const percentage = Math.round((done.length / checklist.length) * 100);
+
+    return {
+      percentage,
+      role: isClient ? 'CLIENT' : 'FREELANCER',
+      missingFields: missing.map((item) => ({ field: item.field, label: item.label })),
+      nextAction: missing[0]?.action ?? 'Профиль полностью заполнен',
+    };
+  }
+
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
