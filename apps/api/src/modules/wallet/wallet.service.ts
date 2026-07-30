@@ -6,6 +6,7 @@ import { LedgerService } from './ledger.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { DomainEventName } from '@taskhunt/shared-types';
 import { SYSTEM_ACCOUNT_EMAIL, DEFAULT_MARKETPLACE_FEE_PERCENT } from './constants';
+import { escapeCsvCell } from '../../common/utils/csv';
 
 // PDFKit-овские встроенные Standard-14 шрифты (Helvetica и т.п.) не
 // поддерживают кириллицу — без встраивания отдельного TTF-шрифта русский
@@ -281,20 +282,13 @@ export class WalletService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const escapeCsv = (str: string) => {
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-
     const header = 'Date,Type,Amount,Currency,Description\n';
     const rows = entries.map((e) => {
       const date = e.createdAt.toISOString();
       const type = e.transaction.type;
       const amount = e.amount.toString();
       const currency = wallet.currency;
-      const desc = escapeCsv(e.transaction.description ?? '');
+      const desc = escapeCsvCell(e.transaction.description ?? '');
       return `${date},${type},${amount},${currency},${desc}`;
     });
 

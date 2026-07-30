@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateOrderTemplateDto, OrderTemplateFrequency } from './dto/create-order-template.dto';
+import { UpdateOrderTemplateDto } from './dto/update-order-template.dto';
 
 @Injectable()
 export class OrderTemplatesService {
@@ -39,14 +40,23 @@ export class OrderTemplatesService {
     });
   }
 
-  async update(clientId: string, id: string, data: Partial<{ active: boolean; frequency: string; title: string; description: string }>) {
+  async update(clientId: string, id: string, dto: UpdateOrderTemplateDto) {
     const template = await this.prisma.orderTemplate.findUnique({ where: { id } });
     if (!template) throw new NotFoundException('Order template not found');
     if (template.clientId !== clientId) throw new ForbiddenException('Not your template');
 
+    // Явный whitelist полей вместо спреда dto — второй рубеж защиты поверх
+    // DTO-валидации (см. историю бага в комментарии к UpdateOrderTemplateDto):
+    // даже если у ValidationPipe снова появится дыра для какого-то параметра,
+    // здесь физически невозможно записать что-то кроме этих четырёх полей.
     return this.prisma.orderTemplate.update({
-      where: { id },
-      data,
+      where: { id, clientId },
+      data: {
+        active: dto.active,
+        frequency: dto.frequency,
+        title: dto.title,
+        description: dto.description,
+      },
     });
   }
 

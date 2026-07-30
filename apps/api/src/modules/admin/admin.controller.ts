@@ -226,14 +226,14 @@ export class AdminController {
   @AuditLog('ORDER_FLAG_MODERATED', 'FraudFlag')
   @Patch('moderation-queue/orders/:id')
   resolveOrderModeration(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: ResolveModerationDto) {
-    return this.adminService.resolveOrderOrProfileModeration(user.id, id, dto.action, dto.note);
+    return this.adminService.resolveOrderOrProfileModeration(user.id, id, dto.action, 'ORDER', dto.note);
   }
 
   @RequirePermissions(PermissionCode.ContentModerate)
   @AuditLog('PROFILE_FLAG_MODERATED', 'FraudFlag')
   @Patch('moderation-queue/profiles/:id')
   resolveProfileModeration(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: ResolveModerationDto) {
-    return this.adminService.resolveOrderOrProfileModeration(user.id, id, dto.action, dto.note);
+    return this.adminService.resolveOrderOrProfileModeration(user.id, id, dto.action, 'PROFILE', dto.note);
   }
 
   @RequirePermissions(PermissionCode.ContentModerate)

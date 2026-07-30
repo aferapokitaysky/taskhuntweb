@@ -730,6 +730,9 @@ export class OrdersService {
 
     const fileAsset = await this.prisma.fileAsset.findUnique({ where: { id: fileId } });
     if (!fileAsset) throw new NotFoundException('File asset not found');
+    if (fileAsset.ownerId !== userId) {
+      throw new ForbiddenException('Можно приложить только собственный файл');
+    }
     if (fileAsset.scanStatus !== 'CLEAN') {
       throw new BadRequestException('Файл еще не прошёл проверку антивирусом или заблокирован');
     }

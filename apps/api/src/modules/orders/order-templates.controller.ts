@@ -6,6 +6,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { OrderTemplatesService } from './order-templates.service';
 import { CreateOrderTemplateDto } from './dto/create-order-template.dto';
+import { UpdateOrderTemplateDto } from './dto/update-order-template.dto';
 
 @Controller('users/me/order-templates')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -24,11 +25,7 @@ export class OrderTemplatesController {
   }
 
   @Patch(':id')
-  update(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
-    @Body() dto: Partial<{ active: boolean; frequency: string; title: string; description: string }>,
-  ) {
+  update(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdateOrderTemplateDto) {
     return this.service.update(user.id, id, dto);
   }
 

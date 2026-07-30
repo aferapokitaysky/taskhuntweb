@@ -5,6 +5,7 @@ import { WalletService } from './wallet.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { DomainEventName } from '@taskhunt/shared-types';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { escapeCsvCell } from '../../common/utils/csv';
 
 @Injectable()
 export class InvoiceService {
@@ -115,20 +116,13 @@ export class InvoiceService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const escapeCsv = (str: string) => {
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-
     const header = 'Date,Amount,Currency,Status,Milestone\n';
     const rows = invoices.map((inv) => {
       const date = inv.createdAt.toISOString();
       const amount = inv.amount.toString();
       const currency = inv.currency;
       const status = inv.status;
-      const milestone = escapeCsv(inv.milestone?.title ?? '—');
+      const milestone = escapeCsvCell(inv.milestone?.title ?? '—');
       return `${date},${amount},${currency},${status},${milestone}`;
     });
 

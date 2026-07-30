@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
@@ -13,12 +13,29 @@ export class AdminService {
 
   // --- Пользователи ---
 
+  /**
+   * Staff-аккаунты нельзя банить/приостанавливать/сбрасывать им 2FA через
+   * эти ручки — иначе один держатель user.ban (сейчас это только OWNER, но
+   * ролями управляет seed-скрипт, а не рантайм-эндпоинт, так что состав
+   * ролей может измениться) мог бы заблокировать или перехватить другой
+   * staff-аккаунт, в т.ч. другого OWNER. bulkSuspendUsers уже так делал —
+   * тут та же защита, просто раньше её не было на одиночных ручках.
+   */
+  private async assertTargetIsNotStaff(userId: string) {
+    const target = await this.prisma.user.findUnique({ where: { id: userId }, select: { isStaff: true } });
+    if (target?.isStaff) {
+      throw new ForbiddenException('Cannot perform this action on a staff account');
+    }
+  }
+
   async banUser(userId: string) {
+    await this.assertTargetIsNotStaff(userId);
     const user = await this.prisma.user.update({ where: { id: userId }, data: { status: 'BANNED' } });
     return sanitizeUser(user);
   }
 
   async suspendUser(userId: string) {
+    await this.assertTargetIsNotStaff(userId);
     const user = await this.prisma.user.update({ where: { id: userId }, data: { status: 'SUSPENDED' } });
     return sanitizeUser(user);
   }
@@ -567,6 +584,7 @@ export class AdminService {
   async resetUser2FA(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
+    if (user.isStaff) throw new ForbiddenException('Cannot perform this action on a staff account');
 
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
@@ -667,9 +685,24 @@ export class AdminService {
     return 'REVIEWED';
   }
 
-  async resolveOrderOrProfileModeration(staffId: string, flagId: string, action: 'APPROVE' | 'REJECT' | 'REQUEST_EDITS', note?: string) {
+  async resolveOrderOrProfileModeration(
+    staffId: string,
+    flagId: string,
+    action: 'APPROVE' | 'REJECT' | 'REQUEST_EDITS',
+    expectedType: 'ORDER' | 'PROFILE',
+    note?: string,
+  ) {
     const flag = await this.prisma.fraudFlag.findUnique({ where: { id: flagId } });
     if (!flag) throw new NotFoundException('Moderation item not found');
+
+    // Роут /moderation-queue/orders/:id и /moderation-queue/profiles/:id
+    // требуют разные права (OrderModerate / ContentModerate) — без этой
+    // проверки держатель только одного из двух мог бы резолвить flag
+    // другого типа через "не свой" роут.
+    const actualType: 'ORDER' | 'PROFILE' = flag.orderId ? 'ORDER' : 'PROFILE';
+    if (actualType !== expectedType) {
+      throw new NotFoundException('Moderation item not found');
+    }
 
     return this.prisma.fraudFlag.update({
       where: { id: flagId },
