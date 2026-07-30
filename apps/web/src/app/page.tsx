@@ -228,7 +228,7 @@ export default async function HomePage() {
         />
       </section>
 
-      <footer className="flex gap-4 text-xs text-stone-400">
+      <footer className="flex flex-wrap justify-center gap-4 text-xs text-stone-400">
         <Link href="/pricing" className="hover:text-stone-600">
           Тарифы
         </Link>

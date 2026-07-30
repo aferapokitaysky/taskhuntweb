@@ -28,6 +28,10 @@ const csp = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // standalone-выход — для Docker-образа (apps/web/Dockerfile): в runtime-слой
+  // копируется только .next/standalone (уже с нужными node_modules), а не
+  // весь workspace целиком.
+  output: 'standalone',
   env: {
     NEXT_PUBLIC_API_URL: apiUrl,
   },

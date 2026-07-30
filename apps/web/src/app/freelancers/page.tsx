@@ -110,7 +110,7 @@ function FreelancersPageContent() {
         </select>
       </div>
 
-      <div className="mb-4 flex items-center gap-2 text-sm">
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
         <span className="text-stone-500">Сортировка:</span>
         {(
           [
