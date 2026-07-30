@@ -22,12 +22,23 @@ function sanitizeDeep<T>(value: T, seen = new WeakSet<object>()): T {
   if (value instanceof Date || Buffer.isBuffer(value)) return value;
   if (typeof (value as { pipe?: unknown }).pipe === 'function') return value;
   if (seen.has(value as object)) return value;
-  seen.add(value as object);
 
   if (Array.isArray(value)) {
+    seen.add(value as object);
     return value.map((item) => sanitizeDeep(item, seen)) as unknown as T;
   }
 
+  // Только настоящие "plain object" (Prisma-модели после сериализации, DTO)
+  // разбираем по ключам. Классы со своей сериализацией — Prisma Decimal
+  // (budgetMin/amount/...), BigInt-обёртки и т.п. — has own toJSON()
+  // и хранят значение во внутренних полях (Decimal: {s,e,d}), не в виде
+  // публичных данных; рекурсия по Object.entries() их бы разобрала и
+  // испортила денежные суммы. Такие объекты не трогаем — их сериализует
+  // штатный JSON.stringify через toJSON() уже после интерцептора.
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
+
+  seen.add(value as object);
   const result: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
     if (SENSITIVE_FIELDS.has(key)) continue;
