@@ -22,13 +22,37 @@ export function handleOrderCreated(event: OrderCreatedEvent, context: HandlerCon
   });
 }
 
-export function handleBidSubmitted(event: BidSubmittedEvent, context: HandlerContext) {
-  return notifyUser(context, event.payload.freelancerId, {
-    eventName: event.name,
-    title: 'Отклик отправлен',
-    message: `Отклик ${event.payload.bidId} на заказ ${event.payload.orderId} отправлен.`,
-    metadata: event.payload,
+export async function handleBidSubmitted(event: BidSubmittedEvent, context: HandlerContext) {
+  const order = await context.prisma.order.findUnique({
+    where: { id: event.payload.orderId },
+    select: { clientId: true, title: true },
   });
+
+  const notifications = [
+    notifyUser(context, event.payload.freelancerId, {
+      eventName: event.name,
+      title: 'Отклик отправлен',
+      message: `Отклик ${event.payload.bidId} на заказ ${event.payload.orderId} отправлен.`,
+      metadata: event.payload,
+    }),
+  ];
+
+  // Заказчик раньше вообще не узнавал о новом отклике — только сам
+  // фрилансер получал подтверждение "отклик отправлен". Без уведомления
+  // клиент видел новых откликнувшихся, только зайдя на страницу заказа
+  // вручную (баг из живого тестирования: "нет уведомления заказчику").
+  if (order) {
+    notifications.push(
+      notifyUser(context, order.clientId, {
+        eventName: event.name,
+        title: 'Новый отклик на заказ',
+        message: `На заказ «${order.title}» откликнулись за ${event.payload.amount}.`,
+        metadata: event.payload,
+      }),
+    );
+  }
+
+  return Promise.all(notifications);
 }
 
 export function handleBidAccepted(event: BidAcceptedEvent, context: HandlerContext) {

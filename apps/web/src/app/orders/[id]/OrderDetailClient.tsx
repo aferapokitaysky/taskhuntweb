@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { api, getStoredAccessToken } from '@/lib/api';
+import { api, ensureFreshAccessToken } from '@/lib/api';
 import type { ChatMessage, ChatThreadSummary, Order, User } from '@/lib/types';
 import { money } from '@/lib/types';
 import { FileUpload, type UploadedFile } from '@/components/FileUpload';
@@ -277,17 +277,21 @@ export default function OrderDetailClient() {
       .then(setMessages)
       .catch(() => setMessages([]));
 
-    const token = getStoredAccessToken();
-    if (!token) return;
-    const nextSocket = io(`${API_URL}/chat`, { auth: { token } });
-    nextSocket.on('connect', () => nextSocket.emit('joinOrder', { orderId, freelancerId: chatFreelancerId }));
-    nextSocket.on('newMessage', (message: ChatMessage) => {
-      setMessages((current) => (current.some((item) => item.id === message.id) ? current : [...current, message]));
+    let cancelled = false;
+    let nextSocket: Socket | null = null;
+    ensureFreshAccessToken().then((token) => {
+      if (cancelled || !token) return;
+      nextSocket = io(`${API_URL}/chat`, { auth: { token } });
+      nextSocket.on('connect', () => nextSocket?.emit('joinOrder', { orderId, freelancerId: chatFreelancerId }));
+      nextSocket.on('newMessage', (message: ChatMessage) => {
+        setMessages((current) => (current.some((item) => item.id === message.id) ? current : [...current, message]));
+      });
+      nextSocket.on('connect_error', () => setError('Не удалось подключиться к чату'));
+      setSocket(nextSocket);
     });
-    nextSocket.on('connect_error', () => setError('Не удалось подключиться к чату'));
-    setSocket(nextSocket);
     return () => {
-      nextSocket.disconnect();
+      cancelled = true;
+      nextSocket?.disconnect();
     };
   }, [canChat, chatFreelancerId, orderId]);
 

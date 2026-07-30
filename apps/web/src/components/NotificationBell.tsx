@@ -129,9 +129,15 @@ export function NotificationBell() {
   function toggleOpen() {
     setOpen((v) => {
       const next = !v;
-      if (next && buttonRef.current) {
-        const rect = buttonRef.current.getBoundingClientRect();
-        setPosition({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+      if (next) {
+        if (buttonRef.current) {
+          const rect = buttonRef.current.getBoundingClientRect();
+          setPosition({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+        }
+        // Открытие колокольчика = "увидел" — иначе бейдж с числом непрочитанных
+        // висел до тех пор, пока не кликнуть по каждому уведомлению отдельно
+        // или по "Прочитать всё", хотя пользователь их уже увидел в списке.
+        markAllRead();
       }
       return next;
     });
