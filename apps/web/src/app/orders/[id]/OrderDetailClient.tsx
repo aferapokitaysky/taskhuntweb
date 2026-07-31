@@ -156,6 +156,9 @@ export default function OrderDetailClient() {
   const [deliverFiles, setDeliverFiles] = useState<UploadedFile[]>([]);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [bidActionId, setBidActionId] = useState<string | null>(null);
+  const [hireConfirmBidId, setHireConfirmBidId] = useState<string | null>(null);
+  const [declineConfirmBidId, setDeclineConfirmBidId] = useState<string | null>(null);
+  const [approveConfirmTarget, setApproveConfirmTarget] = useState<'order' | string | null>(null);
 
   // --- Отзыв после завершения заказа ---
   const [reviewRating, setReviewRating] = useState(5);
@@ -255,6 +258,12 @@ export default function OrderDetailClient() {
   const milestones = useMemo(() => [...(order?.milestones ?? [])].sort((a, b) => a.position - b.position), [order]);
   const hasMilestones = milestones.length > 0;
   const pendingBidCount = order?.bids?.filter((bid) => bid.status === 'PENDING').length ?? 0;
+  const hireConfirmBid = order?.bids?.find((bid) => bid.id === hireConfirmBidId) ?? null;
+  const declineConfirmBid = order?.bids?.find((bid) => bid.id === declineConfirmBidId) ?? null;
+  const approveConfirmMilestone =
+    approveConfirmTarget && approveConfirmTarget !== 'order'
+      ? (order?.milestones?.find((milestone) => milestone.id === approveConfirmTarget) ?? null)
+      : null;
   const workflowGuidance = order
     ? getWorkflowGuidance({
         status: order.status,
@@ -320,6 +329,7 @@ export default function OrderDetailClient() {
 
   async function approve(target: 'order' | string) {
     setError(null);
+    setApproveConfirmTarget(null);
     setBusyAction(`approve-${target}`);
     try {
       const path = target === 'order' ? `/orders/${orderId}/approve` : `/orders/${orderId}/milestones/${target}/approve`;
@@ -334,6 +344,7 @@ export default function OrderDetailClient() {
 
   async function hireBid(bidId: string) {
     setError(null);
+    setHireConfirmBidId(null);
     setBidActionId(`hire-${bidId}`);
     try {
       await api(`/orders/${orderId}/bids/${bidId}/accept`, { method: 'POST' });
@@ -347,6 +358,7 @@ export default function OrderDetailClient() {
 
   async function declineBid(bidId: string) {
     setError(null);
+    setDeclineConfirmBidId(null);
     setBidActionId(`decline-${bidId}`);
     try {
       await api(`/orders/${orderId}/bids/${bidId}/reject`, {
@@ -769,7 +781,7 @@ export default function OrderDetailClient() {
                         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
                           <button
                             type="button"
-                            onClick={() => hireBid(bid.id)}
+                            onClick={() => setHireConfirmBidId(bid.id)}
                             disabled={bidActionId === `hire-${bid.id}`}
                             className="primary-action justify-center px-4 py-2 text-sm font-semibold disabled:opacity-50"
                           >
@@ -777,7 +789,7 @@ export default function OrderDetailClient() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => declineBid(bid.id)}
+                            onClick={() => setDeclineConfirmBidId(bid.id)}
                             disabled={bidActionId === `decline-${bid.id}`}
                             className="secondary-action justify-center px-4 py-2 text-sm font-semibold disabled:opacity-50"
                           >
@@ -824,7 +836,7 @@ export default function OrderDetailClient() {
                     {isClient && milestone.status === 'DELIVERED' && (
                       <button
                         type="button"
-                        onClick={() => approve(milestone.id)}
+                        onClick={() => setApproveConfirmTarget(milestone.id)}
                         disabled={busyAction === `approve-${milestone.id}`}
                         className="primary-action px-3 py-1.5 text-sm font-medium disabled:opacity-50"
                       >
@@ -866,7 +878,7 @@ export default function OrderDetailClient() {
                   {isClient && order.status === 'IN_REVIEW' && (
                     <button
                       type="button"
-                      onClick={() => approve('order')}
+                      onClick={() => setApproveConfirmTarget('order')}
                       disabled={busyAction === 'approve-order'}
                       className="primary-action px-3 py-1.5 text-sm font-medium disabled:opacity-50"
                     >
@@ -1103,6 +1115,59 @@ export default function OrderDetailClient() {
         </section>
       )}
 
+      <ConfirmDialog
+        open={Boolean(hireConfirmBid)}
+        title="Дать таск этому исполнителю?"
+        description={
+          hireConfirmBid
+            ? `Вы выбираете ${hireConfirmBid.freelancer?.profile?.displayName ?? hireConfirmBid.freelancer?.email ?? 'исполнителя'} на сумму ${money(
+                hireConfirmBid.amount,
+                order.currency,
+              )}. Заказ перейдёт в работу, а остальные ожидающие отклики будут закрыты.`
+            : ''
+        }
+        confirmLabel="Дать таск"
+        busy={Boolean(hireConfirmBidId && bidActionId === `hire-${hireConfirmBidId}`)}
+        onCancel={() => setHireConfirmBidId(null)}
+        onConfirm={() => {
+          if (hireConfirmBidId) void hireBid(hireConfirmBidId);
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(declineConfirmBid)}
+        title="Отклонить отклик?"
+        description={
+          declineConfirmBid
+            ? `Отклик от ${declineConfirmBid.freelancer?.profile?.displayName ?? declineConfirmBid.freelancer?.email ?? 'исполнителя'} будет закрыт. Исполнитель получит понятный статус и не будет ждать решения по этому предложению.`
+            : ''
+        }
+        confirmLabel="Отклонить"
+        busy={Boolean(declineConfirmBidId && bidActionId === `decline-${declineConfirmBidId}`)}
+        onCancel={() => setDeclineConfirmBidId(null)}
+        onConfirm={() => {
+          if (declineConfirmBidId) void declineBid(declineConfirmBidId);
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(approveConfirmTarget)}
+        title="Принять работу и отпустить оплату?"
+        description={
+          approveConfirmTarget === 'order'
+            ? `Вы принимаете результат по заказу и отпускаете оплату исполнителю: ${money(order.budgetMin, order.currency)}. После этого заказ станет завершённым.`
+            : approveConfirmMilestone
+              ? `Вы принимаете этап «${approveConfirmMilestone.title}» и отпускаете исполнителю ${money(
+                  approveConfirmMilestone.amount,
+                  order.currency,
+                )}. Это действие меняет финансовый статус этапа.`
+              : ''
+        }
+        confirmLabel="Принять и оплатить"
+        busy={Boolean(approveConfirmTarget && busyAction === `approve-${approveConfirmTarget}`)}
+        onCancel={() => setApproveConfirmTarget(null)}
+        onConfirm={() => {
+          if (approveConfirmTarget) void approve(approveConfirmTarget);
+        }}
+      />
       <ConfirmDialog
         open={issueInvoiceConfirmOpen}
         title="Отправить счёт заказчику?"
