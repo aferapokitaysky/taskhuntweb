@@ -12,6 +12,7 @@ import { EyeIcon } from '@/components/icons/EyeIcon';
 import { ProfileNavIcon } from '@/components/icons/illustrated/ProfileNavIcon';
 import { useToast } from '@/components/Toast';
 import { Mascot } from '@/components/Mascot';
+import { NotificationPreferencesPanel } from '@/components/NotificationPreferencesPanel';
 
 const MAX_SKILLS = 25;
 
@@ -856,6 +857,8 @@ export default function ProfilePage() {
         </button>
         </div>
       </form>
+
+      <NotificationPreferencesPanel />
 
       <section className="premium-panel p-6">
         <div className="mb-4 flex items-center justify-between">

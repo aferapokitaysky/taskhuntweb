@@ -75,6 +75,16 @@ TaskHunt должен ощущаться не как демо и не как л�
 - Current gap: `POST /wallet/invoices` returns `payment.payAddress` only to the freelancer who creates the invoice; chat messages include only `invoice`, so the client can see amount/status but cannot actually open/copy the payment address from chat.
 - Acceptance: client-side invoice card can show "Оплатить счёт" -> confirmation -> payment address/amount/currency, and after IPN status becomes `PAID` the same card renders as receipt/check.
 
+### Request 006: Notification deep-link metadata
+
+- Owner: Claude
+- Needed by: Codex
+- Endpoint/area: notifications table + notification event listener.
+- Need: include typed metadata for in-app notifications so the web bell can deep-link to the exact entity instead of broad sections.
+- Suggested shape: `metadata: { orderId?: string; bidId?: string; invoiceId?: string; disputeId?: string; chatFreelancerId?: string; href?: string }`.
+- Current gap: notification rows only have `eventName`, `title`, `message`; Codex can infer a broad destination (`/dashboard`, `/chats`, `/support`) but cannot open the exact order/chat/invoice/dispute.
+- Acceptance: `GET /notifications/me` returns metadata for new notifications; existing rows may return `metadata: null`. Bell click opens exact route like `/orders/:id`, `/chats?orderId=:id&freelancerId=:id`, or support/dispute context.
+
 ## API Decisions
 
 - 2026-07-30 Codex: frontend will not invent backend fields. Missing endpoints go here first.
