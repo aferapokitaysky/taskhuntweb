@@ -90,6 +90,9 @@ function DashboardContent() {
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [savingOrderDraft, setSavingOrderDraft] = useState(false);
   const [orderFormNotice, setOrderFormNotice] = useState<string | null>(null);
+  const [orderDrafts, setOrderDrafts] = useState<Order[]>([]);
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
   const [bidForm, setBidForm] = useState({ amount: '', deliveryDays: '3', message: '' });
   const [showWithdrawForm, setShowWithdrawForm] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -161,6 +164,7 @@ function DashboardContent() {
         }
 
         if (user.roles.includes('CLIENT')) {
+          refreshDrafts().catch(() => undefined);
           api<typeof previousFreelancers>('/users/me/previous-freelancers')
             .then(setPreviousFreelancers)
             .catch(() => undefined);
@@ -237,6 +241,11 @@ function DashboardContent() {
     if (filterMinBudget) params.set('minBudget', filterMinBudget);
     const nextOrders = await api<PaginatedOrders>(`/orders${params.toString() ? `?${params}` : ''}`);
     setOrders(nextOrders.items);
+  }
+
+  async function refreshDrafts() {
+    const drafts = await api<Order[]>('/orders/drafts/mine');
+    setOrderDrafts(drafts);
   }
 
   // Дебаунс — не дёргаем API на каждое нажатие клавиши/клик по фильтру
@@ -333,22 +342,27 @@ function DashboardContent() {
     setOrderFormNotice(null);
     setCreatingOrder(true);
     try {
-      await api<Order>('/orders', {
-        method: 'POST',
-        body: JSON.stringify({
-          categoryId: orderForm.categoryId,
-          title: orderForm.title,
-          description: orderForm.description,
-          budgetMin: Number(orderForm.budgetMin),
-          budgetMax: orderForm.budgetMax ? Number(orderForm.budgetMax) : undefined,
-          deadline: orderForm.deadline || undefined,
-          tags: orderForm.tags,
-        }),
-      });
+      const payload = {
+        categoryId: orderForm.categoryId,
+        title: orderForm.title,
+        description: orderForm.description,
+        budgetMin: Number(orderForm.budgetMin),
+        budgetMax: orderForm.budgetMax ? Number(orderForm.budgetMax) : undefined,
+        deadline: orderForm.deadline || undefined,
+        tags: orderForm.tags,
+      };
+      if (editingDraftId) {
+        await api(`/orders/${editingDraftId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+        await api(`/orders/drafts/${editingDraftId}/publish`, { method: 'POST' });
+      } else {
+        await api<Order>('/orders', { method: 'POST', body: JSON.stringify(payload) });
+      }
       setOrderForm((current) => ({ ...current, title: '', description: '', budgetMin: '', budgetMax: '', deadline: '', tags: [] }));
+      setEditingDraftId(null);
       setTagInput('');
       setOrderFormNotice('Заказ опубликован. Он уже виден фрилансерам в ленте.');
       await refreshOrders();
+      await refreshDrafts().catch(() => undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать заказ');
     } finally {
@@ -361,24 +375,57 @@ function DashboardContent() {
     setOrderFormNotice(null);
     setSavingOrderDraft(true);
     try {
-      await api<Order>('/orders/drafts', {
-        method: 'POST',
-        body: JSON.stringify({
-          categoryId: orderForm.categoryId,
-          title: orderForm.title || undefined,
-          description: orderForm.description || undefined,
-          budgetMin: orderForm.budgetMin ? Number(orderForm.budgetMin) : undefined,
-          budgetMax: orderForm.budgetMax ? Number(orderForm.budgetMax) : undefined,
-          deadline: orderForm.deadline || undefined,
-          tags: orderForm.tags,
-        }),
-      });
+      const payload = {
+        categoryId: orderForm.categoryId,
+        title: orderForm.title || undefined,
+        description: orderForm.description || undefined,
+        budgetMin: orderForm.budgetMin ? Number(orderForm.budgetMin) : undefined,
+        budgetMax: orderForm.budgetMax ? Number(orderForm.budgetMax) : undefined,
+        deadline: orderForm.deadline || undefined,
+        tags: orderForm.tags,
+      };
+      if (editingDraftId) {
+        await api(`/orders/${editingDraftId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      } else {
+        const draft = await api<Order>('/orders/drafts', { method: 'POST', body: JSON.stringify(payload) });
+        setEditingDraftId(draft.id);
+      }
       setOrderFormNotice('Черновик сохранён. Его можно будет продолжить из ваших заказов.');
+      await refreshDrafts();
       await refreshOrders();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось сохранить черновик');
     } finally {
       setSavingOrderDraft(false);
+    }
+  }
+
+  function continueDraft(draft: Order) {
+    setEditingDraftId(draft.id);
+    setOrderForm({
+      categoryId: draft.categoryId,
+      title: draft.title === 'Черновик заказа' ? '' : draft.title,
+      description: draft.description ?? '',
+      budgetMin: Number(draft.budgetMin) > 0 ? String(draft.budgetMin) : '',
+      budgetMax: draft.budgetMax ? String(draft.budgetMax) : '',
+      deadline: draft.deadline ? draft.deadline.slice(0, 10) : '',
+      tags: draft.tags ?? [],
+    });
+    setOrderFormNotice('Черновик загружен в форму. Можно дописать и опубликовать.');
+    document.getElementById('create-order')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function deleteDraft(draftId: string) {
+    setDeletingDraftId(draftId);
+    setError(null);
+    try {
+      await api(`/orders/drafts/${draftId}`, { method: 'DELETE' });
+      setOrderDrafts((current) => current.filter((draft) => draft.id !== draftId));
+      if (editingDraftId === draftId) setEditingDraftId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось удалить черновик');
+    } finally {
+      setDeletingDraftId(null);
     }
   }
 
@@ -1191,6 +1238,42 @@ function DashboardContent() {
             </section>
           )}
 
+          {isClient && orderDrafts.length > 0 && (
+            <section className="premium-panel rounded-[2rem] p-5">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Черновики</p>
+                  <h2 className="mt-1 font-serif text-2xl text-stone-950">Продолжить заказ</h2>
+                  <p className="mt-1 text-sm leading-5 text-stone-500">Незавершённые брифы не теряются: допишите и публикуйте, когда готовы.</p>
+                </div>
+                <span className="rounded-full bg-card-sand px-3 py-1 text-xs font-semibold text-stone-700">{orderDrafts.length}</span>
+              </div>
+              <div className="space-y-2">
+                {orderDrafts.slice(0, 4).map((draft) => (
+                  <div key={draft.id} className="rounded-[1.35rem] border border-stone-100 bg-white/75 p-3">
+                    <p className="break-words text-sm font-semibold text-stone-950">{draft.title === 'Черновик заказа' ? 'Без названия' : draft.title}</p>
+                    <p className="mt-1 break-words text-xs leading-5 text-stone-500">
+                      {draft.description || 'Описание ещё не заполнено'}
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <button type="button" onClick={() => continueDraft(draft)} className="primary-action px-3 py-2 text-sm">
+                        Продолжить
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteDraft(draft.id)}
+                        disabled={deletingDraftId === draft.id}
+                        className="secondary-action px-3 py-2 text-sm disabled:opacity-50"
+                      >
+                        {deletingDraftId === draft.id ? 'Удаляем...' : 'Удалить'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {isClient && (
             <section id="create-order" className="premium-panel scroll-mt-28 overflow-hidden rounded-[2rem] p-0">
               <div className="border-b border-stone-100 bg-gradient-to-br from-card-sand/65 via-white to-card-sage/45 p-5">
@@ -1332,6 +1415,14 @@ function DashboardContent() {
                     <p className="mt-1 break-words text-sm font-semibold text-stone-950">{orderForm.title || 'Название появится здесь'}</p>
                     <p className="mt-1 text-xs font-semibold text-brand">{orderFormBudgetPreview}</p>
                   </div>
+                  {editingDraftId && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-[1.25rem] bg-card-lavender/65 px-3 py-2">
+                      <p className="text-xs font-semibold text-stone-700">Редактируете сохранённый черновик</p>
+                      <button type="button" onClick={() => setEditingDraftId(null)} className="text-xs font-semibold text-brand hover:text-brand-dark">
+                        Создать новый
+                      </button>
+                    </div>
+                  )}
                   {orderFormNotice && <p className="rounded-[1.25rem] bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{orderFormNotice}</p>}
                   <div className="grid gap-2 sm:grid-cols-2">
                     <button
@@ -1340,14 +1431,14 @@ function DashboardContent() {
                       disabled={savingOrderDraft || !orderForm.categoryId}
                       className="secondary-action rounded-[1.35rem] px-4 py-3 text-sm font-semibold disabled:opacity-50"
                     >
-                      {savingOrderDraft ? 'Сохраняем...' : 'Сохранить черновик'}
+                      {savingOrderDraft ? 'Сохраняем...' : editingDraftId ? 'Обновить черновик' : 'Сохранить черновик'}
                     </button>
                     <button
                       type="submit"
                       disabled={creatingOrder || !orderFormReady}
                       className="primary-action rounded-[1.35rem] px-4 py-3 font-semibold disabled:opacity-50"
                     >
-                      {creatingOrder ? 'Публикуем...' : 'Опубликовать'}
+                      {creatingOrder ? 'Публикуем...' : editingDraftId ? 'Опубликовать черновик' : 'Опубликовать'}
                     </button>
                   </div>
               </form>

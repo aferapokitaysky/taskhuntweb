@@ -18,6 +18,13 @@ const MAX_SKILLS = 25;
 
 const EMPTY_PORTFOLIO_FORM = { title: '', description: '', imageUrl: '', projectUrl: '', tags: [] as string[] };
 
+interface ProfileCompleteness {
+  percentage: number;
+  role: 'CLIENT' | 'FREELANCER';
+  missingFields: { field: string; label: string }[];
+  nextAction: string;
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -94,11 +101,17 @@ export default function ProfilePage() {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [backendCompleteness, setBackendCompleteness] = useState<ProfileCompleteness | null>(null);
 
   useEffect(() => {
-    Promise.all([api<User>('/users/me'), api<Skill[]>('/skills')])
-      .then(([user, skills]) => {
+    Promise.all([
+      api<User>('/users/me'),
+      api<Skill[]>('/skills'),
+      api<ProfileCompleteness>('/users/me/completeness').catch(() => null),
+    ])
+      .then(([user, skills, completeness]) => {
         setAllSkills(skills);
+        setBackendCompleteness(completeness);
         setUserId(user.id);
         setForm({
           displayName: user.profile?.displayName ?? '',
@@ -520,7 +533,7 @@ export default function ProfilePage() {
     Boolean(form.githubUrl.trim() || form.websiteUrl.trim()),
   ];
   const profileCompletion = Math.round((profileCompletionItems.filter(Boolean).length / profileCompletionItems.length) * 100);
-  const nextProfileStep =
+  const localNextProfileStep =
     ([
       [!form.displayName.trim(), 'Добавьте имя, которое увидят клиенты'],
       [!form.bio.trim(), 'Опишите, какие задачи вы закрываете лучше всего'],
@@ -529,7 +542,7 @@ export default function ProfilePage() {
       [portfolioItems.length === 0, 'Добавьте первый кейс в портфолио'],
       [!(form.githubUrl.trim() || form.websiteUrl.trim()), 'Прикрепите GitHub или сайт с работами'],
     ] as Array<[boolean, string]>).find(([missing]) => missing)?.[1] ?? 'Профиль выглядит готовым к показу заказчикам';
-  const profileQuality = [
+  const localProfileQuality = [
     { label: 'Имя', done: Boolean(form.displayName.trim()) },
     { label: 'Описание', done: Boolean(form.bio.trim()) },
     { label: 'Локация', done: Boolean(form.city.trim() || form.country.trim()) },
@@ -537,6 +550,14 @@ export default function ProfilePage() {
     { label: 'Портфолио', done: portfolioItems.length > 0 },
     { label: 'Ссылки', done: Boolean(form.githubUrl.trim() || form.websiteUrl.trim()) },
   ];
+  const displayedProfileCompletion = backendCompleteness?.percentage ?? profileCompletion;
+  const nextProfileStep = backendCompleteness?.nextAction ?? localNextProfileStep;
+  const profileQuality = backendCompleteness
+    ? [
+        { label: backendCompleteness.role === 'CLIENT' ? 'Роль заказчика' : 'Роль фрилансера', done: true },
+        ...backendCompleteness.missingFields.map((field) => ({ label: field.label, done: false })),
+      ]
+    : localProfileQuality;
 
   if (loading) {
     return (
@@ -573,11 +594,11 @@ export default function ProfilePage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase text-stone-400">Заполнение</p>
-                <p className="mt-1 font-serif text-4xl text-stone-950">{profileCompletion}%</p>
+                <p className="mt-1 font-serif text-4xl text-stone-950">{displayedProfileCompletion}%</p>
               </div>
             </div>
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-stone-100">
-              <div className="h-full rounded-full bg-brand" style={{ width: `${profileCompletion}%` }} />
+              <div className="h-full rounded-full bg-brand" style={{ width: `${displayedProfileCompletion}%` }} />
             </div>
             <p className="mt-3 text-sm leading-5 text-stone-600">{nextProfileStep}</p>
           </div>
@@ -734,7 +755,7 @@ export default function ProfilePage() {
             </p>
           </div>
           <span className="rounded-full bg-card-sand px-3 py-1 text-xs font-semibold text-stone-700">
-            {profileCompletion}% готово
+            {displayedProfileCompletion}% готово
           </span>
         </div>
         </div>
