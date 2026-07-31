@@ -1,24 +1,57 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api, saveTokens } from '@/lib/api';
 import { OAuthButtons } from '@/components/OAuthButtons';
-import { Logo } from '@/components/Logo';
+import { AuthShell } from '@/components/AuthShell';
 import { ClientIcon } from '@/components/icons/illustrated/ClientIcon';
 import { FreelancerIcon } from '@/components/icons/illustrated/FreelancerIcon';
 
 type Role = 'CLIENT' | 'FREELANCER';
 
+function getPasswordStrength(password: string) {
+  const checks = [
+    password.length >= 8,
+    /[A-ZА-Я]/.test(password),
+    /[a-zа-я]/.test(password),
+    /\d/.test(password),
+    /[^A-Za-zА-Яа-я0-9]/.test(password),
+  ];
+  const score = checks.filter(Boolean).length;
+  if (!password) return { score: 0, label: 'Введите пароль', bar: 'w-0 bg-stone-200' };
+  if (score <= 2) return { score, label: 'Слабый пароль', bar: 'w-1/3 bg-red-400' };
+  if (score <= 4) return { score, label: 'Нормальный пароль', bar: 'w-2/3 bg-amber-400' };
+  return { score, label: 'Сильный пароль', bar: 'w-full bg-emerald-500' };
+}
+
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto max-w-md px-4 py-12 text-stone-500">Загружаем регистрацию...</main>}>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm() {
   const router = useRouter();
-  const [role, setRole] = useState<Role | null>(null);
+  const searchParams = useSearchParams();
+  const initialRole = useMemo<Role | null>(() => {
+    const queryRole = searchParams.get('role');
+    return queryRole === 'CLIENT' || queryRole === 'FREELANCER' ? queryRole : null;
+  }, [searchParams]);
+  const [role, setRole] = useState<Role | null>(initialRole);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const passwordStrength = getPasswordStrength(password);
+
+  useEffect(() => {
+    setRole(initialRole);
+  }, [initialRole]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,18 +74,19 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
-      <Link href="/" className="mb-8 inline-flex w-fit transition-transform hover:scale-105">
-        <Logo className="h-9" />
-      </Link>
-      <h1 className="mb-6 font-serif text-2xl text-stone-900">Регистрация на TaskHunt</h1>
-
+    <AuthShell
+      eyebrow="Новый аккаунт"
+      title="Создайте профиль под вашу роль"
+      description="Сначала выберите сценарий: нанимать исполнителей или брать заказы. После регистрации короткая анкета настроит рекомендации."
+      sideTitle="Два сценария в одной системе: нанимайте и выполняйте безопасно"
+    >
       {/* Шаг 1: выбор роли — определяет дальнейшую анкету/квиз */}
       <div className="mb-6 grid grid-cols-2 gap-3">
         <button
           type="button"
           onClick={() => setRole('CLIENT')}
-          className={`group flex flex-col items-start gap-2 rounded-2xl bg-card-sand p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+          aria-pressed={role === 'CLIENT'}
+          className={`interactive-card group flex flex-col items-start gap-2 rounded-2xl bg-card-sand p-4 text-left ${
             role === 'CLIENT' ? 'ring-2 ring-brand ring-offset-2 ring-offset-cream' : ''
           }`}
         >
@@ -67,7 +101,8 @@ export default function RegisterPage() {
         <button
           type="button"
           onClick={() => setRole('FREELANCER')}
-          className={`group flex flex-col items-start gap-2 rounded-2xl bg-card-sage p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+          aria-pressed={role === 'FREELANCER'}
+          className={`interactive-card group flex flex-col items-start gap-2 rounded-2xl bg-card-sage p-4 text-left ${
             role === 'FREELANCER' ? 'ring-2 ring-brand ring-offset-2 ring-offset-cream' : ''
           }`}
         >
@@ -88,7 +123,7 @@ export default function RegisterPage() {
           required
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          className="rounded-lg border border-stone-300 px-4 py-3"
+          className="field-surface px-4 py-3"
         />
         <input
           type="email"
@@ -96,7 +131,7 @@ export default function RegisterPage() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="rounded-lg border border-stone-300 px-4 py-3"
+          className="field-surface px-4 py-3"
         />
         <input
           type="password"
@@ -105,15 +140,24 @@ export default function RegisterPage() {
           minLength={8}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded-lg border border-stone-300 px-4 py-3"
+          className="field-surface px-4 py-3"
         />
+        <div className="-mt-2">
+          <div className="h-1.5 overflow-hidden rounded-full bg-stone-100">
+            <div className={`h-full rounded-full transition-all duration-300 ${passwordStrength.bar}`} />
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
+            <span>{passwordStrength.label}</span>
+            <span>{passwordStrength.score}/5</span>
+          </div>
+        </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         <button
           type="submit"
           disabled={!role || loading}
-          className="rounded-lg bg-brand px-4 py-3 font-medium text-white disabled:opacity-50"
+          className="primary-action px-4 py-3"
         >
           {loading ? 'Создаём аккаунт...' : 'Продолжить'}
         </button>
@@ -122,6 +166,12 @@ export default function RegisterPage() {
       <div className="mt-6">
         <OAuthButtons role={role} />
       </div>
-    </main>
+      <p className="mt-6 text-sm text-stone-500">
+        Уже есть аккаунт?{' '}
+        <Link href="/login" className="font-semibold text-brand hover:text-brand-dark">
+          Войти
+        </Link>
+      </p>
+    </AuthShell>
   );
 }

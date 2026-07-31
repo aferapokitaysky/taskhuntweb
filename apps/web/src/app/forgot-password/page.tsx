@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { Logo } from '@/components/Logo';
+import { AuthShell } from '@/components/AuthShell';
 import { AccessIcon } from '@/components/icons/illustrated/AccessIcon';
 
 export default function ForgotPasswordPage() {
@@ -27,12 +27,13 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-4 py-12">
-      <Link href="/" className="mb-6 inline-flex w-fit transition-transform hover:scale-105">
-        <Logo className="h-9" />
-      </Link>
-
-      <div className="w-full rounded-3xl bg-white p-8 text-center shadow-sm">
+    <AuthShell
+      eyebrow="Восстановление доступа"
+      title="Вернём доступ без паники"
+      description="Введите email аккаунта. Если он зарегистрирован, отправим безопасную ссылку для создания нового пароля."
+      sideTitle="Безопасность аккаунта важна так же, как безопасность сделки"
+    >
+      <div className="text-center">
         <Link
           href="/login"
           className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-stone-500 hover:text-stone-900"
@@ -58,19 +59,19 @@ export default function ForgotPasswordPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="rounded-lg border border-stone-300 px-4 py-3"
+              className="field-surface px-4 py-3"
             />
             {error && <p className="text-sm text-red-600">{error}</p>}
             <button
               type="submit"
               disabled={loading}
-              className="rounded-lg bg-brand px-4 py-3 font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+              className="primary-action px-4 py-3"
             >
               {loading ? 'Отправляем…' : 'Отправить ссылку'}
             </button>
           </form>
         )}
       </div>
-    </main>
+    </AuthShell>
   );
 }

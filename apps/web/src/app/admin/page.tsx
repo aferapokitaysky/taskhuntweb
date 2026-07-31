@@ -10,6 +10,7 @@ import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 import { EscrowIcon } from '@/components/icons/illustrated/EscrowIcon';
 import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
+import { Mascot } from '@/components/Mascot';
 import type { Category, CommissionRule, Dispute, FeatureFlag, Skill, User } from '@/lib/types';
 
 // Category.slug/Skill.slug обязательны и уникальны на бэке — генерируем
@@ -101,9 +102,40 @@ export default function AdminPage() {
   return (
     <main className="mx-auto max-w-7xl px-4 py-8">
       <AppHeader />
-      <h1 className="mb-6 font-serif text-3xl text-stone-900">Admin</h1>
 
-      <div className="mb-6 flex flex-wrap gap-2">
+      <section className="workspace-hero mb-6 p-6 md:p-8">
+        <div className="relative grid gap-6 lg:grid-cols-[1fr_360px] lg:items-end">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Staff console</p>
+            <h1 className="mt-3 font-serif text-3xl leading-tight text-stone-950 md:text-5xl">Пульт качества маркетплейса</h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-stone-600">
+              Метрики, споры, пользователи, комиссии и каталог собраны в одном рабочем контуре для быстрых решений команды.
+            </p>
+          </div>
+          <div className="rounded-3xl border border-stone-100 bg-white/65 p-4 shadow-sm backdrop-blur">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Staff pulse</p>
+              <Mascot name="workLaptop" size="h-14 w-14" />
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="hero-stat p-3">
+                <p className="font-serif text-2xl text-stone-950">{users.length}</p>
+                <p className="text-[11px] uppercase text-stone-400">users</p>
+              </div>
+              <div className="hero-stat p-3">
+                <p className="font-serif text-2xl text-stone-950">{disputes.length}</p>
+                <p className="text-[11px] uppercase text-stone-400">disputes</p>
+              </div>
+              <div className="hero-stat p-3">
+                <p className="font-serif text-2xl text-stone-950">{flags.length}</p>
+                <p className="text-[11px] uppercase text-stone-400">flags</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="premium-panel mb-6 flex flex-wrap items-center gap-2 p-2">
         {[
           ['metrics', 'Метрики'],
           ['users', 'Users'],
@@ -116,13 +148,14 @@ export default function AdminPage() {
             key={key}
             type="button"
             onClick={() => setTab(key as Tab)}
-            className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-              tab === key ? 'border-brand bg-brand/10 text-brand' : 'border-stone-300 bg-white hover:bg-stone-50'
+            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+              tab === key ? 'bg-brand text-white shadow-sm' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950'
             }`}
           >
             {label}
           </button>
         ))}
+        <Mascot name="alertWarning" size="ml-auto h-12 w-12" />
       </div>
 
       {error && <ErrorNotice message={error} />}
@@ -131,7 +164,7 @@ export default function AdminPage() {
       {tab === 'users' && (
         <section className="space-y-3">
           {users.map((user) => (
-            <article key={user.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+            <article key={user.id} className="interactive-card flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4">
               <div>
                 <p className="font-semibold">{user.profile?.displayName ?? user.email}</p>
                 <p className="text-sm text-stone-500">{user.email}</p>
@@ -140,7 +173,7 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={() => mutate(() => api(`/admin/users/${user.id}/suspend`, { method: 'POST' }))}
-                  className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium"
+                  className="secondary-action px-3 py-2 text-sm font-medium"
                 >
                   Suspend
                 </button>
@@ -161,7 +194,7 @@ export default function AdminPage() {
       {tab === 'disputes' && (
         <section className="space-y-3">
           {disputes.map((dispute) => (
-            <article key={dispute.id} className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+            <article key={dispute.id} className="interactive-card rounded-2xl p-4">
               <div className="flex flex-wrap justify-between gap-3">
                 <div>
                   <p className="font-semibold">Order {dispute.orderId}</p>
@@ -173,13 +206,13 @@ export default function AdminPage() {
                 placeholder="Resolution notes"
                 value={notesByDispute[dispute.id] ?? ''}
                 onChange={(e) => setNotesByDispute({ ...notesByDispute, [dispute.id]: e.target.value })}
-                className="mt-4 min-h-20 w-full rounded-lg border border-stone-300 px-3 py-2"
+                className="field-surface mt-4 min-h-20 w-full px-3 py-2"
               />
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => mutate(() => api(`/admin/disputes/${dispute.id}/assign`, { method: 'PATCH' }))}
-                  className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium"
+                  className="secondary-action px-3 py-2 text-sm font-medium"
                 >
                   Assign to me
                 </button>
@@ -207,7 +240,7 @@ export default function AdminPage() {
                       }),
                     )
                   }
-                  className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white"
+                  className="primary-action px-3 py-2 text-sm font-medium"
                 >
                   Freelancer wins
                 </button>
@@ -221,7 +254,7 @@ export default function AdminPage() {
       {tab === 'flags' && (
         <section className="space-y-3">
           {flags.map((flag) => (
-            <article key={flag.key} className="flex items-center justify-between gap-3 rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+            <article key={flag.key} className="interactive-card flex items-center justify-between gap-3 rounded-2xl p-4">
               <div>
                 <p className="font-semibold">{flag.key}</p>
                 <p className="text-sm text-stone-500">Rollout {flag.rolloutPercent}%</p>
@@ -269,7 +302,7 @@ export default function AdminPage() {
                 ['Новых юзеров за неделю', metrics.newUsersThisWeek, 'bg-card-lavender'],
               ] as const
             ).map(([label, value, colorClass]) => (
-              <div key={label} className={`rounded-2xl ${colorClass} p-4`}>
+              <div key={label} className={`interactive-card rounded-2xl ${colorClass} p-4`}>
                 <p className="text-xs uppercase text-stone-600">{label}</p>
                 <p className="mt-1 font-serif text-xl text-stone-900">{value}</p>
               </div>
@@ -277,7 +310,7 @@ export default function AdminPage() {
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+            <div className="premium-panel p-4">
               <h3 className="mb-3 font-semibold">Заказы по статусам</h3>
               <div className="space-y-1 text-sm">
                 {Object.entries(metrics.ordersByStatus).map(([status, count]) => (
@@ -288,7 +321,7 @@ export default function AdminPage() {
                 ))}
               </div>
             </div>
-            <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+            <div className="premium-panel p-4">
               <h3 className="mb-3 font-semibold">Активные подписки по тирам</h3>
               <div className="space-y-1 text-sm">
                 {Object.entries(metrics.activeSubscriptionsByTier).map(([tier, count]) => (
@@ -305,7 +338,7 @@ export default function AdminPage() {
 
       {tab === 'catalog' && (
         <section className="grid gap-6 md:grid-cols-2">
-          <div>
+          <div className="premium-panel p-5">
             <h3 className="mb-3 font-semibold">Категории</h3>
             <form
               onSubmit={(e) => {
@@ -325,15 +358,15 @@ export default function AdminPage() {
                 placeholder="Новая категория"
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                className="field-surface min-w-0 flex-1 px-3 py-2 text-sm"
               />
-              <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white">
+              <button type="submit" className="primary-action px-3 py-2 text-sm font-medium">
                 Добавить
               </button>
             </form>
             <div className="space-y-2">
               {categories.map((c) => (
-                <div key={c.id} className="flex items-center justify-between rounded-xl border border-stone-100 bg-white p-3 text-sm">
+                <div key={c.id} className="flex items-center justify-between rounded-2xl border border-stone-100 bg-white p-3 text-sm shadow-sm">
                   <span>{c.name}</span>
                   <button
                     type="button"
@@ -348,7 +381,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div>
+          <div className="premium-panel p-5">
             <h3 className="mb-3 font-semibold">Навыки</h3>
             <form
               onSubmit={(e) => {
@@ -368,15 +401,15 @@ export default function AdminPage() {
                 placeholder="Новый навык"
                 value={newSkillName}
                 onChange={(e) => setNewSkillName(e.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                className="field-surface min-w-0 flex-1 px-3 py-2 text-sm"
               />
-              <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white">
+              <button type="submit" className="primary-action px-3 py-2 text-sm font-medium">
                 Добавить
               </button>
             </form>
             <div className="space-y-2">
               {skills.map((s) => (
-                <div key={s.id} className="flex items-center justify-between gap-2 rounded-xl border border-stone-100 bg-white p-3 text-sm">
+                <div key={s.id} className="flex items-center justify-between gap-2 rounded-2xl border border-stone-100 bg-white p-3 text-sm shadow-sm">
                   <span className="min-w-0 flex-1 truncate">{s.name}</span>
                   <select
                     defaultValue=""
@@ -390,7 +423,7 @@ export default function AdminPage() {
                       }
                       mutate(() => api(`/admin/skills/${s.id}/merge-into/${targetId}`, { method: 'POST' }));
                     }}
-                    className="rounded-lg border border-stone-300 px-2 py-1.5 text-xs text-stone-600"
+                    className="field-surface px-2 py-1.5 text-xs text-stone-600"
                   >
                     <option value="">Объединить с…</option>
                     {skills
@@ -423,7 +456,7 @@ function CommissionEditor({ rule, onSave }: { rule: CommissionRule; onSave: (per
   const [percentage, setPercentage] = useState(String(rule.percentage ?? ''));
 
   return (
-    <article className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+    <article className="interactive-card flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4">
       <div>
         <p className="font-semibold">{rule.type}</p>
         <p className="text-sm text-stone-500">Current: {rule.percentage ?? '0'}%</p>
@@ -435,9 +468,9 @@ function CommissionEditor({ rule, onSave }: { rule: CommissionRule; onSave: (per
           step="0.1"
           value={percentage}
           onChange={(e) => setPercentage(e.target.value)}
-          className="w-28 rounded-lg border border-stone-300 px-3 py-2"
+          className="field-surface w-28 px-3 py-2"
         />
-        <button type="button" onClick={() => onSave(Number(percentage))} className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white">
+        <button type="button" onClick={() => onSave(Number(percentage))} className="primary-action px-3 py-2 text-sm font-medium">
           Save
         </button>
       </div>

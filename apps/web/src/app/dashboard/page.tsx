@@ -9,18 +9,20 @@ import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import type { WithdrawTarget } from '@/components/PayoutAddressBook';
 import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
-import { WalletIcon } from '@/components/icons/WalletIcon';
-import { ShieldIcon } from '@/components/icons/ShieldIcon';
-import { PadlockIcon } from '@/components/icons/PadlockIcon';
+import { LockedFundsIcon } from '@/components/icons/illustrated/LockedFundsIcon';
+import { BalanceMainIcon } from '@/components/icons/illustrated/BalanceMainIcon';
+import { BalanceEscrowIcon } from '@/components/icons/illustrated/BalanceEscrowIcon';
+import { BalancePendingIcon } from '@/components/icons/illustrated/BalancePendingIcon';
+import { FavoriteOrderIcon } from '@/components/icons/illustrated/FavoriteOrderIcon';
+import { TransactionDirectionIcon } from '@/components/icons/illustrated/TransactionDirectionIcon';
 import { WithdrawIcon } from '@/components/icons/WithdrawIcon';
-import { ClockIcon } from '@/components/icons/ClockIcon';
 import { Mascot } from '@/components/Mascot';
 import { TargetIcon } from '@/components/icons/TargetIcon';
 import { DownloadIcon } from '@/components/icons/DownloadIcon';
 import { OrderStatusBadge } from '@/components/OrderStatusBadge';
 import { Skeleton, OrderCardSkeleton } from '@/components/Skeleton';
 import { NextLevelWidget } from '@/components/NextLevelWidget';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api, API_URL, downloadFile } from '@/lib/api';
 import type { BidTemplate, Category, LedgerEntryItem, Order, PaginatedOrders, PreviousFreelancer, SavedPayoutAddress, SavedSearch, User, WalletBalance } from '@/lib/types';
@@ -47,6 +49,16 @@ const TRANSACTION_TYPE_LABELS: Record<LedgerEntryItem['type'], string> = {
   CHARGEBACK: 'Чарджбэк',
 };
 
+type OrderStatusView = 'all' | 'open' | 'active' | 'review' | 'done';
+
+const ORDER_STATUS_TABS: Array<{ value: OrderStatusView; label: string; statuses: Order['status'][] }> = [
+  { value: 'all', label: 'Все', statuses: ['DRAFT', 'OPEN', 'IN_PROGRESS', 'IN_REVIEW', 'COMPLETED', 'CANCELLED', 'DISPUTED', 'EXPIRED'] },
+  { value: 'open', label: 'Открытые', statuses: ['OPEN'] },
+  { value: 'active', label: 'В работе', statuses: ['IN_PROGRESS', 'DISPUTED'] },
+  { value: 'review', label: 'На проверке', statuses: ['IN_REVIEW'] },
+  { value: 'done', label: 'Завершенные', statuses: ['COMPLETED', 'CANCELLED', 'EXPIRED'] },
+];
+
 export default function DashboardPage() {
   return (
     <Suspense fallback={<main className="mx-auto max-w-7xl px-4 py-10 text-stone-500">Загружаем dashboard...</main>}>
@@ -60,6 +72,7 @@ function DashboardContent() {
   const [me, setMe] = useState<User | null>(null);
   const [wallet, setWallet] = useState<WalletBalance | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [recommendedOrders, setRecommendedOrders] = useState<Order[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +111,7 @@ function DashboardContent() {
   const [invitedOrderIds, setInvitedOrderIds] = useState<Set<string>>(new Set());
   const [savedOrders, setSavedOrders] = useState<Order[]>([]);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [orderStatusView, setOrderStatusView] = useState<OrderStatusView>('all');
   const [filterCategoryId, setFilterCategoryId] = useState(searchParams.get('categoryId') ?? '');
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const [filterTagInput, setFilterTagInput] = useState('');
@@ -125,37 +139,48 @@ function DashboardContent() {
         setCategories(categoryList);
         const firstCategory = categoryList.flatMap((category) => [category, ...(category.children ?? [])])[0];
         setOrderForm((current) => ({ ...current, categoryId: firstCategory?.id ?? '' }));
+
+        if (user.roles.includes('FREELANCER')) {
+          api<Order[]>('/orders/saved/mine')
+            .then((list) => {
+              setSavedOrders(list);
+              setSavedOrderIds(new Set(list.map((o) => o.id)));
+            })
+            .catch(() => undefined);
+
+          api<{ orderId: string }[]>('/orders/invites/mine')
+            .then((invites) => setInvitedOrderIds(new Set(invites.map((i) => i.orderId))))
+            .catch(() => undefined);
+
+          api<BidTemplate[]>('/users/me/bid-templates')
+            .then(setBidTemplates)
+            .catch(() => undefined);
+        }
+
+        if (user.roles.includes('CLIENT')) {
+          api<typeof previousFreelancers>('/users/me/previous-freelancers')
+            .then(setPreviousFreelancers)
+            .catch(() => undefined);
+        }
       })
       .catch(() => undefined) // сбой начальной загрузки — просто пустой dashboard с иллюстрациями, без тревожного баннера
       .finally(() => setLoading(false));
-
-    api<Order[]>('/orders/saved/mine')
-      .then((list) => {
-        setSavedOrders(list);
-        setSavedOrderIds(new Set(list.map((o) => o.id)));
-      })
-      .catch(() => undefined);
 
     api<SavedSearch[]>('/saved-searches')
       .then(setSavedSearches)
       .catch(() => undefined);
 
-    api<{ orderId: string }[]>('/orders/invites/mine')
-      .then((invites) => setInvitedOrderIds(new Set(invites.map((i) => i.orderId))))
-      .catch(() => undefined);
-
-    api<BidTemplate[]>('/users/me/bid-templates')
-      .then(setBidTemplates)
-      .catch(() => undefined);
-
     api<SavedPayoutAddress[]>('/wallet/payout-addresses')
       .then(setSavedAddresses)
       .catch(() => undefined);
-
-    api<typeof previousFreelancers>('/users/me/previous-freelancers')
-      .then(setPreviousFreelancers)
-      .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!me?.roles.includes('FREELANCER')) return;
+    api<Order[]>('/matching/orders?limit=3')
+      .then(setRecommendedOrders)
+      .catch(() => setRecommendedOrders([]));
+  }, [me]);
 
   async function toggleSaved(order: Order) {
     const isSaved = savedOrderIds.has(order.id);
@@ -206,7 +231,50 @@ function DashboardContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderSearch, filterCategoryId, filterTags, filterMinBudget]);
 
-  const hasActiveFilter = Boolean(filterCategoryId || filterTags.length > 0 || filterMinBudget);
+  const hasActiveFilter = Boolean(orderSearch || filterCategoryId || filterTags.length > 0 || filterMinBudget);
+  const orderPool = showSavedOnly ? savedOrders : orders;
+  const visibleOrders = useMemo(() => {
+    const tab = ORDER_STATUS_TABS.find((item) => item.value === orderStatusView) ?? ORDER_STATUS_TABS[0];
+    if (tab.value === 'all') return orderPool;
+    return orderPool.filter((order) => tab.statuses.includes(order.status));
+  }, [orderPool, orderStatusView]);
+  const orderCounts = useMemo(() => {
+    return ORDER_STATUS_TABS.reduce(
+      (acc, tab) => ({
+        ...acc,
+        [tab.value]: tab.value === 'all' ? orderPool.length : orderPool.filter((order) => tab.statuses.includes(order.status)).length,
+      }),
+      {} as Record<OrderStatusView, number>,
+    );
+  }, [orderPool]);
+  const invitedCount = orderPool.filter((order) => invitedOrderIds.has(order.id)).length;
+  const boostedCount = orderPool.filter((order) => order.isPromoted).length;
+  const totalBidCount = orderPool.reduce((sum, order) => sum + (order._count?.bids ?? order.bids?.length ?? 0), 0);
+  const ownOrderCount = me ? orderPool.filter((order) => order.clientId === me.id).length : 0;
+  const availableOrderCount = me ? orderPool.filter((order) => order.status === 'OPEN' && order.clientId !== me.id).length : 0;
+  const roleOrderTitle = isClient && !isFreelancer ? 'Мои заказы' : isFreelancer && !isClient ? 'Лента заказов' : 'Заказы и найм';
+  const roleOrderDescription =
+    isClient && !isFreelancer
+      ? 'Следите за своими публикациями, откликами, дедлайнами и переходите в заказ без лишних действий.'
+      : isFreelancer && !isClient
+        ? 'Отберите подходящие задачи, сохраните важные фильтры и отвечайте на хорошие заказы быстрее конкурентов.'
+        : 'В одном месте: ваши публикации как заказчика и открытая лента для работы как исполнителя.';
+  const primaryOrderFilterLabel = isClient && !isFreelancer ? 'Мои заказы' : 'Все заказы';
+  const withdrawAmountNumber = Number(withdrawAmount);
+  const withdrawableNumber = Number(wallet?.withdrawableBalance ?? 0);
+  const withdrawAmountEntered = withdrawAmount.trim().length > 0 && Number.isFinite(withdrawAmountNumber);
+  const withdrawHasEnoughFunds = withdrawAmountEntered && withdrawAmountNumber > 0 && withdrawAmountNumber <= withdrawableNumber;
+  const withdrawAmountTooHigh = withdrawAmountEntered && withdrawAmountNumber > withdrawableNumber;
+
+  function clearOrderFilters() {
+    setOrderSearch('');
+    setFilterCategoryId('');
+    setFilterTags([]);
+    setFilterTagInput('');
+    setFilterMinBudget('');
+    setOrderStatusView('all');
+    setShowSavedOnly(false);
+  }
 
   async function saveCurrentSearch() {
     const parts: string[] = [];
@@ -392,203 +460,287 @@ function DashboardContent() {
   return (
     <main className="mx-auto max-w-7xl px-4 py-8">
       <AppHeader />
-      <h1 className="mb-8 font-serif text-3xl text-stone-900">Dashboard</h1>
+      <section className="workspace-hero mb-8 p-6 md:p-8">
+        <div className="relative grid gap-8 lg:grid-cols-[1fr_380px] lg:items-end">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">
+              {isClient && isFreelancer ? 'Кабинет заказчика и фрилансера' : isClient ? 'Кабинет заказчика' : 'Кабинет фрилансера'}
+            </p>
+            <h1 className="mt-3 max-w-3xl font-serif text-4xl leading-tight text-stone-950 md:text-6xl">
+              {me?.profile?.displayName ? `${me.profile.displayName}, управляем работой спокойно` : 'Ваш рабочий центр TaskHunt'}
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-stone-600">
+              Баланс, заказы, отклики, избранное, вывод средств и подписки на поиск собраны в одном месте, чтобы путь от
+              задачи до оплаты был коротким и понятным.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              {isClient && (
+                <a href="#create-order" className="primary-action px-5 py-3 text-sm">
+                  Создать заказ
+                </a>
+              )}
+              {isFreelancer && (
+                <Link href="/search?type=orders" className="secondary-action px-5 py-3 text-sm">
+                  Найти заказы
+                </Link>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-stone-100 bg-white/65 p-5 shadow-sm backdrop-blur">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs uppercase text-stone-400">Рабочая сводка</p>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+              <div className="hero-stat p-3">
+                <p className="font-serif text-3xl text-stone-950">{orders.length}</p>
+                <p className="text-[11px] uppercase text-stone-400">заказов</p>
+              </div>
+              <div className="hero-stat p-3">
+                <p className="font-serif text-3xl text-stone-950">{savedOrders.length}</p>
+                <p className="text-[11px] uppercase text-stone-400">избранное</p>
+              </div>
+              <div className="hero-stat p-3">
+                <p className="font-serif text-3xl text-stone-950">{savedSearches.length}</p>
+                <p className="text-[11px] uppercase text-stone-400">поиски</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {error && <ErrorNotice message={error} />}
 
-      <section className="mb-8 grid gap-3 md:grid-cols-5">
-        {wallet &&
-          [
-            { label: 'Main', value: wallet.mainBalance, colorClass: 'bg-card-sand', Icon: WalletIcon },
-            { label: 'Escrow', value: wallet.escrowBalance, colorClass: 'bg-card-sage', Icon: ShieldIcon },
-            { label: 'Locked', value: wallet.lockedBalance, colorClass: 'bg-card-rose', Icon: PadlockIcon },
-            { label: 'Withdrawable', value: wallet.withdrawableBalance, colorClass: 'bg-card-lavender', Icon: WithdrawIcon },
-            { label: 'Pending', value: wallet.pendingBalance, colorClass: 'bg-cream-200', Icon: ClockIcon },
-          ].map(({ label, value, colorClass, Icon }) => (
-            <div key={label} className={`rounded-2xl ${colorClass} p-4 transition-transform duration-200 hover:-translate-y-0.5`}>
-              <div className="flex items-center gap-1.5 text-stone-600">
-                <Icon className="h-4 w-4" />
-                <p className="text-xs uppercase">{label}</p>
+      <section className="premium-panel mb-8 overflow-hidden rounded-[2rem] p-0">
+        <div className="grid gap-0 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="finance-panel-lead p-5 md:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Финансы</p>
+                <h2 className="mt-1 font-serif text-3xl text-stone-950">Баланс и вывод</h2>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-stone-600">
+                  Контролируйте доступные деньги, эскроу и заявки на вывод из одного спокойного блока.
+                </p>
               </div>
-              <p className="mt-1.5 font-serif text-lg text-stone-900">{money(value, wallet.currency)}</p>
+              <div className="flex items-center gap-3">
+                <Mascot name="payoutWallet" size="h-14 w-14" />
+                <button type="button" onClick={() => setShowWithdrawForm((v) => !v)} className="primary-action px-5 py-3 text-sm">
+                  {showWithdrawForm ? 'Свернуть вывод' : 'Вывести средства'}
+                </button>
+              </div>
             </div>
-          ))}
-      </section>
 
-      <section className="mb-8 rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">Вывод средств</h2>
-          <button
-            type="button"
-            onClick={() => setShowWithdrawForm((v) => !v)}
-            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
-          >
-            {showWithdrawForm ? 'Скрыть' : 'Вывести средства'}
-          </button>
-        </div>
+            {wallet && (
+              <div className="mt-5 grid gap-3 lg:grid-cols-[1.05fr_1fr]">
+                <div className="interactive-card rounded-[2rem] border border-brand/15 bg-white/80 p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Доступно к выводу</p>
+                      <p className="mt-2 font-serif text-4xl leading-none text-stone-950 md:text-5xl">
+                        {money(wallet.withdrawableBalance, wallet.currency)}
+                      </p>
+                    </div>
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-card-lavender text-stone-900">
+                      <WithdrawIcon className="h-5 w-5" />
+                    </span>
+                  </div>
+                  <p className="mt-4 max-w-sm text-sm leading-6 text-stone-600">
+                    Это сумма, которую можно отправить на сохранённый адрес или новый кошелёк прямо сейчас.
+                  </p>
+                </div>
 
-        {showWithdrawForm && (
-          <form onSubmit={submitWithdraw} className="mt-4 space-y-4">
-            <input
-              required
-              type="number"
-              min="1"
-              placeholder="Сумма, USD"
-              value={withdrawAmount}
-              onChange={(e) => setWithdrawAmount(e.target.value)}
-              className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm"
-            />
-            <PayoutAddressBook onChange={setWithdrawTarget} />
-            <button
-              type="submit"
-              disabled={withdrawing || !withdrawTarget || !withdrawAmount}
-              className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {withdrawing ? 'Отправляем…' : 'Запросить вывод'}
-            </button>
-          </form>
-        )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    { label: 'Основной', value: wallet.mainBalance, colorClass: 'bg-card-sand', Icon: BalanceMainIcon },
+                    { label: 'В эскроу', value: wallet.escrowBalance, colorClass: 'bg-card-sage', Icon: BalanceEscrowIcon },
+                    { label: 'Заблокировано', value: wallet.lockedBalance, colorClass: 'bg-card-rose', Icon: LockedFundsIcon },
+                    { label: 'В обработке', value: wallet.pendingBalance, colorClass: 'bg-cream-200', Icon: BalancePendingIcon },
+                  ].map(({ label, value, colorClass, Icon }) => (
+                    <div key={label} className={`interactive-card min-w-0 rounded-[1.7rem] ${colorClass} p-3.5 sm:p-4`}>
+                      <div className="flex min-w-0 items-center gap-1.5 text-stone-600">
+                        <Icon className="h-6 w-6 shrink-0" />
+                        <p className="min-w-0 overflow-visible break-words text-[10px] font-semibold uppercase leading-[1.15] tracking-[0.04em] sm:text-[11px]">
+                          {label}
+                        </p>
+                      </div>
+                      <p className="mt-2 break-words font-serif text-xl leading-tight text-stone-950 sm:text-2xl">
+                        {money(value, wallet.currency)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-        {withdrawResult && (
-          <div className="mt-3 flex items-center gap-3 rounded-lg bg-emerald-50 px-3 py-2">
-            <Mascot name="thumbsup" size="h-10 w-10" />
-            <p className="text-sm text-emerald-700">
-              Заявка на вывод принята. Комиссия: {money(withdrawResult.fee, wallet?.currency)}, к выплате:{' '}
-              {money(withdrawResult.netAmount, wallet?.currency)}.
-            </p>
+            {withdrawResult && (
+              <div className="mt-4 flex items-center gap-3 rounded-3xl bg-emerald-50 px-4 py-3">
+                <Mascot name="successConfetti" size="h-12 w-12" />
+                <p className="text-sm font-medium text-emerald-700">
+                  Заявка принята. Комиссия: {money(withdrawResult.fee, wallet?.currency)}, к выплате:{' '}
+                  {money(withdrawResult.netAmount, wallet?.currency)}.
+                </p>
+              </div>
+            )}
           </div>
-        )}
 
-        <div className="mt-4 border-t border-stone-100 pt-4">
-          <button
-            type="button"
-            onClick={() => setShowAutoWithdraw((v) => !v)}
-            className="text-sm font-medium text-stone-500 hover:text-stone-700"
-          >
-            {showAutoWithdraw ? 'Скрыть автовывод' : 'Настроить автовывод'}
-          </button>
-          {showAutoWithdraw && (
-            <form onSubmit={submitAutoWithdraw} className="mt-3 space-y-3">
-              <p className="text-sm text-stone-500">
-                Когда доступный баланс превышает порог — заявка на вывод создастся автоматически на выбранный
-                сохранённый адрес.
-              </p>
-              <input
-                type="number"
-                min="1"
-                placeholder="Порог, USD"
-                value={autoWithdrawThreshold}
-                onChange={(e) => setAutoWithdrawThreshold(e.target.value)}
-                className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm"
-              />
-              <select
-                value={autoWithdrawAddressId}
-                onChange={(e) => setAutoWithdrawAddressId(e.target.value)}
-                className="w-full max-w-xs rounded-lg border border-stone-300 px-3 py-2 text-sm"
-              >
-                <option value="">Выберите адрес…</option>
-                {savedAddresses.map((addr) => (
-                  <option key={addr.id} value={addr.id}>
-                    {addr.label} ({addr.network})
-                  </option>
-                ))}
-              </select>
-              {autoWithdrawSaved && <p className="text-sm text-emerald-600">Сохранено.</p>}
+          <div className="finance-panel-side border-t border-stone-100 p-5 md:p-6 xl:border-l xl:border-t-0">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Операции</p>
+                <h3 className="mt-1 font-serif text-2xl text-stone-950">Вывод и история</h3>
+              </div>
               <div className="flex gap-2">
+                <button type="button" onClick={() => downloadFile('/wallet/transactions/export.csv', 'transactions.csv')} className="secondary-action px-3 py-2 text-sm">
+                  CSV
+                </button>
+                <button type="button" onClick={toggleHistory} className="secondary-action px-3 py-2 text-sm">
+                  {showHistory ? 'Скрыть' : 'История'}
+                </button>
+              </div>
+            </div>
+
+            {showWithdrawForm && (
+              <form onSubmit={submitWithdraw} className="mt-4 rounded-[2rem] border border-stone-100 bg-stone-50/70 p-4">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+                  <label
+                    className={`field-surface flex min-h-[8.5rem] flex-col justify-between p-4 transition ${
+                      withdrawHasEnoughFunds
+                        ? 'border-emerald-300 bg-emerald-50/70'
+                        : withdrawAmountTooHigh
+                          ? 'border-red-300 bg-red-50/70'
+                          : ''
+                    }`}
+                  >
+                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-400">Сумма вывода</span>
+                    <div className="mt-3 flex items-end gap-2">
+                      <input
+                        required
+                        type="number"
+                        min="1"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={withdrawAmount}
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                        className="w-full min-w-0 border-0 bg-transparent p-0 font-serif text-4xl leading-none text-stone-950 shadow-none outline-none ring-0 placeholder:text-stone-300 focus:border-0 focus:ring-0 md:text-5xl"
+                      />
+                      <span className="pb-1 text-sm font-bold uppercase text-stone-400">{wallet?.currency ?? 'USD'}</span>
+                    </div>
+                    <span
+                      className={`mt-3 rounded-full px-3 py-1 text-xs font-semibold ${
+                        withdrawHasEnoughFunds
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : withdrawAmountTooHigh
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-stone-100 text-stone-500'
+                      }`}
+                    >
+                      {withdrawAmountTooHigh
+                        ? `Не хватает: доступно ${money(wallet?.withdrawableBalance ?? 0, wallet?.currency)}`
+                        : withdrawHasEnoughFunds
+                          ? `Можно вывести: доступно ${money(wallet?.withdrawableBalance ?? 0, wallet?.currency)}`
+                          : `Доступно: ${money(wallet?.withdrawableBalance ?? 0, wallet?.currency)}`}
+                    </span>
+                  </label>
+                  <PayoutAddressBook onChange={setWithdrawTarget} />
+                </div>
                 <button
                   type="submit"
-                  disabled={autoWithdrawSaving || !autoWithdrawThreshold || !autoWithdrawAddressId}
-                  className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  disabled={withdrawing || !withdrawTarget || !withdrawAmount || withdrawAmountTooHigh}
+                  className="primary-action mt-3 w-full px-4 py-3 text-sm"
                 >
-                  {autoWithdrawSaving ? 'Сохраняем…' : 'Включить'}
+                  {withdrawing ? 'Отправляем…' : 'Подтвердить вывод'}
                 </button>
-                {autoWithdrawThreshold && (
-                  <button
-                    type="button"
-                    onClick={disableAutoWithdraw}
-                    disabled={autoWithdrawSaving}
-                    className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+              </form>
+            )}
+
+            <div className="mt-4 rounded-3xl border border-stone-100 bg-card-sand/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-stone-950">Автовывод</p>
+                  <p className="mt-1 text-sm text-stone-600">
+                    {autoWithdrawThreshold ? `Порог: ${money(autoWithdrawThreshold, wallet?.currency)}` : 'Создавайте заявку автоматически при достижении порога.'}
+                  </p>
+                </div>
+                <button type="button" onClick={() => setShowAutoWithdraw((v) => !v)} className="secondary-action px-3 py-2 text-sm">
+                  {showAutoWithdraw ? 'Закрыть' : 'Настроить'}
+                </button>
+              </div>
+              {showAutoWithdraw && (
+                <form onSubmit={submitAutoWithdraw} className="mt-3 grid gap-2 sm:grid-cols-[140px_1fr_auto]">
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Порог"
+                    value={autoWithdrawThreshold}
+                    onChange={(e) => setAutoWithdrawThreshold(e.target.value)}
+                    className="field-surface px-3 py-2 text-sm"
+                  />
+                  <select
+                    value={autoWithdrawAddressId}
+                    onChange={(e) => setAutoWithdrawAddressId(e.target.value)}
+                    className="field-surface px-3 py-2 text-sm"
                   >
-                    Выключить
+                    <option value="">Адрес вывода…</option>
+                    {savedAddresses.map((addr) => (
+                      <option key={addr.id} value={addr.id}>
+                        {addr.label} ({addr.network})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={autoWithdrawSaving || !autoWithdrawThreshold || !autoWithdrawAddressId}
+                    className="primary-action px-4 py-2 text-sm"
+                  >
+                    {autoWithdrawSaving ? '...' : 'Сохранить'}
+                  </button>
+                  {autoWithdrawThreshold && (
+                    <button type="button" onClick={disableAutoWithdraw} disabled={autoWithdrawSaving} className="secondary-action px-4 py-2 text-sm sm:col-span-3">
+                      Выключить автовывод
+                    </button>
+                  )}
+                  {autoWithdrawSaved && <p className="text-sm text-emerald-600 sm:col-span-3">Сохранено.</p>}
+                </form>
+              )}
+            </div>
+
+            {showHistory && (
+              <div className="mt-4 max-h-[360px] overflow-y-auto rounded-3xl border border-stone-100 bg-white p-2">
+                {historyLoading && historyItems.length === 0 && <p className="p-3 text-sm text-stone-500">Загружаем…</p>}
+                {!historyLoading && historyItems.length === 0 && <p className="p-3 text-sm text-stone-400">Операций пока не было.</p>}
+                <div className="space-y-1">
+                  {historyItems.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2 transition hover:bg-stone-50">
+                      <div className="flex items-center gap-3">
+                        <span className={`flex h-9 w-9 items-center justify-center rounded-full ${item.direction === 'CREDIT' ? 'bg-card-sage text-emerald-700' : 'bg-card-sand text-stone-700'}`}>
+                          <TransactionDirectionIcon direction={item.direction} className="h-6 w-6" />
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold text-stone-900">{TRANSACTION_TYPE_LABELS[item.type] ?? item.type}</p>
+                          <p className="text-xs text-stone-500">{new Date(item.createdAt).toLocaleString('ru-RU')}</p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <p className={`text-sm font-semibold ${item.direction === 'CREDIT' ? 'text-emerald-600' : 'text-stone-700'}`}>
+                          {item.direction === 'CREDIT' ? '+' : '-'}
+                          {money(item.amount, item.currency)}
+                        </p>
+                        <button type="button" title="Скачать чек" onClick={() => downloadFile(`/wallet/transactions/${item.id}/receipt.pdf`, `receipt-${item.id}.pdf`)} className="rounded-full p-1.5 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700">
+                          <DownloadIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {historyCursor && (
+                  <button type="button" onClick={() => loadHistory(historyCursor)} disabled={historyLoading} className="secondary-action mt-2 w-full py-2 text-sm disabled:opacity-50">
+                    {historyLoading ? 'Загружаем…' : 'Показать ещё'}
                   </button>
                 )}
               </div>
-            </form>
-          )}
-        </div>
-      </section>
-
-      <section className="mb-8 rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">История операций</h2>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => downloadFile('/wallet/transactions/export.csv', 'transactions.csv')}
-              className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
-            >
-              Скачать CSV
-            </button>
-            <button
-              type="button"
-              onClick={toggleHistory}
-              className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
-            >
-              {showHistory ? 'Скрыть' : 'Показать'}
-            </button>
-          </div>
-        </div>
-
-        {showHistory && (
-          <div className="mt-4">
-            {historyLoading && historyItems.length === 0 && <p className="text-sm text-stone-500">Загружаем…</p>}
-            {!historyLoading && historyItems.length === 0 && (
-              <p className="text-sm text-stone-400">Операций пока не было.</p>
-            )}
-            <div className="divide-y divide-stone-100">
-              {historyItems.map((item) => (
-                <div key={item.id} className="flex items-center justify-between gap-3 py-3">
-                  <div className="flex items-center gap-3">
-                    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-stone-400" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      {item.direction === 'CREDIT' ? <path d="M12 19V5M5 12l7-7 7 7" /> : <path d="M12 5v14M5 12l7 7 7-7" />}
-                    </svg>
-                    <div>
-                      <p className="text-sm font-medium text-stone-900">{TRANSACTION_TYPE_LABELS[item.type] ?? item.type}</p>
-                      <p className="text-xs text-stone-500">
-                        {item.balanceType} · {new Date(item.createdAt).toLocaleString('ru-RU')}
-                        {item.description ? ` · ${item.description}` : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <p className={`font-medium ${item.direction === 'CREDIT' ? 'text-emerald-600' : 'text-stone-700'}`}>
-                      {item.direction === 'CREDIT' ? '+' : '−'}
-                      {money(item.amount, item.currency)}
-                    </p>
-                    <button
-                      type="button"
-                      title="Скачать чек"
-                      onClick={() => downloadFile(`/wallet/transactions/${item.id}/receipt.pdf`, `receipt-${item.id}.pdf`)}
-                      className="rounded-full p-1.5 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
-                    >
-                      <DownloadIcon className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {historyCursor && (
-              <button
-                type="button"
-                onClick={() => loadHistory(historyCursor)}
-                disabled={historyLoading}
-                className="mt-3 w-full rounded-lg border border-stone-300 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50 disabled:opacity-50"
-              >
-                {historyLoading ? 'Загружаем…' : 'Показать ещё'}
-              </button>
             )}
           </div>
-        )}
+        </div>
       </section>
 
       {isFreelancer && me?.level && (
@@ -601,241 +753,373 @@ function DashboardContent() {
         </div>
       )}
 
-      <div className={`grid gap-6 ${hasAside ? 'lg:grid-cols-[1fr_360px]' : ''}`}>
-        <section>
-          <div className="mb-3 flex flex-wrap items-center gap-2.5">
-            <h2 className="font-serif text-xl text-stone-900">Заказы</h2>
-            <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-brand px-2 text-xs font-semibold text-white">
-              {orders.length}
-            </span>
-            <div className="ml-auto flex items-center gap-1 rounded-full bg-stone-100 p-1 text-sm">
+      {isFreelancer && recommendedOrders.length > 0 && (
+        <section className="premium-panel mb-8 rounded-3xl p-5">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-brand">Лучшие совпадения</p>
+              <h2 className="font-serif text-2xl text-stone-900">Заказы, которые стоит посмотреть первыми</h2>
+            </div>
+            <Link href="/search?type=orders" className="text-sm font-semibold text-brand hover:text-brand-dark">
+              Открыть поиск →
+            </Link>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-3">
+            {recommendedOrders.map((order) => (
+              <Link key={order.id} href={`/orders/${order.id}`} className="interactive-card rounded-3xl border border-stone-100 bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="line-clamp-2 text-sm font-semibold text-stone-950">{order.title}</p>
+                  {typeof order.matchScore === 'number' && (
+                    <span className="rounded-full bg-brand/10 px-2 py-1 text-xs font-bold text-brand">
+                      {Math.round(order.matchScore)}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-sm font-semibold text-stone-900">{money(order.budgetMin, order.currency)}</p>
+                {order.matchReasons && order.matchReasons.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {order.matchReasons.slice(0, 2).map((reason) => (
+                      <span key={reason} className="rounded-full bg-card-sage/70 px-2 py-1 text-xs font-medium text-stone-700">
+                        {reason}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {order.missing && order.missing.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {order.missing.slice(0, 2).map((item) => (
+                      <span key={item} className="rounded-full bg-card-sand/70 px-2 py-1 text-xs font-medium text-stone-600">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {typeof order.compatibilityPercent === 'number' && (
+                  <div className="mt-3">
+                    <div className="mb-1 flex justify-between text-xs text-stone-500">
+                      <span>Совпадение навыков</span>
+                      <span>{order.compatibilityPercent}%</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-stone-100">
+                      <div className="h-full rounded-full bg-brand" style={{ width: `${order.compatibilityPercent}%` }} />
+                    </div>
+                  </div>
+                )}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className={`grid gap-6 ${hasAside ? 'lg:grid-cols-[1fr_380px]' : ''}`}>
+        <section className="premium-panel overflow-hidden rounded-[2.25rem] p-0">
+          <div className="border-b border-stone-100 bg-gradient-to-br from-white via-card-sand/35 to-card-sage/35 p-5 md:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Рабочая лента</p>
+                <h2 className="mt-1 font-serif text-3xl text-stone-950">{roleOrderTitle}</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
+                  {roleOrderDescription}
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="hero-stat rounded-[1.5rem] px-4 py-3">
+                  <p className="font-serif text-2xl text-stone-950">{isClient && !isFreelancer ? ownOrderCount : orderPool.length}</p>
+                  <p className="text-[11px] uppercase text-stone-400">{isClient && !isFreelancer ? 'моих' : 'в ленте'}</p>
+                </div>
+                <div className="hero-stat rounded-[1.5rem] px-4 py-3">
+                  <p className="font-serif text-2xl text-stone-950">{totalBidCount}</p>
+                  <p className="text-[11px] uppercase text-stone-400">откликов</p>
+                </div>
+                <div className="hero-stat rounded-[1.5rem] px-4 py-3">
+                  <p className="font-serif text-2xl text-stone-950">{isFreelancer ? invitedCount : availableOrderCount}</p>
+                  <p className="text-[11px] uppercase text-stone-400">{isFreelancer ? 'инвайтов' : 'открытых'}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setShowSavedOnly(false)}
-                className={`rounded-full px-3 py-1 font-medium transition ${
-                  !showSavedOnly ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  !showSavedOnly ? 'bg-brand text-white shadow-sm' : 'bg-white/75 text-stone-600 hover:bg-white hover:text-stone-950'
                 }`}
               >
-                Все
+                {primaryOrderFilterLabel}
               </button>
-              <button
-                type="button"
-                onClick={() => setShowSavedOnly(true)}
-                className={`rounded-full px-3 py-1 font-medium transition ${
-                  showSavedOnly ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
-                }`}
-              >
-                Избранное {savedOrders.length > 0 && `(${savedOrders.length})`}
-              </button>
+              {isFreelancer && (
+                <button
+                  type="button"
+                  onClick={() => setShowSavedOnly(true)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    showSavedOnly ? 'bg-brand text-white shadow-sm' : 'bg-white/75 text-stone-600 hover:bg-white hover:text-stone-950'
+                  }`}
+                >
+                  Избранное {savedOrders.length > 0 && `(${savedOrders.length})`}
+                </button>
+              )}
+              {isClient && (
+                <a href="#create-order" className="rounded-full bg-card-sage/80 px-4 py-2 text-sm font-semibold text-stone-800 transition hover:bg-card-sage">
+                  Новый заказ
+                </a>
+              )}
+              {boostedCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-700">
+                  <BoostIcon className="h-4 w-4" />
+                  {boostedCount} продвигается
+                </span>
+              )}
             </div>
           </div>
-          {!showSavedOnly && (
-            <>
-              <input
-                placeholder="Поиск по названию или описанию"
-                value={orderSearch}
-                onChange={(e) => setOrderSearch(e.target.value)}
-                className="mb-3 w-full rounded-lg border border-stone-300 px-4 py-2 text-sm"
-              />
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <select
-                  value={filterCategoryId}
-                  onChange={(e) => setFilterCategoryId(e.target.value)}
-                  className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
+
+          <div className="p-5 md:p-6">
+            <div className="mb-5 flex flex-wrap gap-2 rounded-[1.75rem] bg-stone-50 p-1.5">
+              {ORDER_STATUS_TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setOrderStatusView(tab.value)}
+                  className={`flex shrink-0 items-center gap-2 rounded-[1.25rem] px-3.5 py-2.5 text-sm font-semibold transition ${
+                    orderStatusView === tab.value ? 'bg-white text-brand shadow-sm ring-1 ring-brand/10' : 'text-stone-500 hover:bg-white hover:text-stone-900'
+                  }`}
                 >
-                  <option value="">Все категории</option>
-                  {flatCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  placeholder="Тэги через Enter"
-                  value={filterTagInput}
-                  onChange={(e) => setFilterTagInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter' || !filterTagInput.trim()) return;
-                    e.preventDefault();
-                    const tag = filterTagInput.trim();
-                    if (!filterTags.includes(tag)) setFilterTags((current) => [...current, tag]);
-                    setFilterTagInput('');
-                  }}
-                  className="w-40 rounded-lg border border-stone-300 px-3 py-2 text-sm"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="Бюджет от"
-                  value={filterMinBudget}
-                  onChange={(e) => setFilterMinBudget(e.target.value)}
-                  className="w-28 rounded-lg border border-stone-300 px-3 py-2 text-sm"
-                />
-                {isFreelancer && (
-                  <button
-                    type="button"
-                    onClick={saveCurrentSearch}
-                    disabled={!hasActiveFilter || savingSearch || savedSearches.length >= 5}
-                    title={
-                      savedSearches.length >= 5
-                        ? 'Можно сохранить не больше 5 подписок'
-                        : 'Получать уведомление о новых заказах по этому фильтру'
-                    }
-                    className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-600 transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-stone-300 disabled:hover:text-stone-600"
+                  {tab.label}
+                  <span className={orderStatusView === tab.value ? 'text-brand/70' : 'text-stone-400'}>{orderCounts[tab.value] ?? 0}</span>
+                </button>
+              ))}
+            </div>
+
+            {!showSavedOnly && (
+              <div className="mb-5 rounded-[2rem] border border-stone-100 bg-white/70 p-3 shadow-sm backdrop-blur">
+                <div className="grid gap-2 xl:grid-cols-[1fr_210px_160px_135px_auto]">
+                  <input
+                    placeholder="Поиск по названию или описанию"
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    className="field-surface w-full rounded-[1.35rem] px-4 py-3 text-sm"
+                  />
+                  <select
+                    value={filterCategoryId}
+                    onChange={(e) => setFilterCategoryId(e.target.value)}
+                    className="field-surface rounded-[1.35rem] px-3 py-3 text-sm"
                   >
-                    <BellIcon className="h-4 w-4" />
-                    Уведомлять об этом фильтре
+                    <option value="">Все категории</option>
+                    {flatCategories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    placeholder="Теги, Enter"
+                    value={filterTagInput}
+                    onChange={(e) => setFilterTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' || !filterTagInput.trim()) return;
+                      e.preventDefault();
+                      const tag = filterTagInput.trim();
+                      if (!filterTags.includes(tag)) setFilterTags((current) => [...current, tag]);
+                      setFilterTagInput('');
+                    }}
+                    className="field-surface rounded-[1.35rem] px-3 py-3 text-sm"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Бюджет от"
+                    value={filterMinBudget}
+                    onChange={(e) => setFilterMinBudget(e.target.value)}
+                    className="field-surface rounded-[1.35rem] px-3 py-3 text-sm"
+                  />
+                  <button type="button" onClick={clearOrderFilters} disabled={!hasActiveFilter && orderStatusView === 'all'} className="secondary-action rounded-[1.35rem] px-4 py-3 text-sm disabled:opacity-40">
+                    Сбросить
                   </button>
-                )}
-              </div>
-              {filterTags.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-1.5">
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   {filterTags.map((tag) => (
                     <button
                       key={tag}
                       type="button"
                       onClick={() => setFilterTags((current) => current.filter((t) => t !== tag))}
-                      className="rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700 hover:line-through"
+                      className="rounded-full bg-card-sand px-3 py-1.5 text-xs font-semibold text-stone-700 hover:line-through"
                     >
-                      {tag} ×
+                      {tag} x
                     </button>
                   ))}
-                </div>
-              )}
-              {savedSearchError && <p className="mb-3 text-xs text-red-600">{savedSearchError}</p>}
-              {savedSearches.length > 0 && (
-                <div className="mb-4 flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs text-stone-400">Подписки:</span>
-                  {savedSearches.map((s) => (
-                    <span
-                      key={s.id}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand"
+                  {isFreelancer && (
+                    <button
+                      type="button"
+                      onClick={saveCurrentSearch}
+                      disabled={!hasActiveFilter || savingSearch || savedSearches.length >= 5}
+                      title={savedSearches.length >= 5 ? 'Можно сохранить не больше 5 подписок' : 'Получать уведомление о новых заказах по этому фильтру'}
+                      className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-600 transition hover:border-brand/30 hover:text-brand disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      <BellIcon className="h-3.5 w-3.5" />
-                      {s.label}
-                      <button type="button" onClick={() => deleteSavedSearch(s.id)} className="hover:text-brand-dark">
-                        ×
-                      </button>
-                    </span>
-                  ))}
+                      <BellIcon className="h-4 w-4" />
+                      Сохранить фильтр
+                    </button>
+                  )}
                 </div>
-              )}
-            </>
-          )}
-          <div className="space-y-3">
-            {(showSavedOnly ? savedOrders : orders).map((order) => (
-              <article
-                key={order.id}
-                className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Link href={`/orders/${order.id}`} className="text-lg font-semibold hover:text-brand">
-                        {order.title}
-                      </Link>
-                      {order.isPromoted && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                          <BoostIcon className="h-3 w-3" />
-                          Продвигается
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 line-clamp-2 text-sm text-stone-600">{order.description}</p>
-                    {order.tags && order.tags.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {order.tags.map((tag) => (
-                          <span key={tag} className="rounded-full bg-card-sand px-2 py-0.5 text-xs text-stone-700">
-                            {tag}
-                          </span>
-                        ))}
+
+                {savedSearchError && <p className="mt-3 text-xs text-red-600">{savedSearchError}</p>}
+                {savedSearches.length > 0 && (
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-stone-100 pt-3">
+                    <span className="text-xs font-semibold uppercase text-stone-400">Подписки</span>
+                    {savedSearches.map((savedSearch) => (
+                      <span key={savedSearch.id} className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand">
+                        <BellIcon className="h-3.5 w-3.5" />
+                        {savedSearch.label}
+                        <button type="button" onClick={() => deleteSavedSearch(savedSearch.id)} className="hover:text-brand-dark">
+                          x
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {visibleOrders.map((order) => {
+                const bidsCount = order._count?.bids ?? order.bids?.length ?? 0;
+                const isOwnOrder = order.clientId === me?.id;
+                const canBid = isFreelancer && order.status === 'OPEN' && !isOwnOrder;
+                const hasWorkChat = Boolean(order.acceptedBidId);
+                const roleHint = isOwnOrder
+                  ? bidsCount > 0
+                    ? `${bidsCount} откликов ждут решения`
+                    : 'Заказ опубликован, отклики появятся здесь'
+                  : canBid
+                    ? 'Можно быстро отправить отклик'
+                    : 'Откройте заказ, чтобы посмотреть детали';
+                return (
+                  <article key={order.id} className="interactive-card rounded-[2rem] border border-stone-100 bg-white p-4 shadow-sm md:p-5">
+                    <div className="grid gap-4 lg:grid-cols-[1fr_210px]">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link href={`/orders/${order.id}`} className="line-clamp-2 text-lg font-semibold text-stone-950 hover:text-brand">
+                            {order.title}
+                          </Link>
+                          {order.isPromoted && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                              <BoostIcon className="h-3 w-3" />
+                              Продвигается
+                            </span>
+                          )}
+                          {invitedOrderIds.has(order.id) && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand">
+                              <TargetIcon className="h-3.5 w-3.5" />
+                              Вас пригласили
+                            </span>
+                          )}
+                          {isOwnOrder && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-card-sage/80 px-2.5 py-1 text-xs font-semibold text-stone-800">
+                              Ваш заказ
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-2 line-clamp-2 text-sm leading-6 text-stone-600">{order.description}</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-stone-600">
+                          <span className="rounded-full bg-stone-100 px-3 py-1">{order.category?.name ?? 'Категория'}</span>
+                          <span className="rounded-full bg-card-sage/70 px-3 py-1">{bidsCount} откликов</span>
+                          {order.deadline && <span className="rounded-full bg-card-lavender/70 px-3 py-1">До {new Date(order.deadline).toLocaleDateString('ru-RU')}</span>}
+                          {order.viewsCount != null && <span className="rounded-full bg-stone-100 px-3 py-1">{order.viewsCount} просмотров</span>}
+                        </div>
+                        {order.tags && order.tags.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {order.tags.slice(0, 6).map((tag) => (
+                              <span key={tag} className="rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <div className="text-right">
-                      <p className="font-semibold">{money(order.budgetMin, order.currency)}</p>
-                      <OrderStatusBadge status={order.status} className="mt-1" />
+
+                      <div className="flex flex-col items-stretch gap-2 rounded-[1.75rem] bg-stone-50 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs uppercase text-stone-400">Бюджет</p>
+                            <p className="mt-1 font-serif text-2xl text-stone-950">{money(order.budgetMin, order.currency)}</p>
+                            {order.budgetMax && <p className="text-xs text-stone-500">до {money(order.budgetMax, order.currency)}</p>}
+                          </div>
+                          {isFreelancer && !isOwnOrder && (
+                            <button
+                              type="button"
+                              onClick={() => toggleSaved(order)}
+                              title={savedOrderIds.has(order.id) ? 'Убрать из избранного' : 'В избранное'}
+                              className="rounded-full bg-white p-2 text-stone-300 shadow-sm transition hover:scale-105 hover:text-amber-500"
+                            >
+                              <FavoriteOrderIcon active={savedOrderIds.has(order.id)} className="h-6 w-6" />
+                            </button>
+                          )}
+                        </div>
+                        <OrderStatusBadge status={order.status} />
+                        <div className="rounded-[1.35rem] bg-white/80 px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Следующий шаг</p>
+                          <p className="mt-1 text-xs font-medium leading-5 text-stone-600">{roleHint}</p>
+                        </div>
+                        {isOwnOrder && bidsCount > 0 && order.status === 'OPEN' ? (
+                          <Link href={`/orders/${order.id}`} className="primary-action mt-1 px-3 py-2 text-center text-sm">
+                            Разобрать отклики
+                          </Link>
+                        ) : canBid ? (
+                          <button type="button" onClick={() => setSelectedOrder(order)} className="primary-action mt-1 px-3 py-2 text-sm">
+                            Откликнуться
+                          </button>
+                        ) : (
+                          <Link href={`/orders/${order.id}`} className="secondary-action mt-1 px-3 py-2 text-center text-sm">
+                            {isOwnOrder ? 'Управлять заказом' : 'Открыть заказ'}
+                          </Link>
+                        )}
+                        {hasWorkChat && (
+                          <Link
+                            href={`/chats?orderId=${order.id}${order.chatThreads?.[0]?.freelancerId ? `&freelancerId=${order.chatThreads[0].freelancerId}` : ''}`}
+                            className="rounded-full bg-card-sage px-3 py-2 text-center text-sm font-semibold text-stone-800"
+                          >
+                            Открыть чат
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleSaved(order)}
-                      title={savedOrderIds.has(order.id) ? 'Убрать из избранного' : 'В избранное'}
-                      className="shrink-0 rounded-full p-1 text-stone-300 transition hover:scale-110 hover:text-amber-500"
-                    >
-                      <svg
-                        viewBox="0 0 20 20"
-                        className={`h-5 w-5 ${savedOrderIds.has(order.id) ? 'fill-amber-400 text-amber-500' : 'fill-none text-stone-300'}`}
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      >
-                        <path
-                          d="M10 3l2.2 4.46 4.92.72-3.56 3.47.84 4.9L10 14.14l-4.4 2.31.84-4.9-3.56-3.47 4.92-.72L10 3z"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                  <span className="rounded-full bg-stone-100 px-3 py-1">{order.category?.name ?? 'Категория'}</span>
-                  <span className="text-stone-500">Откликов: {order._count?.bids ?? order.bids?.length ?? 0}</span>
-                  {order.acceptedBidId && (
-                    <Link href={`/orders/${order.id}`} className="font-medium text-brand hover:text-brand-dark">
-                      Открыть чат
-                    </Link>
-                  )}
-                  {invitedOrderIds.has(order.id) && (
-                    <span className="flex items-center gap-1 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand">
-                      <TargetIcon className="h-3.5 w-3.5" />
-                      Вас пригласили
-                    </span>
-                  )}
-                  {isFreelancer && order.status === 'OPEN' && order.clientId !== me?.id && (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedOrder(order)}
-                      className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-brand-dark hover:shadow-md active:translate-y-0"
-                    >
-                      Откликнуться
-                      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
-                        <path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              </article>
-            ))}
-            {showSavedOnly && savedOrders.length === 0 && (
-              <EmptyState
-                icon={<BuildIcon />}
-                title="В избранном пока пусто"
-                description="Нажмите на звёздочку у заказа, чтобы вернуться к нему позже."
-              />
-            )}
-            {!showSavedOnly && orders.length === 0 && (
-              <EmptyState
-                icon={<BuildIcon />}
-                title="Заказов пока нет"
-                description={isClient ? 'Разместите первый заказ справа — отклики начнут приходить сразу.' : 'Загляните позже или сбросьте поиск.'}
-              />
-            )}
+                  </article>
+                );
+              })}
+
+              {showSavedOnly && savedOrders.length === 0 && (
+                <EmptyState icon={<BuildIcon />} title="В избранном пока пусто" description="Нажмите на звёздочку у заказа, чтобы вернуться к нему позже." />
+              )}
+              {!showSavedOnly && visibleOrders.length === 0 && (
+                <EmptyState
+                  icon={<BuildIcon />}
+                  title={orders.length === 0 ? 'Заказов пока нет' : 'По этому фильтру ничего нет'}
+                  description={orders.length === 0 ? (isClient ? 'Разместите первый заказ справа — отклики начнут приходить сразу.' : 'Загляните позже или сбросьте поиск.') : 'Смените статус, категорию, бюджет или сбросьте фильтры.'}
+                />
+              )}
+            </div>
           </div>
         </section>
 
         {hasAside && (
         <aside className="space-y-6">
           {isClient && previousFreelancers.length > 0 && (
-            <section className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
-              <h2 className="mb-3 text-lg font-semibold">Нанимали раньше</h2>
+            <section className="premium-panel rounded-[2rem] p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Команда</p>
+                  <h2 className="mt-1 text-lg font-semibold text-stone-950">Нанимали раньше</h2>
+                </div>
+                <Mascot name="qualityChecklist" size="h-12 w-12" />
+              </div>
               <div className="space-y-2">
                 {previousFreelancers.map((f) => (
                   <Link
                     key={f.id}
                     href={`/freelancers/${f.id}`}
-                    className="flex items-center gap-3 rounded-lg p-2 text-sm transition hover:bg-stone-50"
+                    className="flex items-center gap-3 rounded-[1.5rem] p-2 text-sm transition hover:bg-stone-50"
                   >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-card-sand font-serif text-sm text-stone-900">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-card-sand font-serif text-sm text-stone-900">
                       {f.profile?.avatarUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={`${API_URL}${f.profile.avatarUrl}`} alt="" className="h-full w-full object-cover" />
@@ -857,13 +1141,31 @@ function DashboardContent() {
           )}
 
           {isClient && (
-            <section className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
-              <h2 className="mb-4 text-lg font-semibold">Создать заказ</h2>
+            <section id="create-order" className="premium-panel rounded-[2rem] p-5">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Публикация</p>
+                  <h2 className="mt-1 font-serif text-2xl text-stone-950">Создать заказ</h2>
+                  <p className="mt-1 text-sm leading-5 text-stone-500">Короткое ТЗ, бюджет, срок и стек — этого достаточно, чтобы собрать первые отклики.</p>
+                </div>
+                <Mascot name="workLaptop" size="h-14 w-14" />
+              </div>
+              <div className="mb-4 grid gap-2 rounded-[1.75rem] bg-card-sand/45 p-3 text-xs font-semibold text-stone-700">
+                {[
+                  '1. Назовите результат, а не процесс',
+                  '2. Укажите стек и ограничения',
+                  '3. Поставьте бюджет и желаемый срок',
+                ].map((item) => (
+                  <div key={item} className="rounded-full bg-white/75 px-3 py-2">
+                    {item}
+                  </div>
+                ))}
+              </div>
               <form onSubmit={createOrder} className="space-y-3">
                 <select
                   value={orderForm.categoryId}
                   onChange={(e) => setOrderForm({ ...orderForm, categoryId: e.target.value })}
-                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
                 >
                   {flatCategories.map((category) => (
                     <option key={category.id} value={category.id}>
@@ -877,7 +1179,7 @@ function DashboardContent() {
                   placeholder="Название"
                   value={orderForm.title}
                   onChange={(e) => setOrderForm({ ...orderForm, title: e.target.value })}
-                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
                 />
                 <textarea
                   required
@@ -885,9 +1187,9 @@ function DashboardContent() {
                   placeholder="Описание задачи"
                   value={orderForm.description}
                   onChange={(e) => setOrderForm({ ...orderForm, description: e.target.value })}
-                  className="min-h-28 w-full rounded-lg border border-stone-300 px-3 py-2"
+                  className="field-surface min-h-32 w-full rounded-[1.35rem] px-3 py-3 text-sm"
                 />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   <input
                     required
                     type="number"
@@ -895,7 +1197,7 @@ function DashboardContent() {
                     placeholder="Бюджет от"
                     value={orderForm.budgetMin}
                     onChange={(e) => setOrderForm({ ...orderForm, budgetMin: e.target.value })}
-                    className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                    className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
                   />
                   <input
                     type="number"
@@ -903,14 +1205,14 @@ function DashboardContent() {
                     placeholder="До"
                     value={orderForm.budgetMax}
                     onChange={(e) => setOrderForm({ ...orderForm, budgetMax: e.target.value })}
-                    className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                    className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
                   />
                 </div>
                 <input
                   type="date"
                   value={orderForm.deadline}
                   onChange={(e) => setOrderForm({ ...orderForm, deadline: e.target.value })}
-                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
                 />
                 <div>
                   <input
@@ -926,7 +1228,7 @@ function DashboardContent() {
                       }
                       setTagInput('');
                     }}
-                    className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                    className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
                   />
                   {orderForm.tags.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -943,7 +1245,7 @@ function DashboardContent() {
                     </div>
                   )}
                 </div>
-                <button type="submit" className="w-full rounded-lg bg-brand px-4 py-3 font-medium text-white">
+                <button type="submit" className="primary-action w-full rounded-[1.35rem] px-4 py-3 font-medium">
                   Опубликовать
                 </button>
               </form>
@@ -951,9 +1253,15 @@ function DashboardContent() {
           )}
 
           {selectedOrder && (
-            <section className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
-              <h2 className="mb-1 text-lg font-semibold">Отклик</h2>
-              <p className="mb-4 text-sm text-stone-500">{selectedOrder.title}</p>
+            <section className="premium-panel rounded-[2rem] p-5">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Отклик</p>
+                  <h2 className="mt-1 font-serif text-2xl text-stone-950">Предложение заказчику</h2>
+                  <p className="mt-1 text-sm leading-5 text-stone-500">{selectedOrder.title}</p>
+                </div>
+                <Mascot name="magnifierPro" size="h-14 w-14" />
+              </div>
               <form onSubmit={submitBid} className="space-y-3">
                 {bidTemplates.length > 0 && (
                   <select
@@ -968,7 +1276,7 @@ function DashboardContent() {
                       }));
                       e.target.value = '';
                     }}
-                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-600"
+                    className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm text-stone-600"
                   >
                     <option value="">Вставить шаблон…</option>
                     {bidTemplates.map((template) => (
@@ -985,7 +1293,7 @@ function DashboardContent() {
                   placeholder="Сумма, USD"
                   value={bidForm.amount}
                   onChange={(e) => setBidForm({ ...bidForm, amount: e.target.value })}
-                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
                 />
                 <input
                   required
@@ -994,16 +1302,16 @@ function DashboardContent() {
                   placeholder="Дней на выполнение"
                   value={bidForm.deliveryDays}
                   onChange={(e) => setBidForm({ ...bidForm, deliveryDays: e.target.value })}
-                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
                 />
                 <textarea
                   required
                   placeholder="Сообщение заказчику"
                   value={bidForm.message}
                   onChange={(e) => setBidForm({ ...bidForm, message: e.target.value })}
-                  className="min-h-24 w-full rounded-lg border border-stone-300 px-3 py-2"
+                  className="field-surface min-h-28 w-full rounded-[1.35rem] px-3 py-3 text-sm"
                 />
-                <button type="submit" className="w-full rounded-lg bg-brand px-4 py-3 font-medium text-white">
+                <button type="submit" className="primary-action w-full rounded-[1.35rem] px-4 py-3 font-medium">
                   Отправить отклик
                 </button>
               </form>

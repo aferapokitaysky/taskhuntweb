@@ -1,29 +1,31 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
-import { FaqIcon } from '@/components/icons/illustrated/FaqIcon';
 import { AppHeader } from '@/components/AppHeader';
-import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorNotice } from '@/components/ErrorNotice';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
+import { MailCheckIcon } from '@/components/icons/illustrated/MailCheckIcon';
+import { EscrowSupportShieldIcon } from '@/components/icons/illustrated/EscrowSupportShieldIcon';
+import { Mascot } from '@/components/Mascot';
 
 const FAQ_ITEMS = [
   {
     q: 'Когда деньги переходят исполнителю?',
-    a: 'Оплата резервируется в эскроу на платформе сразу после выставления счёта. Средства переходят исполнителю только после того, как заказчик примет сданную работу — до этого момента их нельзя вывести ни одной из сторон.',
+    a: 'Оплата резервируется в эскроу после выставления счёта. Исполнитель получает средства только после приёмки работы заказчиком.',
   },
   {
     q: 'Что будет, если возник спор?',
-    a: 'Любая сторона может открыть спор по заказу. Эскроу замораживается, к разбирательству подключается модератор — он изучает переписку и файлы и принимает решение о возврате или выплате.',
+    a: 'Любая сторона может открыть спор по заказу. Эскроу замораживается, а модератор изучает переписку, файлы и историю действий.',
   },
   {
     q: 'Сколько платформа берёт комиссии?',
-    a: 'Комиссия зависит от тарифа (Starter/Pro/Premium) и удерживается автоматически при выплате — точные цифры смотрите на странице тарифов.',
+    a: 'Комиссия зависит от тарифа Starter, Pro или Premium и удерживается автоматически при выплате.',
   },
   {
     q: 'Как вывести средства?',
-    a: 'В кошельке на дашборде — запрос на вывод обрабатывается воркером и уходит на указанный крипто-адрес; статус можно отслеживать там же.',
+    a: 'На дашборде откройте вывод средств, выберите сохранённый адрес и создайте заявку. Статус будет виден в истории операций.',
   },
 ];
 
@@ -47,11 +49,18 @@ interface TicketDetail extends SupportTicket {
   messages: SupportMessage[];
 }
 
-const STATUS_LABEL: Record<string, string> = {
+const STATUS_LABEL: Record<SupportTicket['status'], string> = {
   OPEN: 'Открыт',
   PENDING: 'В работе',
   RESOLVED: 'Решён',
   CLOSED: 'Закрыт',
+};
+
+const STATUS_TONE: Record<SupportTicket['status'], string> = {
+  OPEN: 'bg-card-sand text-stone-800',
+  PENDING: 'bg-card-lavender text-stone-800',
+  RESOLVED: 'bg-card-sage text-stone-800',
+  CLOSED: 'bg-stone-100 text-stone-500',
 };
 
 export default function SupportPage() {
@@ -59,11 +68,12 @@ export default function SupportPage() {
   const [selected, setSelected] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [newTicket, setNewTicket] = useState({ subject: '', message: '' });
   const [creating, setCreating] = useState(false);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
+
+  const openTickets = useMemo(() => tickets.filter((ticket) => ticket.status === 'OPEN' || ticket.status === 'PENDING').length, [tickets]);
 
   function loadTickets() {
     return api<SupportTicket[]>('/support/tickets/mine').then(setTickets);
@@ -71,7 +81,7 @@ export default function SupportPage() {
 
   useEffect(() => {
     loadTickets()
-      .catch(() => undefined) // сбой начальной загрузки — просто пустой список с иллюстрацией, без тревожного баннера
+      .catch(() => undefined)
       .finally(() => setLoading(false));
   }, []);
 
@@ -116,126 +126,197 @@ export default function SupportPage() {
     }
   }
 
-  if (loading) {
-    return <main className="mx-auto max-w-6xl px-4 py-10 text-stone-500">Загружаем поддержку…</main>;
-  }
-
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
+    <main className="mx-auto max-w-7xl px-4 py-8">
       <AppHeader />
-      <h1 className="mb-6 font-serif text-2xl text-stone-900">Поддержка</h1>
 
-      <section className="mb-8 rounded-3xl bg-card-sand p-5">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-stone-900">
-          <FaqIcon className="h-8 w-8 animate-pulse-soft" />
-          Частые вопросы
-        </h2>
-        <div className="divide-y divide-stone-900/10">
-          {FAQ_ITEMS.map((item) => (
-            <details key={item.q} className="group py-3">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-stone-900 marker:content-none">
-                {item.q}
-                <span className="shrink-0 text-lg text-stone-500 transition-transform duration-200 group-open:rotate-45">
-                  +
-                </span>
-              </summary>
-              <p className="mt-2 text-sm leading-relaxed text-stone-700">{item.a}</p>
-            </details>
-          ))}
+      <section className="workspace-hero mb-8 p-6 md:p-8">
+        <div className="relative grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Центр поддержки</p>
+            <h1 className="mt-3 max-w-3xl font-serif text-4xl leading-tight text-stone-950 md:text-6xl">Помогаем довести сделку до спокойного финала</h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-stone-600">
+              Быстрые ответы, личные обращения, переписка по тикету и понятный статус без лишних переходов.
+            </p>
+          </div>
+          <div className="rounded-[2rem] border border-stone-100 bg-white/70 p-5 shadow-sm backdrop-blur">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Пульс поддержки</p>
+                <p className="mt-1 text-sm text-stone-600">Статусы, FAQ и обращения в одном спокойном блоке.</p>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="hero-stat min-w-0 p-3 text-center">
+                <p className="font-serif text-2xl text-stone-950">{tickets.length}</p>
+                <p className="text-[11px] uppercase text-stone-400">всего</p>
+              </div>
+              <div className="hero-stat min-w-0 p-3 text-center">
+                <p className="font-serif text-2xl text-stone-950">{openTickets}</p>
+                <p className="text-[11px] uppercase text-stone-400">активно</p>
+              </div>
+              <div className="hero-stat min-w-0 p-3 text-center">
+                <p className="font-serif text-2xl text-stone-950">4</p>
+                <p className="text-[11px] uppercase text-stone-400">FAQ</p>
+              </div>
+            </div>
+          </div>
         </div>
-        <p className="mt-4 text-xs text-stone-500">Не нашли ответ? Создайте обращение ниже — мы ответим лично.</p>
       </section>
 
       {error && <ErrorNotice message={error} />}
 
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        <div>
-          <form onSubmit={createTicket} className="mb-6 space-y-2 rounded-lg border border-stone-200 bg-white p-4 shadow-sm">
-            <h2 className="mb-2 font-semibold">Новое обращение</h2>
+      <section className="mb-8 grid gap-4 lg:grid-cols-3">
+        {[
+          { title: 'Эскроу и оплата', text: 'Разбираем блокировки, выплаты, возвраты и спорные ситуации.', Icon: EscrowSupportShieldIcon },
+          { title: 'Сделка и чат', text: 'Помогаем восстановить контекст заказа, файлов и этапов.', Icon: ChatIcon },
+          { title: 'Аккаунт и доступ', text: 'Пароль, 2FA, уведомления и вопросы по профилю.', Icon: MailCheckIcon },
+        ].map(({ title, text, Icon }) => (
+          <div key={title} className="interactive-card rounded-[2rem] p-5">
+            <div className="flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-white/70 shadow-sm">
+              <Icon className="h-12 w-12" />
+            </div>
+            <h2 className="mt-4 font-serif text-xl text-stone-950">{title}</h2>
+            <p className="mt-2 text-sm leading-6 text-stone-600">{text}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="premium-panel mb-8 rounded-[2rem] p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-[1.7rem] bg-card-lavender/60">
+            <Mascot name="supportHeadset" size="h-20 w-20" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase text-stone-400">Быстрые ответы</p>
+            <h2 className="font-serif text-2xl text-stone-950">FAQ перед обращением</h2>
+          </div>
+        </div>
+        <div className="divide-y divide-stone-100">
+          {FAQ_ITEMS.map((item) => (
+            <details key={item.q} className="group py-4">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[1.35rem] px-3 py-2 text-sm font-semibold text-stone-950 transition hover:bg-stone-50 marker:content-none">
+                {item.q}
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-stone-100 text-stone-500 transition group-open:rotate-45">
+                  +
+                </span>
+              </summary>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">{item.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+        <aside className="space-y-4">
+          <form onSubmit={createTicket} className="premium-panel space-y-3 p-5">
+            <div>
+              <p className="text-xs font-semibold uppercase text-stone-400">Новое обращение</p>
+              <h2 className="mt-1 font-serif text-2xl text-stone-950">Опишите вопрос</h2>
+            </div>
+            <div className="flex items-center gap-3 rounded-[1.5rem] bg-card-sage/45 p-3">
+              <Mascot name="supportHeadset" size="h-14 w-14" />
+              <p className="text-sm leading-5 text-stone-600">Добавьте тему, номер заказа и что уже пробовали.</p>
+            </div>
             <input
               required
-              placeholder="Тема"
+              placeholder="Тема обращения"
               value={newTicket.subject}
-              onChange={(e) => setNewTicket((f) => ({ ...f, subject: e.target.value }))}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              onChange={(e) => setNewTicket((form) => ({ ...form, subject: e.target.value }))}
+              className="field-surface w-full px-3 py-2 text-sm"
             />
             <textarea
               required
-              placeholder="Опишите проблему"
+              placeholder="Что произошло? Добавьте номер заказа, если он есть"
               value={newTicket.message}
-              onChange={(e) => setNewTicket((f) => ({ ...f, message: e.target.value }))}
-              className="min-h-24 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              onChange={(e) => setNewTicket((form) => ({ ...form, message: e.target.value }))}
+              className="field-surface min-h-28 w-full px-3 py-2 text-sm"
             />
-            <button
-              type="submit"
-              disabled={creating}
-              className="w-full rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
+            <button type="submit" disabled={creating} className="primary-action w-full px-4 py-3 text-sm">
               {creating ? 'Отправляем…' : 'Создать обращение'}
             </button>
           </form>
 
-          <div className="space-y-2">
-            {tickets.map((ticket) => (
-              <button
-                key={ticket.id}
-                type="button"
-                onClick={() => openTicket(ticket.id)}
-                className={`w-full rounded-lg border p-3 text-left text-sm transition ${
-                  selected?.id === ticket.id ? 'border-brand bg-brand/10' : 'border-stone-200 bg-white hover:border-stone-300'
-                }`}
-              >
-                <p className="font-medium">{ticket.subject}</p>
-                <p className="mt-1 text-xs text-stone-500">{STATUS_LABEL[ticket.status]}</p>
-              </button>
-            ))}
-            {tickets.length === 0 && (
-              <EmptyState icon={<ChatIcon />} title="Обращений пока нет" description="Если возникнут вопросы — создайте обращение слева." />
+          <section className="premium-panel p-3">
+            <p className="px-2 pb-2 text-xs font-semibold uppercase text-stone-400">Мои обращения</p>
+            {loading ? (
+              <p className="px-2 py-3 text-sm text-stone-500">Загружаем…</p>
+            ) : tickets.length > 0 ? (
+              <div className="space-y-2">
+                {tickets.map((ticket) => (
+                  <button
+                    key={ticket.id}
+                    type="button"
+                    onClick={() => openTicket(ticket.id)}
+                    className={`w-full rounded-2xl p-3 text-left text-sm transition ${
+                      selected?.id === ticket.id ? 'bg-brand text-white shadow-sm' : 'bg-white text-stone-900 hover:bg-stone-100'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="line-clamp-2 font-semibold">{ticket.subject}</p>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_TONE[ticket.status]}`}>
+                        {STATUS_LABEL[ticket.status]}
+                      </span>
+                    </div>
+                    <p className={selected?.id === ticket.id ? 'mt-2 text-xs text-white/75' : 'mt-2 text-xs text-stone-500'}>
+                      {new Date(ticket.updatedAt).toLocaleString('ru-RU')}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[2rem] bg-card-sand/45 p-4">
+                <EmptyState icon={<ChatIcon />} title="Обращений пока нет" description="Создайте первое обращение, если нужен разбор." />
+              </div>
             )}
-          </div>
-        </div>
+          </section>
+        </aside>
 
-        <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
+        <section className="premium-panel min-h-[560px] rounded-[2rem] p-5">
           {!selected ? (
-            <p className="text-sm text-stone-500">Выберите обращение слева.</p>
+            <div className="flex min-h-[520px] items-center justify-center">
+              <div className="w-full rounded-[2rem] bg-card-lavender/35 p-6">
+                <EmptyState icon={<ChatIcon />} title="Выберите обращение" description="Переписка и статус появятся в этой панели." />
+              </div>
+            </div>
           ) : (
-            <>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold">{selected.subject}</h2>
-                <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-medium">
+            <div className="flex min-h-[520px] flex-col">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 pb-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-stone-400">Тикет</p>
+                  <h2 className="mt-1 font-serif text-2xl text-stone-950">{selected.subject}</h2>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_TONE[selected.status]}`}>
                   {STATUS_LABEL[selected.status]}
                 </span>
               </div>
 
-              <div className="mb-4 max-h-[420px] space-y-3 overflow-y-auto rounded-lg bg-stone-50 p-3">
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto rounded-[2rem] bg-stone-50 p-4">
                 {selected.messages.map((message) => (
-                  <div key={message.id} className="rounded-lg bg-white p-3 shadow-sm">
-                    <p className="text-xs text-stone-500">
-                      {message.sender?.profile?.displayName ?? message.sender?.email ?? 'Поддержка'}
-                    </p>
-                    <p className="mt-1 text-sm text-stone-800">{message.body}</p>
-                  </div>
+                  <article key={message.id} className="rounded-[1.5rem] bg-white p-4 shadow-sm">
+                    <div className="mb-2 flex items-center justify-between gap-3 text-xs text-stone-500">
+                      <span>{message.sender?.profile?.displayName ?? message.sender?.email ?? 'Поддержка'}</span>
+                      <span>{new Date(message.createdAt).toLocaleString('ru-RU')}</span>
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-stone-800">{message.body}</p>
+                  </article>
                 ))}
               </div>
 
-              <form onSubmit={sendReply} className="flex gap-2">
+              <form onSubmit={sendReply} className="mt-4 flex flex-col gap-2 sm:flex-row">
                 <input
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
                   placeholder="Ваше сообщение"
-                  className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2"
+                  className="field-surface min-w-0 flex-1 px-3 py-3 text-sm"
                 />
-                <button
-                  type="submit"
-                  disabled={sending}
-                  className="rounded-lg bg-brand px-4 py-2 font-medium text-white disabled:opacity-50"
-                >
-                  Отправить
+                <button type="submit" disabled={sending || !reply.trim()} className="primary-action px-5 py-3 text-sm disabled:opacity-50">
+                  {sending ? 'Отправляем…' : 'Отправить'}
                 </button>
               </form>
-            </>
+            </div>
           )}
-        </div>
+        </section>
       </div>
     </main>
   );

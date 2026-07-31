@@ -79,6 +79,46 @@ export class ChatService {
     });
   }
 
+  /** Общий inbox для отдельной страницы чатов: все диалоги, где пользователь заказчик или фрилансер. */
+  async listMyThreads(userId: string) {
+    const threads = await this.prisma.chatThread.findMany({
+      where: {
+        OR: [{ freelancerId: userId }, { order: { clientId: userId } }],
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        freelancer: { include: { profile: true } },
+        order: {
+          include: {
+            category: true,
+            client: { include: { profile: true } },
+          },
+        },
+        messages: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: { sender: { include: { profile: true } }, invoice: true, file: true },
+        },
+      },
+    });
+
+    return threads.map((thread) => {
+      const isClientSide = thread.order.clientId === userId;
+      const participant = isClientSide ? thread.freelancer : thread.order.client;
+      return {
+        threadId: thread.id,
+        orderId: thread.orderId,
+        freelancerId: thread.freelancerId,
+        order: thread.order,
+        participant,
+        role: isClientSide ? 'CLIENT' : 'FREELANCER',
+        lastMessage: thread.messages[0] ?? null,
+        createdAt: thread.createdAt,
+      };
+    });
+  }
+
   async listMessages(orderId: string, freelancerId: string, userId: string) {
     const thread = await this.getOrCreateThread(orderId, freelancerId, userId);
     return this.prisma.chatMessage.findMany({

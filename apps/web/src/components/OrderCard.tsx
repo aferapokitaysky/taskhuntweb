@@ -8,39 +8,54 @@ import { OrderStatusBadge } from '@/components/OrderStatusBadge';
  * действий вроде "Откликнуться"/избранного, только просмотр и переход. */
 export function OrderCard({ order }: { order: Order }) {
   return (
-    <article className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <Link href={`/orders/${order.id}`} className="text-lg font-semibold hover:text-brand">
-              {order.title}
-            </Link>
-            {order.isPromoted && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                <BoostIcon className="h-3 w-3" />
-                Продвигается
+    <article className="interactive-card group rounded-[2rem] border border-stone-100 bg-white p-5 shadow-sm">
+      <div className="flex h-full flex-col gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-stone-400">{order.category?.name ?? 'Категория'}</p>
+            <div className="flex items-center gap-2">
+              <Link href={`/orders/${order.id}`} className="text-lg font-semibold leading-snug text-stone-950 transition-colors hover:text-brand">
+                {order.title}
+              </Link>
+              {order.isPromoted && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 shadow-sm shadow-amber-200/70">
+                  <BoostIcon className="h-3 w-3 animate-pulse-soft" />
+                  Продвигается
+                </span>
+              )}
+            </div>
+            <p className="mt-1 line-clamp-2 text-sm leading-6 text-stone-600">{order.description}</p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-lg font-semibold">{money(order.budgetMin, order.currency)}</p>
+            <p className="text-xs text-stone-400">бюджет от</p>
+          </div>
+        </div>
+
+        {order.tags && order.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {order.tags.slice(0, 5).map((tag) => (
+              <span key={tag} className="rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700">
+                {tag}
               </span>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-4 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <OrderStatusBadge status={order.status} />
+            <span className="rounded-full bg-stone-100 px-3 py-1 text-stone-600">
+              {order._count?.bids ?? order.bids?.length ?? 0} откликов
+            </span>
+            {typeof order.viewsCount === 'number' && (
+              <span className="rounded-full bg-stone-100 px-3 py-1 text-stone-600">{order.viewsCount} просмотров</span>
             )}
           </div>
-          <p className="mt-1 line-clamp-2 text-sm text-stone-600">{order.description}</p>
-          {order.tags && order.tags.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {order.tags.map((tag) => (
-                <span key={tag} className="rounded-full bg-card-sand px-2 py-0.5 text-xs text-stone-700">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
+          <Link href={`/orders/${order.id}`} className="font-semibold text-brand opacity-90 transition group-hover:translate-x-0.5 group-hover:opacity-100">
+            Подробнее →
+          </Link>
         </div>
-        <div className="text-right">
-          <p className="font-semibold">{money(order.budgetMin, order.currency)}</p>
-          <OrderStatusBadge status={order.status} className="mt-1" />
-        </div>
-      </div>
-      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-        <span className="rounded-full bg-stone-100 px-3 py-1">{order.category?.name ?? 'Категория'}</span>
-        <span className="text-stone-500">Откликов: {order._count?.bids ?? order.bids?.length ?? 0}</span>
       </div>
     </article>
   );

@@ -4,7 +4,7 @@ import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import { Logo } from '@/components/Logo';
+import { AuthShell } from '@/components/AuthShell';
 import { AccessIcon } from '@/components/icons/illustrated/AccessIcon';
 
 function ResetPasswordForm() {
@@ -41,7 +41,7 @@ function ResetPasswordForm() {
         </div>
         <h1 className="mb-3 font-serif text-2xl text-stone-900">Ссылка недействительна</h1>
         <p className="mb-6 text-stone-600">В ссылке нет токена сброса — запросите новую.</p>
-        <Link href="/forgot-password" className="rounded-lg border border-stone-300 px-6 py-3 font-medium hover:bg-stone-50">
+        <Link href="/forgot-password" className="secondary-action inline-flex px-6 py-3">
           Запросить снова
         </Link>
       </div>
@@ -49,11 +49,16 @@ function ResetPasswordForm() {
   }
 
   if (done) {
-    return <p className="text-emerald-600">Пароль обновлён, перенаправляем на вход…</p>;
+    return (
+      <div className="text-center">
+        <AccessIcon className="mx-auto h-16 w-16" />
+        <p className="mt-4 font-semibold text-emerald-600">Пароль обновлён, перенаправляем на вход…</p>
+      </div>
+    );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
       <div className="mx-auto flex h-16 w-16 animate-float items-center justify-center">
         <AccessIcon className="h-16 w-16" />
       </div>
@@ -65,13 +70,13 @@ function ResetPasswordForm() {
         minLength={8}
         value={newPassword}
         onChange={(e) => setNewPassword(e.target.value)}
-        className="rounded-lg border border-stone-300 px-4 py-3"
+        className="field-surface px-4 py-3"
       />
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button
         type="submit"
         disabled={loading}
-        className="rounded-lg bg-brand px-4 py-3 font-medium text-white disabled:opacity-50"
+        className="primary-action px-4 py-3"
       >
         {loading ? 'Сохраняем…' : 'Сохранить пароль'}
       </button>
@@ -81,13 +86,15 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
-      <Link href="/" className="mb-8 inline-flex w-fit self-center transition-transform hover:scale-105">
-        <Logo className="h-9" />
-      </Link>
+    <AuthShell
+      eyebrow="Новый пароль"
+      title="Создайте новый ключ доступа"
+      description="Минимум 8 символов. После смены пароля вернём вас на страницу входа."
+      sideTitle="Контроль доступа встроен в тот же продуктовый поток"
+    >
       <Suspense fallback={<p className="text-center text-stone-500">Загрузка…</p>}>
         <ResetPasswordForm />
       </Suspense>
-    </main>
+    </AuthShell>
   );
 }

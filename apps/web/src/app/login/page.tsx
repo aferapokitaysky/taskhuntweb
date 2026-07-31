@@ -6,8 +6,7 @@ import { useState } from 'react';
 import { api, saveTokens } from '@/lib/api';
 import type { LoginResponse } from '@/lib/types';
 import { OAuthButtons } from '@/components/OAuthButtons';
-import { Logo } from '@/components/Logo';
-import { Mascot } from '@/components/Mascot';
+import { AuthShell } from '@/components/AuthShell';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -62,15 +61,11 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
-      <Link href="/" className="mb-8 inline-flex w-fit transition-transform hover:scale-105">
-        <Logo className="h-9" />
-      </Link>
-      <div className="mb-6 flex items-center gap-3">
-        <Mascot name="hello" size="h-14 w-14" />
-        <h1 className="text-2xl font-bold">С возвращением</h1>
-      </div>
-
+    <AuthShell
+      eyebrow="Вход в рабочее пространство"
+      title="Продолжайте сделки без потери контекста"
+      description="Заказы, отклики, инвойсы, уведомления и выплаты ждут в личном кабинете. Если включена 2FA, попросим код на следующем шаге."
+    >
       {totpToken ? (
         <form onSubmit={handleVerifyTotp} className="flex flex-col gap-4">
           <p className="text-sm text-stone-600">Введите код из приложения-аутентификатора или один из резервных кодов.</p>
@@ -81,7 +76,7 @@ export default function LoginPage() {
             placeholder="Код"
             value={totpCode}
             onChange={(e) => setTotpCode(e.target.value)}
-            className="rounded-lg border border-stone-300 px-4 py-3"
+            className="field-surface px-4 py-3"
           />
 
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -89,7 +84,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="rounded-lg bg-brand px-4 py-3 font-medium text-white disabled:opacity-50"
+            className="primary-action px-4 py-3"
           >
             {loading ? 'Проверяем...' : 'Подтвердить'}
           </button>
@@ -113,7 +108,7 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="rounded-lg border border-stone-300 px-4 py-3"
+              className="field-surface px-4 py-3"
             />
             <input
               type="password"
@@ -121,7 +116,7 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="rounded-lg border border-stone-300 px-4 py-3"
+              className="field-surface px-4 py-3"
             />
 
             <Link href="/forgot-password" className="text-right text-sm text-stone-500 hover:text-brand">
@@ -133,7 +128,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="rounded-lg bg-brand px-4 py-3 font-medium text-white disabled:opacity-50"
+              className="primary-action px-4 py-3"
             >
               {loading ? 'Входим...' : 'Войти'}
             </button>
@@ -151,6 +146,6 @@ export default function LoginPage() {
           </p>
         </>
       )}
-    </main>
+    </AuthShell>
   );
 }

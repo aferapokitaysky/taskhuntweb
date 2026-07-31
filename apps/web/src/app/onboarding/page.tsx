@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { Category, MarketplaceRole } from '@/lib/types';
 import { Mascot } from '@/components/Mascot';
+import { Logo } from '@/components/Logo';
 
 export default function OnboardingPage() {
   return (
@@ -89,34 +90,58 @@ function OnboardingForm() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-4 py-12">
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Mascot name="wave" size="h-12 w-12" />
-          <div>
-            <p className="text-sm font-medium text-brand">{role === 'FREELANCER' ? 'Фрилансер' : 'Заказчик'}</p>
-            <h1 className="text-2xl font-bold">Быстрая анкета</h1>
+    <main className="min-h-screen px-4 py-6">
+      <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-stone-200/70 lg:grid-cols-[360px_minmax(0,1fr)]">
+        <aside className="bg-stone-950 p-6 text-white lg:p-8">
+          <Logo className="h-10" />
+          <div className="mt-10">
+            <Mascot name="wave" size="h-24 w-24" />
+            <p className="mt-6 text-sm font-medium text-brand-light">{role === 'FREELANCER' ? 'Профиль исполнителя' : 'Профиль заказчика'}</p>
+            <h1 className="mt-2 font-serif text-3xl leading-tight">Настроим рекомендации под вас</h1>
+            <p className="mt-4 text-sm leading-6 text-stone-300">
+              Эти ответы помогают сортировать заказы, исполнителей и уведомления так, чтобы вы видели полезное раньше шума.
+            </p>
           </div>
-        </div>
-        <span className="text-sm text-stone-500">
-          {step}/{lastStep}
-        </span>
-      </div>
+          <div className="mt-8 space-y-3">
+            {Array.from({ length: lastStep }).map((_, i) => {
+              const n = i + 1;
+              return (
+                <div key={n} className={`rounded-2xl px-4 py-3 text-sm ${step === n ? 'bg-white text-stone-950' : 'bg-white/10 text-stone-300'}`}>
+                  Шаг {n}: {n === 1 ? 'интересы' : role === 'CLIENT' ? 'задачи и бюджет' : n === 2 ? 'уровень' : 'ставка'}
+                </div>
+              );
+            })}
+          </div>
+        </aside>
 
-      <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+        <section className="flex flex-col justify-center p-5 sm:p-8 lg:p-12">
+          <div className="mb-8">
+            <div className="mb-3 flex items-center justify-between text-sm">
+              <span className="font-semibold text-brand">Шаг {step} из {lastStep}</span>
+              <span className="text-stone-400">{Math.round((step / lastStep) * 100)}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-stone-100">
+              <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${(step / lastStep) * 100}%` }} />
+            </div>
+          </div>
+
+      <div className="premium-panel reveal-in rounded-[2rem] bg-cream-50 p-5 sm:p-7">
         {step === 1 && (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Выберите интересные категории</h2>
+            <div>
+              <h2 className="font-serif text-2xl text-stone-950">Выберите интересные категории</h2>
+              <p className="mt-2 text-sm text-stone-600">Можно выбрать несколько — по ним строятся рекомендации и быстрые фильтры.</p>
+            </div>
             <div className="grid gap-2 sm:grid-cols-2">
               {flatCategories.map((category) => (
                 <button
                   key={category.id}
                   type="button"
                   onClick={() => toggleCategory(category.id)}
-                  className={`rounded-lg border px-3 py-2 text-left text-sm ${
+                  className={`interactive-card rounded-2xl border px-4 py-3 text-left text-sm font-medium ${
                     selectedCategories.includes(category.id)
-                      ? 'border-brand bg-brand/10 text-brand'
-                      : 'border-stone-200 hover:border-brand'
+                      ? 'border-brand bg-brand/10 text-brand shadow-sm'
+                      : 'border-stone-200 bg-white hover:border-brand'
                   }`}
                 >
                   {category.name}
@@ -128,11 +153,14 @@ function OnboardingForm() {
 
         {step === 2 && role === 'CLIENT' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Какой тип задач планируете размещать?</h2>
+            <div>
+              <h2 className="font-serif text-2xl text-stone-950">Какой тип задач планируете размещать?</h2>
+              <p className="mt-2 text-sm text-stone-600">Это помогает подсказать структуру заказа и рекомендованный бюджет.</p>
+            </div>
             <select
               value={primaryGoal}
               onChange={(e) => setPrimaryGoal(e.target.value)}
-              className="w-full rounded-lg border border-stone-300 px-4 py-3"
+              className="field-surface w-full px-4 py-3"
             >
               <option>Найти исполнителя для задачи</option>
               <option>Нанять команду</option>
@@ -144,22 +172,25 @@ function OnboardingForm() {
               placeholder="Обычный бюджет заказа, USD"
               value={expectedBudgetMin}
               onChange={(e) => setExpectedBudgetMin(e.target.value)}
-              className="w-full rounded-lg border border-stone-300 px-4 py-3"
+              className="field-surface w-full px-4 py-3"
             />
           </div>
         )}
 
         {step === 2 && role === 'FREELANCER' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Ваш уровень</h2>
+            <div>
+              <h2 className="font-serif text-2xl text-stone-950">Ваш уровень</h2>
+              <p className="mt-2 text-sm text-stone-600">Уровень влияет на подбор заказов и ожидания заказчика.</p>
+            </div>
             <div className="grid grid-cols-3 gap-2">
               {['junior', 'middle', 'senior'].map((level) => (
                 <button
                   key={level}
                   type="button"
                   onClick={() => setExperienceLevel(level)}
-                  className={`rounded-lg border px-3 py-3 text-sm font-medium ${
-                    experienceLevel === level ? 'border-brand bg-brand/10 text-brand' : 'border-stone-200'
+                  className={`interactive-card rounded-2xl border px-3 py-4 text-sm font-semibold ${
+                    experienceLevel === level ? 'border-brand bg-brand/10 text-brand shadow-sm' : 'border-stone-200 bg-white hover:border-brand'
                   }`}
                 >
                   {level}
@@ -171,19 +202,22 @@ function OnboardingForm() {
 
         {step === 3 && role === 'FREELANCER' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Ставка и доступность</h2>
+            <div>
+              <h2 className="font-serif text-2xl text-stone-950">Ставка и доступность</h2>
+              <p className="mt-2 text-sm text-stone-600">Покажем заказы, которые реально подходят по формату и ожиданиям.</p>
+            </div>
             <input
               type="number"
               min="1"
               placeholder="Минимальная ставка, USD"
               value={expectedRateMin}
               onChange={(e) => setExpectedRateMin(e.target.value)}
-              className="w-full rounded-lg border border-stone-300 px-4 py-3"
+              className="field-surface w-full px-4 py-3"
             />
             <select
               value={availability}
               onChange={(e) => setAvailability(e.target.value)}
-              className="w-full rounded-lg border border-stone-300 px-4 py-3"
+              className="field-surface w-full px-4 py-3"
             >
               <option value="full_time">Full-time</option>
               <option value="part_time">Part-time</option>
@@ -199,7 +233,7 @@ function OnboardingForm() {
             type="button"
             onClick={() => setStep((current) => Math.max(1, current - 1))}
             disabled={step === 1 || loading}
-            className="rounded-lg border border-stone-300 px-4 py-3 font-medium disabled:opacity-40"
+            className="secondary-action px-5 py-3 disabled:opacity-40"
           >
             Назад
           </button>
@@ -207,7 +241,7 @@ function OnboardingForm() {
             <button
               type="button"
               onClick={() => setStep((current) => Math.min(lastStep, current + 1))}
-              className="rounded-lg bg-brand px-4 py-3 font-medium text-white"
+              className="primary-action px-5 py-3"
             >
               Далее
             </button>
@@ -216,13 +250,15 @@ function OnboardingForm() {
               type="button"
               onClick={submit}
               disabled={loading}
-              className="rounded-lg bg-brand px-4 py-3 font-medium text-white disabled:opacity-50"
+              className="primary-action px-5 py-3"
             >
               {loading ? 'Сохраняем...' : 'В dashboard'}
             </button>
           )}
         </div>
-      </section>
+      </div>
+        </section>
+      </div>
     </main>
   );
 }

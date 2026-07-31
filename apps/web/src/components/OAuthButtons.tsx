@@ -24,8 +24,7 @@ export function OAuthButtons({ role }: OAuthButtonsProps) {
       <a
         href={disabled ? undefined : `${API_URL}/auth/google${suffix}`}
         aria-disabled={disabled}
-        className={`flex items-center justify-center gap-3 rounded-lg border border-stone-300 bg-white px-4 py-3
-          font-medium text-stone-700 transition hover:border-stone-400 hover:bg-stone-50
+        className={`secondary-action flex items-center justify-center gap-3 px-4 py-3
           ${disabled ? 'pointer-events-none opacity-40' : ''}`}
       >
         <GoogleIcon />
@@ -35,8 +34,8 @@ export function OAuthButtons({ role }: OAuthButtonsProps) {
       <a
         href={disabled ? undefined : `${API_URL}/auth/github${suffix}`}
         aria-disabled={disabled}
-        className={`flex items-center justify-center gap-3 rounded-lg border border-stone-900 bg-stone-900 px-4 py-3
-          font-medium text-white transition hover:bg-stone-800
+        className={`flex items-center justify-center gap-3 rounded-2xl border border-stone-900 bg-stone-900 px-4 py-3
+          font-semibold text-white shadow-lg shadow-stone-900/10 transition hover:-translate-y-0.5 hover:bg-stone-800
           ${disabled ? 'pointer-events-none opacity-40' : ''}`}
       >
         <GithubIcon className="h-5 w-5 text-white" />

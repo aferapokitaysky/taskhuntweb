@@ -14,6 +14,7 @@ import { EyeIcon } from '@/components/icons/EyeIcon';
 import { MessageIcon } from '@/components/icons/MessageIcon';
 import { TargetIcon } from '@/components/icons/TargetIcon';
 import { EmptySearchIcon } from '@/components/icons/illustrated/EmptySearchIcon';
+import { Skeleton } from '@/components/Skeleton';
 
 const RECENTLY_VIEWED_KEY = 'taskhunt:recentlyViewed';
 
@@ -88,10 +89,18 @@ export default function CategoryOrdersPage() {
     <main className="mx-auto max-w-6xl px-4 py-8">
       <AppHeader />
 
-      <div className="mb-6 flex items-center gap-4">
-        {category && <CategoryIcon slug={category.slug} className="h-16 w-16 shrink-0" />}
+      <section className="premium-panel mb-6 rounded-[2rem] p-6">
+        <div className="flex flex-wrap items-center justify-between gap-5">
+          <div className="flex items-center gap-4">
+            {category && (
+              <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-cream-100">
+                <CategoryIcon slug={category.slug} className="h-20 w-20" />
+              </span>
+            )}
         <div>
-          <h1 className="font-serif text-3xl text-stone-900">{category?.name ?? 'Категория'}</h1>
+              <p className="text-sm font-semibold text-brand">Категория</p>
+              <h1 className="mt-1 font-serif text-3xl text-stone-900">{category?.name ?? 'Категория'}</h1>
+              <p className="mt-2 text-sm text-stone-500">{orders.length} заказов в текущей выдаче</p>
           {category?.children && category.children.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {category.children.map((child) => (
@@ -105,12 +114,17 @@ export default function CategoryOrdersPage() {
               ))}
             </div>
           )}
+            </div>
+          </div>
+          <Link href={`/search?type=orders&q=${encodeURIComponent(category?.name ?? '')}`} className="secondary-action px-4 py-2 text-sm">
+            Искать шире
+          </Link>
         </div>
-      </div>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
         <div>
-          <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl bg-white p-3 shadow-sm">
+          <div className="premium-panel mb-6 flex flex-wrap items-center gap-3 rounded-3xl p-3">
             <div className="flex min-w-0 flex-1 items-center gap-2 px-2">
               <SearchIcon className="h-4 w-4 shrink-0 text-stone-400" />
               <input
@@ -126,11 +140,21 @@ export default function CategoryOrdersPage() {
               value={minBudget}
               onChange={(e) => setMinBudget(e.target.value)}
               placeholder="Бюджет от"
-              className="w-32 rounded-lg border border-stone-200 px-3 py-1.5 text-sm"
+              className="field-surface w-32 px-3 py-1.5 text-sm"
             />
           </div>
 
-          {loading && <p className="text-stone-500">Загружаем заказы…</p>}
+          {loading && (
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
+                  <Skeleton className="h-5 w-2/3" />
+                  <Skeleton className="mt-3 h-3 w-full" />
+                  <Skeleton className="mt-2 h-3 w-3/4" />
+                </div>
+              ))}
+            </div>
+          )}
 
           {!loading && orders.length === 0 && (
             <EmptyState
@@ -145,7 +169,7 @@ export default function CategoryOrdersPage() {
               {orders.map((order) => (
                 <article
                   key={order.id}
-                  className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                  className="interactive-card rounded-3xl border border-stone-100 bg-white p-5 shadow-sm"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <Link href={`/orders/${order.id}`} className="text-lg font-semibold hover:text-brand">
@@ -196,7 +220,7 @@ export default function CategoryOrdersPage() {
         </div>
 
         {recentlyViewedHere.length > 0 && (
-          <aside className="h-fit rounded-2xl bg-white p-4 shadow-sm">
+          <aside className="premium-panel h-fit rounded-3xl p-4">
             <h2 className="mb-3 text-sm font-semibold text-stone-700">Вы недавно смотрели</h2>
             <div className="space-y-2">
               {recentlyViewedHere.slice(0, 5).map((item) => (

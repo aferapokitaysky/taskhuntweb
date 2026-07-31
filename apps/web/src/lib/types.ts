@@ -168,6 +168,9 @@ export interface Order {
   isPromoted?: boolean;
   disputes?: Dispute[];
   viewsCount?: number;
+  matchScore?: number;
+  matchReasons?: string[];
+  missing?: string[];
   compatibilityPercent?: number | null;
   client?: { id: string; verifiedPayer?: boolean } | null;
 }
@@ -195,6 +198,17 @@ export interface ChatThreadSummary {
   threadId: string | null;
   hasThread: boolean;
   freelancer?: User & { profile?: Profile | null };
+  lastMessage?: ChatMessage | null;
+}
+
+export interface ChatInboxThread {
+  threadId: string;
+  orderId: string;
+  freelancerId: string;
+  role: 'CLIENT' | 'FREELANCER';
+  createdAt: string;
+  order: Order;
+  participant?: User & { profile?: Profile | null };
   lastMessage?: ChatMessage | null;
 }
 

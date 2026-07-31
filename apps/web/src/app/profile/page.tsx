@@ -9,7 +9,9 @@ import { AppHeader } from '@/components/AppHeader';
 import { GithubIcon } from '@/components/icons/GithubIcon';
 import { GlobeIcon } from '@/components/icons/GlobeIcon';
 import { EyeIcon } from '@/components/icons/EyeIcon';
+import { ProfileNavIcon } from '@/components/icons/illustrated/ProfileNavIcon';
 import { useToast } from '@/components/Toast';
+import { Mascot } from '@/components/Mascot';
 
 const MAX_SKILLS = 25;
 
@@ -507,6 +509,34 @@ export default function ProfilePage() {
     }
   }
 
+  const selectedSkills = allSkills.filter((skill) => selectedSkillIds.includes(skill.id));
+  const profileCompletionItems = [
+    Boolean(form.displayName.trim()),
+    Boolean(form.bio.trim()),
+    Boolean(form.city.trim() || form.country.trim()),
+    selectedSkillIds.length >= 3,
+    portfolioItems.length > 0,
+    Boolean(form.githubUrl.trim() || form.websiteUrl.trim()),
+  ];
+  const profileCompletion = Math.round((profileCompletionItems.filter(Boolean).length / profileCompletionItems.length) * 100);
+  const nextProfileStep =
+    ([
+      [!form.displayName.trim(), 'Добавьте имя, которое увидят клиенты'],
+      [!form.bio.trim(), 'Опишите, какие задачи вы закрываете лучше всего'],
+      [!(form.city.trim() || form.country.trim()), 'Укажите локацию для доверия в профиле'],
+      [selectedSkillIds.length < 3, 'Выберите минимум 3 навыка для точного матчинга'],
+      [portfolioItems.length === 0, 'Добавьте первый кейс в портфолио'],
+      [!(form.githubUrl.trim() || form.websiteUrl.trim()), 'Прикрепите GitHub или сайт с работами'],
+    ] as Array<[boolean, string]>).find(([missing]) => missing)?.[1] ?? 'Профиль выглядит готовым к показу заказчикам';
+  const profileQuality = [
+    { label: 'Имя', done: Boolean(form.displayName.trim()) },
+    { label: 'Описание', done: Boolean(form.bio.trim()) },
+    { label: 'Локация', done: Boolean(form.city.trim() || form.country.trim()) },
+    { label: 'Навыки', done: selectedSkillIds.length >= 3 },
+    { label: 'Портфолио', done: portfolioItems.length > 0 },
+    { label: 'Ссылки', done: Boolean(form.githubUrl.trim() || form.websiteUrl.trim()) },
+  ];
+
   if (loading) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
@@ -519,54 +549,89 @@ export default function ProfilePage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
       <AppHeader />
-      <h1 className="mb-6 font-serif text-2xl text-stone-900">Профиль</h1>
+
+      <section className="workspace-hero mb-6 p-6 md:p-8">
+        <div className="relative grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Профиль TaskHunt</p>
+            <h1 className="mt-3 max-w-2xl font-serif text-3xl leading-tight text-stone-950 md:text-5xl">
+              {form.displayName ? `${form.displayName}, усиливаем вашу витрину` : 'Соберите профиль, которому доверяют'}
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-stone-600">
+              Заполненный профиль лучше попадает в рекомендации, быстрее объясняет экспертизу и снижает лишние вопросы перед стартом заказа.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold text-stone-700">
+              <span className="rounded-full border border-stone-200 bg-white/70 px-3 py-1.5">{isFreelancer ? 'Фрилансер' : 'Заказчик'}</span>
+              <span className="rounded-full border border-stone-200 bg-white/70 px-3 py-1.5">
+                {availableForWork ? 'Открыт для задач' : 'Пауза в заказах'}
+              </span>
+              <span className="rounded-full border border-stone-200 bg-white/70 px-3 py-1.5">{viewsCount} просмотров</span>
+            </div>
+          </div>
+          <div className="rounded-3xl border border-stone-100 bg-white/65 p-5 shadow-sm backdrop-blur">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase text-stone-400">Заполнение</p>
+                <p className="mt-1 font-serif text-4xl text-stone-950">{profileCompletion}%</p>
+              </div>
+            </div>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-stone-100">
+              <div className="h-full rounded-full bg-brand" style={{ width: `${profileCompletion}%` }} />
+            </div>
+            <p className="mt-3 text-sm leading-5 text-stone-600">{nextProfileStep}</p>
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
-        <div className="space-y-6 lg:sticky lg:top-6">
-          <div className="rounded-3xl bg-white p-6 text-center shadow-sm">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={avatarUploading}
-              className="group relative mx-auto flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-card-sand font-serif text-3xl text-stone-900 transition hover:opacity-90 disabled:opacity-60"
-              title="Загрузить фото"
-            >
-              {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={`${API_URL}${avatarUrl}`} alt="Аватар" className="h-full w-full object-cover" />
-              ) : (
-                form.displayName.charAt(0).toUpperCase() || '?'
+        <div className="lg:sticky lg:top-6">
+          <aside className="premium-panel overflow-hidden rounded-[2rem] p-0">
+            <div className="bg-gradient-to-br from-card-sand/80 via-white to-card-sage/60 p-6 text-center">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarUploading}
+                className="group relative mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-[2rem] border-4 border-white bg-gradient-to-br from-card-sand to-card-sage shadow-xl shadow-stone-900/10 transition hover:-translate-y-0.5 disabled:opacity-60"
+                title="Загрузить фото"
+              >
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`${API_URL}${avatarUrl}`} alt="Аватар" className="h-full w-full object-cover" />
+                ) : (
+                  <ProfileNavIcon className="h-24 w-24 translate-y-2" />
+                )}
+                <span className="absolute inset-0 flex items-center justify-center bg-stone-950/55 text-xs font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                  {avatarUploading ? 'Загрузка' : 'Изменить'}
+                </span>
+              </button>
+              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleAvatarChange} className="hidden" />
+
+              <p className="mt-4 font-serif text-2xl text-stone-950">{form.displayName || 'Без имени'}</p>
+              <p className="text-sm text-stone-500">{[form.city, form.country].filter(Boolean).join(', ') || 'Локация не указана'}</p>
+              {avatarError && <p className="mt-1 text-xs text-red-600">{avatarError}</p>}
+
+              <button
+                type="button"
+                onClick={toggleAvailableForWork}
+                disabled={availabilitySaving}
+                className={`mt-5 flex w-full items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60 ${
+                  availableForWork ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-stone-300 bg-white/70 text-stone-500'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${availableForWork ? 'bg-emerald-500' : 'bg-stone-400'}`} />
+                {availableForWork ? 'Открыт для заказов' : 'Не ищу заказы'}
+              </button>
+
+              {userId && (
+                <Link href={`/freelancers/${userId}`} target="_blank" className="secondary-action mt-3 block px-4 py-2.5 text-sm">
+                  Публичный профиль
+                </Link>
               )}
-              <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100">
-                {avatarUploading ? '…' : 'Изменить'}
-              </span>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              onChange={handleAvatarChange}
-              className="hidden"
-            />
+            </div>
 
-            <p className="mt-4 font-serif text-lg text-stone-900">{form.displayName || 'Без имени'}</p>
-            <p className="text-sm text-stone-500">{[form.city, form.country].filter(Boolean).join(', ') || 'Локация не указана'}</p>
-            {avatarError && <p className="mt-1 text-xs text-red-600">{avatarError}</p>}
-
-            <button
-              type="button"
-              onClick={toggleAvailableForWork}
-              disabled={availabilitySaving}
-              className={`mt-4 flex w-full items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition disabled:opacity-60 ${
-                availableForWork ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-stone-300 text-stone-500'
-              }`}
-            >
-              <span className={`h-2 w-2 rounded-full ${availableForWork ? 'bg-emerald-500' : 'bg-stone-400'}`} />
-              {availableForWork ? 'Открыт для заказов' : 'Не ищу заказы'}
-            </button>
-
-            <div className="mt-3 text-left">
-              <label className="flex items-center gap-2 text-sm text-stone-600">
+            <div className="border-t border-stone-100 p-5">
+              <label className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-3 text-sm font-medium text-stone-700">
+                <span>Отпуск</span>
                 <input
                   type="checkbox"
                   checked={onVacation}
@@ -577,7 +642,6 @@ export default function ProfilePage() {
                     saveVacation(checked, vacationUntil);
                   }}
                 />
-                Я в отпуске
               </label>
               {onVacation && (
                 <input
@@ -587,77 +651,101 @@ export default function ProfilePage() {
                     setVacationUntil(e.target.value);
                     saveVacation(true, e.target.value);
                   }}
-                  className="mt-2 w-full rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
+                  className="field-surface mt-2 w-full px-3 py-2 text-sm"
                 />
               )}
             </div>
 
-            {userId && (
-              <Link
-                href={`/freelancers/${userId}`}
-                target="_blank"
-                className="mt-3 block text-sm font-medium text-brand hover:text-brand-dark"
-              >
-                Смотреть публичный профиль →
-              </Link>
-            )}
+            <div className="grid grid-cols-2 gap-2 border-t border-stone-100 p-5 text-center">
+              <div className="min-w-0 rounded-2xl bg-card-sand/70 p-3">
+                <p className="font-serif text-xl text-stone-950">{selectedSkillIds.length}</p>
+                <p className="text-[11px] uppercase text-stone-500">навыков</p>
+              </div>
+              <div className="min-w-0 rounded-2xl bg-card-sage/70 p-3">
+                <p className="font-serif text-xl text-stone-950">{portfolioItems.length}</p>
+                <p className="text-[11px] uppercase text-stone-500">кейсов</p>
+              </div>
+              <div className="col-span-2 min-w-0 rounded-2xl bg-card-lavender/70 p-3">
+                <p className="flex items-center justify-center gap-1 font-serif text-xl text-stone-950">
+                  <EyeIcon className="h-4 w-4 text-stone-400" />
+                  {viewsCount}
+                </p>
+                <p className="text-[11px] uppercase text-stone-500">просмотров</p>
+              </div>
+            </div>
 
             {(form.githubUrl || form.websiteUrl) && (
-              <div className="mt-5 flex flex-col gap-2 border-t border-stone-100 pt-4 text-left">
+              <div className="flex flex-col gap-2 border-t border-stone-100 p-5">
                 {form.githubUrl && (
-                  <a
-                    href={form.githubUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-2 text-sm text-stone-600 transition hover:text-brand"
-                  >
+                  <a href={form.githubUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-2xl bg-stone-50 px-3 py-2 text-sm text-stone-600 transition hover:text-brand">
                     <GithubIcon className="h-4 w-4 shrink-0" />
                     <span className="truncate">{form.githubUrl.replace(/^https?:\/\//, '')}</span>
                   </a>
                 )}
                 {form.websiteUrl && (
-                  <a
-                    href={form.websiteUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-2 text-sm text-stone-600 transition hover:text-brand"
-                  >
+                  <a href={form.websiteUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-2xl bg-stone-50 px-3 py-2 text-sm text-stone-600 transition hover:text-brand">
                     <GlobeIcon className="h-4 w-4 shrink-0" />
                     <span className="truncate">{form.websiteUrl.replace(/^https?:\/\//, '')}</span>
                   </a>
                 )}
               </div>
             )}
-          </div>
 
-          <div className="grid grid-cols-3 gap-2 rounded-3xl bg-white p-5 text-center shadow-sm">
-            <div>
-              <p className="font-serif text-xl text-stone-900">{selectedSkillIds.length}</p>
-              <p className="text-xs text-stone-500">навыков</p>
+            {selectedSkills.length > 0 && (
+              <div className="border-t border-stone-100 p-5">
+                <p className="text-xs font-semibold uppercase text-stone-400">Фокус профиля</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedSkills.slice(0, 8).map((skill) => (
+                    <span key={skill.id} className="rounded-full bg-card-sage px-3 py-1 text-xs font-semibold text-stone-800">
+                      {skill.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="border-t border-stone-100 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase text-stone-400">Чеклист качества</p>
+                <Mascot name="guideQuestion" size="h-12 w-12" />
+              </div>
+              <div className="mt-4 space-y-2">
+                {profileQuality.map((item) => (
+                  <div key={item.label} className="flex items-center justify-between rounded-2xl bg-stone-50 px-3 py-2">
+                    <span className="text-sm font-medium text-stone-700">{item.label}</span>
+                    <span className={`h-2.5 w-2.5 rounded-full ${item.done ? 'bg-emerald-500' : 'bg-stone-300'}`} />
+                  </div>
+                ))}
+              </div>
             </div>
-            <div>
-              <p className="font-serif text-xl text-stone-900">{portfolioItems.length}</p>
-              <p className="text-xs text-stone-500">кейсов</p>
-            </div>
-            <div>
-              <p className="flex items-center justify-center gap-1 font-serif text-xl text-stone-900">
-                <EyeIcon className="h-4 w-4 text-stone-400" />
-                {viewsCount}
-              </p>
-              <p className="text-xs text-stone-500">просмотров</p>
-            </div>
-          </div>
+          </aside>
         </div>
 
         <div className="space-y-6">
-      <form onSubmit={handleSubmit} className="space-y-4 rounded-3xl bg-white p-6 shadow-sm">
+      <form onSubmit={handleSubmit} className="premium-panel overflow-hidden p-0">
+        <div className="border-b border-stone-100 bg-gradient-to-br from-white via-card-sand/40 to-card-lavender/35 p-6">
+        <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase text-stone-400">Основное</p>
+            <h2 className="mt-1 font-serif text-2xl text-stone-900">Публичные данные</h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-stone-600">
+              Это витрина, по которой заказчик решает, писать вам или пролистать дальше. Чем конкретнее профиль, тем лучше рекомендации.
+            </p>
+          </div>
+          <span className="rounded-full bg-card-sand px-3 py-1 text-xs font-semibold text-stone-700">
+            {profileCompletion}% готово
+          </span>
+        </div>
+        </div>
+
+        <div className="space-y-4 p-6">
         <div>
           <label className="mb-1 block text-sm font-medium text-stone-600">Имя</label>
           <input
             required
             value={form.displayName}
             onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-            className="w-full rounded-lg border border-stone-300 px-4 py-3"
+            className="field-surface w-full px-4 py-3"
           />
         </div>
 
@@ -666,17 +754,17 @@ export default function ProfilePage() {
           <textarea
             value={form.bio}
             onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
-            className="min-h-28 w-full rounded-lg border border-stone-300 px-4 py-3"
+            className="field-surface min-h-28 w-full px-4 py-3"
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-stone-600">Страна</label>
             <input
               value={form.country}
               onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
-              className="w-full rounded-lg border border-stone-300 px-4 py-3"
+              className="field-surface w-full px-4 py-3"
             />
           </div>
           <div>
@@ -684,12 +772,12 @@ export default function ProfilePage() {
             <input
               value={form.city}
               onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-              className="w-full rounded-lg border border-stone-300 px-4 py-3"
+              className="field-surface w-full px-4 py-3"
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-stone-600">GitHub</label>
             <input
@@ -697,7 +785,7 @@ export default function ProfilePage() {
               placeholder="https://github.com/username"
               value={form.githubUrl}
               onChange={(e) => setForm((f) => ({ ...f, githubUrl: e.target.value }))}
-              className="w-full rounded-lg border border-stone-300 px-4 py-3"
+              className="field-surface w-full px-4 py-3"
             />
           </div>
           <div>
@@ -707,7 +795,7 @@ export default function ProfilePage() {
               placeholder="https://..."
               value={form.websiteUrl}
               onChange={(e) => setForm((f) => ({ ...f, websiteUrl: e.target.value }))}
-              className="w-full rounded-lg border border-stone-300 px-4 py-3"
+              className="field-surface w-full px-4 py-3"
             />
           </div>
         </div>
@@ -719,6 +807,7 @@ export default function ProfilePage() {
               {selectedSkillIds.length}/{MAX_SKILLS}
             </span>
           </div>
+          <div className="max-h-60 overflow-y-auto rounded-3xl border border-stone-100 bg-stone-50/70 p-3">
           <div className="flex flex-wrap gap-2">
             {allSkills.map((skill) => {
               const selected = selectedSkillIds.includes(skill.id);
@@ -736,6 +825,7 @@ export default function ProfilePage() {
               );
             })}
           </div>
+          </div>
 
           <div className="mt-3">
             <input
@@ -748,7 +838,7 @@ export default function ProfilePage() {
                 e.preventDefault();
                 addSkillByName(skillInput);
               }}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm disabled:opacity-60"
+              className="field-surface w-full px-3 py-2 text-sm disabled:opacity-60"
             />
             {skillError && <p className="mt-1 text-xs text-red-600">{skillError}</p>}
           </div>
@@ -760,13 +850,14 @@ export default function ProfilePage() {
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-brand px-6 py-3 font-medium text-white disabled:opacity-50"
+          className="primary-action px-6 py-3 font-medium disabled:opacity-50"
         >
           {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
+        </div>
       </form>
 
-      <section className="rounded-3xl bg-white p-6 shadow-sm">
+      <section className="premium-panel p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-serif text-xl text-stone-900">Портфолио</h2>
           {!showPortfolioForm && (
@@ -783,7 +874,7 @@ export default function ProfilePage() {
         {portfolioItems.length > 0 && (
           <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {portfolioItems.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-stone-100 p-4">
+              <div key={item.id} className="interactive-card rounded-2xl p-4">
                 {item.imageUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={item.imageUrl} alt={item.title} className="mb-3 h-32 w-full rounded-lg object-cover" />
@@ -822,31 +913,31 @@ export default function ProfilePage() {
         )}
 
         {showPortfolioForm && (
-          <form onSubmit={submitPortfolio} className="space-y-3 rounded-2xl border border-stone-100 p-4">
+          <form onSubmit={submitPortfolio} className="space-y-3 rounded-2xl border border-stone-100 bg-stone-50/60 p-4">
             <input
               required
               placeholder="Название кейса"
               value={portfolioForm.title}
               onChange={(e) => setPortfolioForm((f) => ({ ...f, title: e.target.value }))}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              className="field-surface w-full px-3 py-2 text-sm"
             />
             <textarea
               placeholder="Описание"
               value={portfolioForm.description}
               onChange={(e) => setPortfolioForm((f) => ({ ...f, description: e.target.value }))}
-              className="min-h-20 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              className="field-surface min-h-20 w-full px-3 py-2 text-sm"
             />
             <input
               placeholder="Ссылка на картинку (необязательно)"
               value={portfolioForm.imageUrl}
               onChange={(e) => setPortfolioForm((f) => ({ ...f, imageUrl: e.target.value }))}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              className="field-surface w-full px-3 py-2 text-sm"
             />
             <input
               placeholder="Ссылка на проект (необязательно)"
               value={portfolioForm.projectUrl}
               onChange={(e) => setPortfolioForm((f) => ({ ...f, projectUrl: e.target.value }))}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              className="field-surface w-full px-3 py-2 text-sm"
             />
             <div>
               <input
@@ -862,7 +953,7 @@ export default function ProfilePage() {
                   }
                   setPortfolioTagInput('');
                 }}
-                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                className="field-surface w-full px-3 py-2 text-sm"
               />
               {portfolioForm.tags.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -886,7 +977,7 @@ export default function ProfilePage() {
               <button
                 type="submit"
                 disabled={portfolioSaving}
-                className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="primary-action px-4 py-2 text-sm font-medium disabled:opacity-50"
               >
                 {portfolioSaving ? 'Сохраняем…' : editingPortfolioId ? 'Сохранить изменения' : 'Добавить'}
               </button>
@@ -896,7 +987,7 @@ export default function ProfilePage() {
                   setShowPortfolioForm(false);
                   setEditingPortfolioId(null);
                 }}
-                className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                className="secondary-action px-4 py-2 text-sm font-medium"
               >
                 Отмена
               </button>
@@ -906,7 +997,7 @@ export default function ProfilePage() {
       </section>
 
       {isFreelancer && (
-        <section className="rounded-3xl bg-white p-6 shadow-sm">
+        <section className="premium-panel p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-serif text-xl text-stone-900">Шаблоны откликов</h2>
             {!showBidTemplateForm && (
@@ -923,7 +1014,7 @@ export default function ProfilePage() {
           {bidTemplates.length > 0 && (
             <div className="mb-4 grid gap-3 sm:grid-cols-2">
               {bidTemplates.map((template) => (
-                <div key={template.id} className="rounded-2xl border border-stone-100 p-4">
+                <div key={template.id} className="interactive-card rounded-2xl p-4">
                   <p className="font-medium text-stone-900">{template.name}</p>
                   <p className="mt-1 line-clamp-2 text-sm text-stone-600">{template.message}</p>
                   {template.defaultDeliveryDays && (
@@ -949,20 +1040,20 @@ export default function ProfilePage() {
           )}
 
           {showBidTemplateForm && (
-            <form onSubmit={submitBidTemplate} className="space-y-3 rounded-2xl border border-stone-100 p-4">
+            <form onSubmit={submitBidTemplate} className="space-y-3 rounded-2xl border border-stone-100 bg-stone-50/60 p-4">
               <input
                 required
                 placeholder="Название шаблона"
                 value={bidTemplateForm.name}
                 onChange={(e) => setBidTemplateForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                className="field-surface w-full px-3 py-2 text-sm"
               />
               <textarea
                 required
                 placeholder="Текст отклика"
                 value={bidTemplateForm.message}
                 onChange={(e) => setBidTemplateForm((f) => ({ ...f, message: e.target.value }))}
-                className="min-h-24 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                className="field-surface min-h-24 w-full px-3 py-2 text-sm"
               />
               <input
                 type="number"
@@ -970,7 +1061,7 @@ export default function ProfilePage() {
                 placeholder="Срок по умолчанию, дней (необязательно)"
                 value={bidTemplateForm.defaultDeliveryDays}
                 onChange={(e) => setBidTemplateForm((f) => ({ ...f, defaultDeliveryDays: e.target.value }))}
-                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                className="field-surface w-full px-3 py-2 text-sm"
               />
 
               {bidTemplateError && <p className="text-sm text-red-600">{bidTemplateError}</p>}
@@ -979,7 +1070,7 @@ export default function ProfilePage() {
                 <button
                   type="submit"
                   disabled={bidTemplateSaving}
-                  className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  className="primary-action px-4 py-2 text-sm font-medium disabled:opacity-50"
                 >
                   {bidTemplateSaving ? 'Сохраняем…' : editingBidTemplateId ? 'Сохранить изменения' : 'Добавить'}
                 </button>
@@ -989,7 +1080,7 @@ export default function ProfilePage() {
                     setShowBidTemplateForm(false);
                     setEditingBidTemplateId(null);
                   }}
-                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                  className="secondary-action px-4 py-2 text-sm font-medium"
                 >
                   Отмена
                 </button>
@@ -999,7 +1090,7 @@ export default function ProfilePage() {
         </section>
       )}
 
-      <section className="rounded-3xl bg-white p-6 shadow-sm">
+      <section className="premium-panel p-6">
         <h2 className="mb-4 font-serif text-xl text-stone-900">Безопасность</h2>
         <form onSubmit={submitPasswordChange} className="max-w-sm space-y-3">
           <div>
@@ -1009,7 +1100,7 @@ export default function ProfilePage() {
               type="password"
               value={passwordForm.currentPassword}
               onChange={(e) => setPasswordForm((f) => ({ ...f, currentPassword: e.target.value }))}
-              className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm"
+              className="field-surface w-full px-4 py-2.5 text-sm"
             />
           </div>
           <div>
@@ -1020,7 +1111,7 @@ export default function ProfilePage() {
               type="password"
               value={passwordForm.newPassword}
               onChange={(e) => setPasswordForm((f) => ({ ...f, newPassword: e.target.value }))}
-              className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm"
+              className="field-surface w-full px-4 py-2.5 text-sm"
             />
           </div>
           <div>
@@ -1031,7 +1122,7 @@ export default function ProfilePage() {
               type="password"
               value={passwordForm.repeatPassword}
               onChange={(e) => setPasswordForm((f) => ({ ...f, repeatPassword: e.target.value }))}
-              className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm"
+              className="field-surface w-full px-4 py-2.5 text-sm"
             />
           </div>
 
@@ -1041,7 +1132,7 @@ export default function ProfilePage() {
           <button
             type="submit"
             disabled={passwordSaving}
-            className="rounded-lg bg-brand px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            className="primary-action px-6 py-2.5 text-sm font-medium disabled:opacity-50"
           >
             {passwordSaving ? 'Сохраняем…' : 'Сменить пароль'}
           </button>
@@ -1064,7 +1155,7 @@ export default function ProfilePage() {
               <button
                 type="button"
                 onClick={() => setTotpBackupCodes(null)}
-                className="mt-3 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white"
+                className="primary-action mt-3 px-4 py-2 text-sm font-medium"
               >
                 Готово, я сохранил коды
               </button>
@@ -1080,21 +1171,21 @@ export default function ProfilePage() {
                 placeholder="6-значный код"
                 value={totpCode}
                 onChange={(e) => setTotpCode(e.target.value)}
-                className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm"
+                className="field-surface w-full px-4 py-2.5 text-sm"
               />
               {totpError && <p className="text-sm text-red-600">{totpError}</p>}
               <div className="flex gap-2">
                 <button
                   type="submit"
                   disabled={totpBusy}
-                  className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  className="primary-action px-4 py-2 text-sm font-medium disabled:opacity-50"
                 >
                   Подтвердить
                 </button>
                 <button
                   type="button"
                   onClick={() => setTotpEnrollment(null)}
-                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                  className="secondary-action px-4 py-2 text-sm font-medium"
                 >
                   Отмена
                 </button>
@@ -1109,7 +1200,7 @@ export default function ProfilePage() {
                   type="password"
                   value={totpDisablePassword}
                   onChange={(e) => setTotpDisablePassword(e.target.value)}
-                  className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm"
+                  className="field-surface w-full px-4 py-2.5 text-sm"
                 />
                 {totpError && <p className="text-sm text-red-600">{totpError}</p>}
                 <div className="flex gap-2">
@@ -1123,7 +1214,7 @@ export default function ProfilePage() {
                   <button
                     type="button"
                     onClick={() => setShowTotpDisable(false)}
-                    className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                    className="secondary-action px-4 py-2 text-sm font-medium"
                   >
                     Отмена
                   </button>
@@ -1149,7 +1240,7 @@ export default function ProfilePage() {
                 type="button"
                 onClick={startTotpEnrollment}
                 disabled={totpBusy}
-                className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:border-brand hover:text-brand disabled:opacity-50"
+                className="secondary-action px-4 py-2 text-sm font-medium disabled:opacity-50"
               >
                 Включить 2FA
               </button>
@@ -1170,7 +1261,7 @@ export default function ProfilePage() {
           {!sessions && !sessionsError && <p className="text-sm text-stone-400">Загружаем сессии…</p>}
           <div className="space-y-2">
             {sessions?.map((session) => (
-              <div key={session.id} className="flex items-center justify-between rounded-lg border border-stone-200 px-4 py-2.5 text-sm">
+              <div key={session.id} className="flex items-center justify-between rounded-2xl border border-stone-100 bg-white px-4 py-2.5 text-sm shadow-sm">
                 <div>
                   <p className="font-medium text-stone-800">
                     {deviceLabel(session.userAgent)}
@@ -1191,7 +1282,7 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      <section className="rounded-3xl bg-white p-6 shadow-sm">
+      <section className="premium-panel p-6">
         <h2 className="mb-4 font-serif text-xl text-stone-900">Уведомления</h2>
         <div className="max-w-sm">
           <p className="mb-2 text-sm text-stone-600">Сводка непрочитанных уведомлений на email:</p>
@@ -1219,7 +1310,7 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      <section className="rounded-3xl bg-white p-6 shadow-sm">
+      <section className="premium-panel p-6">
         <h2 className="mb-4 font-serif text-xl text-stone-900">Данные и приватность</h2>
 
         <div className="max-w-sm">
@@ -1229,7 +1320,7 @@ export default function ProfilePage() {
             type="button"
             onClick={exportMyData}
             disabled={exportBusy}
-            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:border-brand hover:text-brand disabled:opacity-50"
+            className="secondary-action px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {exportBusy ? 'Готовим файл…' : 'Скачать мои данные'}
           </button>
@@ -1250,7 +1341,7 @@ export default function ProfilePage() {
                 type="password"
                 value={deletePassword}
                 onChange={(e) => setDeletePassword(e.target.value)}
-                className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm"
+                className="field-surface w-full px-4 py-2.5 text-sm"
               />
               {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
               <div className="flex gap-2">
@@ -1264,7 +1355,7 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   onClick={() => setShowDeleteAccount(false)}
-                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                  className="secondary-action px-4 py-2 text-sm font-medium"
                 >
                   Отмена
                 </button>

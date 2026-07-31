@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
+import { Mascot } from '@/components/Mascot';
 
 interface ReferredUser {
   userId: string;
@@ -82,7 +83,7 @@ export default function ReferralsPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-4xl px-4 py-12">
+      <main className="mx-auto max-w-4xl px-4 py-8">
         <AppHeader />
         <div className="text-center text-stone-500">Загрузка реферальной программы...</div>
       </main>
@@ -91,7 +92,7 @@ export default function ReferralsPage() {
 
   if (error) {
     return (
-      <main className="mx-auto max-w-4xl px-4 py-12">
+      <main className="mx-auto max-w-4xl px-4 py-8">
         <AppHeader />
         <EmptyState
           icon={<MatchIcon />}
@@ -103,45 +104,54 @@ export default function ReferralsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-12 space-y-8">
+    <main className="mx-auto max-w-5xl space-y-8 px-4 py-8">
       <AppHeader />
-      <div>
-        <h1 className="font-serif text-3xl text-stone-900">Реферальная программа</h1>
-        <p className="mt-2 text-stone-600">
-          Приглашайте друзей на TaskHunt и получайте 5% от первого оплаченного заказа каждого привлечённого пользователя.
-        </p>
-      </div>
+      <section className="workspace-hero p-6 md:p-8">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-brand">Партнёрский рост</p>
+            <h1 className="mt-2 font-serif text-4xl leading-tight text-stone-950">Реферальная программа</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-600">
+              Приглашайте друзей на TaskHunt и получайте 5% от первого оплаченного заказа каждого привлечённого пользователя.
+            </p>
+          </div>
+          <Mascot name="successConfetti" size="h-20 w-20" />
+        </div>
+      </section>
 
       {/* Карточки со статистикой */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="rounded-3xl bg-card-sand p-6">
-          <div className="text-sm font-medium text-stone-600">Ваш реферальный код</div>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="interactive-card rounded-3xl bg-card-sand p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-sm font-medium text-stone-600">Ваш реферальный код</div>
+            <Mascot name="invoiceCoin" size="h-12 w-12" />
+          </div>
           <div className="mt-2 flex items-center justify-between">
             <span className="text-2xl font-mono font-bold tracking-wider text-brand">
               {info?.code}
             </span>
             <button
               onClick={handleCopyLink}
-              className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/10"
+              className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/10"
             >
               {copied ? 'Скопировано!' : 'Копировать ссылку'}
             </button>
           </div>
         </div>
 
-        <div className="rounded-3xl bg-card-sage p-6">
+        <div className="interactive-card rounded-3xl bg-card-sage p-6">
           <div className="text-sm font-medium text-stone-600">Привлечено друзей</div>
           <div className="mt-2 font-serif text-3xl text-stone-900">{info?.totalReferred ?? 0}</div>
         </div>
 
-        <div className="rounded-3xl bg-card-lavender p-6">
+        <div className="interactive-card rounded-3xl bg-card-lavender p-6">
           <div className="text-sm font-medium text-stone-600">Заработано</div>
           <div className="mt-2 font-serif text-3xl text-stone-900">${info?.totalEarned ?? '0.00'}</div>
         </div>
       </div>
 
       {/* Форма ввода промокода */}
-      <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+      <div className="premium-panel rounded-3xl p-6">
         <h2 className="font-serif text-lg text-stone-900">Есть код от друга?</h2>
         <p className="mt-1 text-sm text-stone-500">
           Введите промокод реферера до совершения первой оплаты, чтобы привязать ваш аккаунт.
@@ -153,13 +163,13 @@ export default function ReferralsPage() {
             placeholder="Введите промокод"
             value={inputCode}
             onChange={(e) => setInputCode(e.target.value)}
-            className="flex-1 rounded-lg border border-stone-300 px-4 py-2.5 font-mono text-sm uppercase focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+            className="field-surface flex-1 px-4 py-2.5 font-mono text-sm uppercase"
             disabled={redeemLoading}
           />
           <button
             type="submit"
             disabled={redeemLoading || !inputCode.trim()}
-            className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-50"
+            className="primary-action px-5 py-2.5 text-sm"
           >
             {redeemLoading ? 'Проверка...' : 'Применить'}
           </button>
@@ -170,7 +180,7 @@ export default function ReferralsPage() {
       </div>
 
       {/* Таблица рефералов */}
-      <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+      <div className="premium-panel rounded-3xl p-6">
         <h2 className="mb-4 font-serif text-lg text-stone-900">Ваши рефералы</h2>
 
         {!info?.referrals || info.referrals.length === 0 ? (
@@ -192,15 +202,15 @@ export default function ReferralsPage() {
               <tbody className="divide-y divide-stone-100">
                 {info.referrals.map((ref) => (
                   <tr key={ref.userId} className="hover:bg-stone-50">
-                    <td className="py-3 px-4 font-medium text-stone-900">{ref.displayName}</td>
-                    <td className="py-3 px-4 text-stone-500">
+                    <td className="px-4 py-3 font-medium text-stone-900">{ref.displayName}</td>
+                    <td className="px-4 py-3 text-stone-500">
                       {new Date(ref.joinedAt).toLocaleDateString('ru-RU', {
                         day: 'numeric',
                         month: 'long',
                         year: 'numeric',
                       })}
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="px-4 py-3">
                       {ref.rewardPaid ? (
                         <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
                           Начислено

@@ -5,19 +5,22 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { api, ensureFreshAccessToken } from '@/lib/api';
-import type { ChatMessage, ChatThreadSummary, Order, User } from '@/lib/types';
+import type { ChatMessage, ChatThreadSummary, Invoice, Order, User } from '@/lib/types';
 import { money } from '@/lib/types';
 import { FileUpload, type UploadedFile } from '@/components/FileUpload';
 import { PaperclipIcon } from '@/components/icons/PaperclipIcon';
 import { StarIcon } from '@/components/icons/StarIcon';
 import { BoostIcon } from '@/components/icons/BoostIcon';
-import { ShieldIcon } from '@/components/icons/ShieldIcon';
 import { CheckIcon } from '@/components/icons/CheckIcon';
 import { AppHeader } from '@/components/AppHeader';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { InvoiceChatCard } from '@/components/InvoiceChatCard';
 import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
+import { BidAvatarIcon } from '@/components/icons/illustrated/BidAvatarIcon';
+import { BalanceEscrowIcon } from '@/components/icons/illustrated/BalanceEscrowIcon';
 import { Mascot } from '@/components/Mascot';
 import { OrderStatusBadge } from '@/components/OrderStatusBadge';
 import { OrderTimeline } from '@/components/OrderTimeline';
@@ -37,6 +40,77 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const RECENTLY_VIEWED_KEY = 'taskhunt:recentlyViewed';
 const MAX_RECENTLY_VIEWED = 10;
+
+function getWorkflowGuidance(params: {
+  status: Order['status'];
+  isClient: boolean;
+  isFreelancer: boolean;
+  pendingBidCount: number;
+  hasAcceptedBid: boolean;
+  hasMilestones: boolean;
+}) {
+  const { status, isClient, isFreelancer, pendingBidCount, hasAcceptedBid, hasMilestones } = params;
+  if (status === 'OPEN') {
+    if (isClient && pendingBidCount > 0) {
+      return {
+        title: 'Ваш ход: выберите исполнителя',
+        text: 'Статус станет «В работе», когда заказчик примет один из откликов. После этого появится рабочий чат и сдача результата.',
+        actor: 'Заказчик',
+      };
+    }
+    if (isClient) {
+      return {
+        title: 'Ждём отклики',
+        text: 'Сейчас заказ виден фрилансерам. Когда появятся отклики, заказчик выбирает исполнителя кнопкой «Принять».',
+        actor: 'Фрилансеры',
+      };
+    }
+    return {
+      title: hasAcceptedBid ? 'Исполнитель уже выбран' : 'Можно откликнуться',
+      text: hasAcceptedBid
+        ? 'Заказ скоро перейдёт в работу после принятого отклика.'
+        : 'Фрилансер отправляет отклик, а заказчик решает, кого взять в работу.',
+      actor: isFreelancer ? 'Фрилансер' : 'Участники',
+    };
+  }
+  if (status === 'IN_PROGRESS') {
+    return {
+      title: isFreelancer ? 'Ваш ход: сдайте работу' : 'Исполнитель работает над задачей',
+      text: hasMilestones
+        ? 'Фрилансер сдаёт этапы по одному. Заказчик принимает каждый сданный этап и отпускает оплату.'
+        : 'Фрилансер нажимает «Сдать работу», после этого заказ переходит на проверку заказчику.',
+      actor: isFreelancer ? 'Фрилансер' : 'Фрилансер',
+    };
+  }
+  if (status === 'IN_REVIEW') {
+    return {
+      title: isClient ? 'Ваш ход: принять результат' : 'Ждём проверку заказчика',
+      text: 'Заказчик принимает работу и отпускает оплату. Если что-то пошло не так, любая сторона может открыть спор.',
+      actor: 'Заказчик',
+    };
+  }
+  if (status === 'DISPUTED') {
+    return {
+      title: 'Спор на разборе',
+      text: 'Статус держит система, пока поддержка не разберёт материалы и не вынесет решение.',
+      actor: 'Поддержка',
+    };
+  }
+  if (status === 'COMPLETED') {
+    return {
+      title: 'Заказ завершён',
+      text: 'Работа принята, оплата отпущена. Участники могут оставить отзыв и подтвердить навыки исполнителя.',
+      actor: 'Система',
+    };
+  }
+  if (status === 'CANCELLED') {
+    return { title: 'Заказ отменён', text: 'Дальше действий по заказу нет. Заказчик может создать копию и запустить задачу заново.', actor: 'Система' };
+  }
+  if (status === 'EXPIRED') {
+    return { title: 'Срок истёк', text: 'Заказ не дошёл до работы в срок. Заказчик может повторить публикацию.', actor: 'Система' };
+  }
+  return { title: 'Черновик', text: 'Заказ ещё не опубликован и не участвует в рабочем процессе.', actor: 'Заказчик' };
+}
 
 function rememberRecentlyViewed(id: string, title: string) {
   if (typeof window === 'undefined') return;
@@ -65,6 +139,8 @@ export default function OrderDetailClient() {
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [invoiceDescription, setInvoiceDescription] = useState('');
   const [paymentAddress, setPaymentAddress] = useState<string | null>(null);
+  const [issueInvoiceConfirmOpen, setIssueInvoiceConfirmOpen] = useState(false);
+  const [paymentConfirmInvoice, setPaymentConfirmInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
@@ -79,6 +155,7 @@ export default function OrderDetailClient() {
   const [deliverNotes, setDeliverNotes] = useState('');
   const [deliverFiles, setDeliverFiles] = useState<UploadedFile[]>([]);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [bidActionId, setBidActionId] = useState<string | null>(null);
 
   // --- Отзыв после завершения заказа ---
   const [reviewRating, setReviewRating] = useState(5);
@@ -177,6 +254,17 @@ export default function OrderDetailClient() {
   const chatFreelancerId = isClient ? activeFreelancerId : (me?.id ?? null);
   const milestones = useMemo(() => [...(order?.milestones ?? [])].sort((a, b) => a.position - b.position), [order]);
   const hasMilestones = milestones.length > 0;
+  const pendingBidCount = order?.bids?.filter((bid) => bid.status === 'PENDING').length ?? 0;
+  const workflowGuidance = order
+    ? getWorkflowGuidance({
+        status: order.status,
+        isClient,
+        isFreelancer,
+        pendingBidCount,
+        hasAcceptedBid,
+        hasMilestones,
+      })
+    : null;
 
   async function createMilestone(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -241,6 +329,35 @@ export default function OrderDetailClient() {
       setError(err instanceof Error ? err.message : 'Не удалось принять работу');
     } finally {
       setBusyAction(null);
+    }
+  }
+
+  async function hireBid(bidId: string) {
+    setError(null);
+    setBidActionId(`hire-${bidId}`);
+    try {
+      await api(`/orders/${orderId}/bids/${bidId}/accept`, { method: 'POST' });
+      await refreshOrder();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось выбрать исполнителя');
+    } finally {
+      setBidActionId(null);
+    }
+  }
+
+  async function declineBid(bidId: string) {
+    setError(null);
+    setBidActionId(`decline-${bidId}`);
+    try {
+      await api(`/orders/${orderId}/bids/${bidId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: 'Заказчик выбрал другого исполнителя или продолжает отбор.' }),
+      });
+      await refreshOrder();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось отклонить отклик');
+    } finally {
+      setBidActionId(null);
     }
   }
 
@@ -323,9 +440,9 @@ export default function OrderDetailClient() {
     setMessages((current) => [...current, created]);
   }
 
-  async function issueInvoice(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function issueInvoice() {
     setError(null);
+    setIssueInvoiceConfirmOpen(false);
     try {
       const result = await api<{ payment: { payAddress: string } }>('/wallet/invoices', {
         method: 'POST',
@@ -358,20 +475,20 @@ export default function OrderDetailClient() {
 
       {error && <ErrorNotice message={error} />}
 
-      <section className="mb-6 rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <section className="workspace-hero mb-6 p-6 md:p-8">
+        <div className="relative flex flex-wrap items-start justify-between gap-6">
           <div>
-            <div className="flex items-center gap-2 text-sm text-stone-500">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-stone-500">
               <span>{order.category?.name}</span>
               {order.client?.verifiedPayer && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                  <ShieldIcon className="h-3 w-3" />
+                  <BalanceEscrowIcon className="h-4 w-4" />
                   Проверенный плательщик
                 </span>
               )}
             </div>
             <div className="mt-1 flex items-center gap-2">
-              <h1 className="font-serif text-3xl text-stone-900">{order.title}</h1>
+              <h1 className="max-w-3xl font-serif text-3xl leading-tight text-stone-950 md:text-5xl">{order.title}</h1>
               {order.isPromoted && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
                   <BoostIcon className="h-3 w-3" />
@@ -380,40 +497,69 @@ export default function OrderDetailClient() {
               )}
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-xl font-semibold">{money(order.budgetMin, order.currency)}</p>
-            <OrderStatusBadge status={order.status} className="mt-1" />
+          <div className="rounded-[2rem] border border-stone-100 bg-white/70 p-5 text-right shadow-sm backdrop-blur">
+            <div className="flex items-start justify-between gap-4 text-left">
+              <Mascot name="invoiceCoin" size="h-14 w-14" />
+              <div>
+                <p className="text-xs uppercase text-stone-400">Бюджет</p>
+                <p className="mt-1 font-serif text-3xl text-stone-950">{money(order.budgetMin, order.currency)}</p>
+                <OrderStatusBadge status={order.status} className="mt-1" />
+              </div>
+            </div>
             {isClient && ['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(order.status) && (
               <button
                 type="button"
                 onClick={cloneOrder}
                 disabled={cloning}
-                className="mt-2 rounded-full border border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-600 hover:border-brand hover:text-brand disabled:opacity-50"
+                className="secondary-action mt-3 px-3 py-1.5 text-xs font-medium disabled:opacity-50"
               >
                 {cloning ? 'Создаём…' : 'Повторить заказ'}
               </button>
             )}
           </div>
         </div>
-        <p className="mt-4 whitespace-pre-wrap text-stone-700">{order.description}</p>
+        <p className="relative mt-5 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-stone-600">{order.description}</p>
 
-        <div className="mt-5 border-t border-stone-100 pt-4">
-          <OrderTimeline status={order.status} />
+        <div className="relative mt-6 rounded-[2rem] border border-stone-100 bg-white/70 p-4 shadow-sm backdrop-blur">
+          <div className="flex items-center gap-4">
+            <div className="min-w-0 flex-1">
+              <OrderTimeline status={order.status} />
+            </div>
+          </div>
+          {workflowGuidance && (
+            <div className="mt-4 grid gap-3 border-t border-stone-100 pt-4 md:grid-cols-[1fr_auto] md:items-center">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
+                    Сейчас отвечает: {workflowGuidance.actor}
+                  </span>
+                  <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-500">
+                    {pendingBidCount} откликов на решении
+                  </span>
+                </div>
+                <p className="mt-3 font-semibold text-stone-950">{workflowGuidance.title}</p>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-stone-600">{workflowGuidance.text}</p>
+              </div>
+              <div className="rounded-[1.5rem] bg-card-sand/70 px-4 py-3 text-sm font-semibold text-stone-700">
+                Статус меняется только действием участника
+              </div>
+            </div>
+          )}
         </div>
 
         {isClient && order.status === 'OPEN' && !order.isPromoted && (
-          <div className="mt-4 border-t border-stone-100 pt-4">
+          <div className="relative mt-4 rounded-3xl border border-amber-300/20 bg-amber-300/10 p-4">
             <button
               type="button"
               onClick={boostOrder}
               disabled={boosting}
-              className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-full border border-amber-200/40 bg-amber-100 px-4 py-2 text-sm font-medium text-stone-950 hover:bg-amber-50 disabled:opacity-50"
             >
               <BoostIcon className="h-4 w-4" />
               {boosting ? 'Оформляем…' : 'Продвинуть заказ (7 дней)'}
             </button>
             {boostResult && (
-              <p className="mt-2 text-sm text-stone-600">
+              <p className="mt-2 text-sm text-stone-700">
                 {boostResult.paidFromQuota
                   ? 'Продвижение активировано из бесплатной квоты тарифа.'
                   : `Оплатите буст: ${boostResult.payAddress}`}
@@ -423,11 +569,11 @@ export default function OrderDetailClient() {
         )}
 
         {(isClient || isFreelancer) && (
-          <div className="mt-4 border-t border-stone-100 pt-4">
+          <div className="relative mt-4">
             {order.disputes && order.disputes.length > 0 ? (
               <div
-                className={`rounded-lg px-4 py-3 text-sm ${
-                  order.disputes[0].status === 'RESOLVED' ? 'bg-card-sage/50 text-stone-700' : 'bg-card-sand text-stone-700'
+                className={`rounded-2xl px-4 py-3 text-sm ${
+                  order.disputes[0].status === 'RESOLVED' ? 'bg-card-sage text-stone-800' : 'bg-card-sand text-stone-800'
                 }`}
               >
                 <p className="font-medium">
@@ -442,7 +588,7 @@ export default function OrderDetailClient() {
               <button
                 type="button"
                 onClick={() => setShowDisputeForm(true)}
-                className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
+                className="secondary-action px-4 py-2 text-sm font-medium"
               >
                 Открыть спор
               </button>
@@ -456,21 +602,21 @@ export default function OrderDetailClient() {
                   placeholder="Опишите причину спора (минимум 10 символов)"
                   value={disputeReason}
                   onChange={(e) => setDisputeReason(e.target.value)}
-                  className="min-h-20 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                  className="field-surface min-h-20 w-full px-3 py-2 text-sm"
                 />
                 {disputeError && <p className="text-sm text-red-600">{disputeError}</p>}
                 <div className="flex gap-2">
                   <button
                     type="submit"
                     disabled={disputeSubmitting}
-                    className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                    className="primary-action px-4 py-2 text-sm font-medium disabled:opacity-50"
                   >
                     {disputeSubmitting ? 'Отправляем…' : 'Отправить'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowDisputeForm(false)}
-                    className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600"
+                    className="secondary-action px-4 py-2 text-sm font-medium"
                   >
                     Отмена
                   </button>
@@ -481,8 +627,19 @@ export default function OrderDetailClient() {
         )}
       </section>
 
-      <section className="mb-6 rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
-        <h2 className="mb-4 font-serif text-xl text-stone-900">Отклики</h2>
+      <section className="premium-panel mb-6 rounded-[2rem] p-5 md:p-6">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand">Выбор исполнителя</p>
+            <h2 className="mt-1 font-serif text-2xl text-stone-900">Отклики</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600">
+              Сравните сообщение, срок и бюджет. Заказ перейдёт в работу только после действия заказчика.
+            </p>
+          </div>
+          <div className="rounded-full bg-card-sand px-4 py-2 text-sm font-semibold text-stone-700">
+            {(order.bids ?? []).length} кандидатов
+          </div>
+        </div>
         {order.tags && order.tags.length > 0 && (
           <div className="mb-4 flex flex-wrap gap-1.5">
             {order.tags.map((tag) => (
@@ -495,35 +652,141 @@ export default function OrderDetailClient() {
         <div className="space-y-3">
           {(order.bids ?? []).map((bid) => {
             const compatibility = compatibilityByBidId[bid.id];
+            const freelancerName = bid.freelancer?.profile?.displayName ?? bid.freelancer?.email ?? 'Фрилансер';
+            const avatarUrl = bid.freelancer?.profile?.avatarUrl;
+            const isSelectedBid = bid.status === 'ACCEPTED' || order.acceptedBidId === bid.id;
+            const canDecideBid = isClient && order.status === 'OPEN' && bid.status === 'PENDING';
+            const isMutedBid = bid.status === 'REJECTED' || bid.status === 'WITHDRAWN';
             return (
-              <div key={bid.id} className="rounded-lg border border-stone-200 p-3">
-                <div className="flex justify-between gap-3">
-                  <p className="font-medium">{bid.freelancer?.profile?.displayName ?? bid.freelancer?.email ?? 'Фрилансер'}</p>
-                  <p className="font-semibold">{money(bid.amount, order.currency)}</p>
-                </div>
-                <p className="mt-1 text-sm text-stone-600">{bid.message}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-500">
-                  <span>
-                    {bid.deliveryDays} дн. · {BID_STATUS_LABELS[bid.status] ?? bid.status}
-                  </span>
-                  {compatibility != null && (
-                    <span
-                      className={`rounded-full px-2 py-0.5 font-medium ${
-                        compatibility >= 70 ? 'bg-card-sage text-stone-800' : compatibility >= 40 ? 'bg-card-sand text-stone-800' : 'bg-stone-100 text-stone-600'
-                      }`}
-                    >
-                      {compatibility}% совпадение
-                    </span>
-                  )}
-                  {isClient && (bid.status === 'PENDING' || bid.status === 'ACCEPTED') && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveFreelancerId(bid.freelancerId)}
-                      className="font-medium text-brand hover:underline"
-                    >
-                      Написать
-                    </button>
-                  )}
+              <div
+                key={bid.id}
+                className={`interactive-card rounded-[2rem] border p-5 transition ${
+                  isSelectedBid
+                    ? 'border-emerald-300 bg-emerald-50/60'
+                    : isMutedBid
+                      ? 'border-stone-100 bg-stone-50/75 opacity-75'
+                      : 'border-stone-100 bg-white/80'
+                }`}
+              >
+                <div className="grid gap-5 lg:grid-cols-[1fr_250px] lg:items-start">
+                  <div className="min-w-0">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[1.35rem] border border-stone-100 bg-card-sage shadow-sm">
+                        {avatarUrl ? (
+                          <img
+                            src={avatarUrl.startsWith('http') ? avatarUrl : `${API_URL}${avatarUrl}`}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <BidAvatarIcon className="h-12 w-12" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="break-words text-lg font-semibold text-stone-950">{freelancerName}</p>
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              isSelectedBid
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : bid.status === 'PENDING'
+                                  ? 'bg-card-sand text-stone-700'
+                                  : 'bg-stone-100 text-stone-500'
+                            }`}
+                          >
+                            {BID_STATUS_LABELS[bid.status] ?? bid.status}
+                          </span>
+                        </div>
+                        <p className="mt-1 break-all text-xs text-stone-500">{bid.freelancer?.email}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-stone-600 shadow-sm">
+                            {bid.deliveryDays} дн. на выполнение
+                          </span>
+                          {compatibility != null && (
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                compatibility >= 70
+                                  ? 'bg-card-sage text-stone-800'
+                                  : compatibility >= 40
+                                    ? 'bg-card-sand text-stone-800'
+                                    : 'bg-stone-100 text-stone-600'
+                              }`}
+                            >
+                              {compatibility}% совпадение
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-[1.5rem] border border-stone-100 bg-white/75 p-4">
+                      <p className="text-xs font-semibold uppercase text-stone-400">Сообщение к заказу</p>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-stone-700">
+                        {bid.message || 'Фрилансер пока не добавил сопроводительное сообщение.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.6rem] border border-stone-100 bg-white/85 p-4 shadow-sm">
+                    <p className="text-xs font-semibold uppercase text-stone-400">Предложение</p>
+                    <p className="mt-1 font-serif text-3xl text-stone-950">{money(bid.amount, order.currency)}</p>
+                    {isSelectedBid ? (
+                      <p className="mt-3 rounded-[1.25rem] bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700">
+                        Исполнитель выбран. Рабочий чат уже доступен.
+                      </p>
+                    ) : canDecideBid ? (
+                      <p className="mt-3 rounded-[1.25rem] bg-card-sand/80 px-3 py-2 text-sm text-stone-700">
+                        Нажмите «Дать таск», чтобы принять этого исполнителя. Остальные ожидающие отклики будут закрыты.
+                      </p>
+                    ) : (
+                      <p className="mt-3 rounded-[1.25rem] bg-stone-100 px-3 py-2 text-sm text-stone-500">
+                        Действия по этому отклику сейчас недоступны.
+                      </p>
+                    )}
+
+                    <div className="mt-4 grid gap-2">
+                      <Link href={`/freelancers/${bid.freelancerId}`} className="secondary-action justify-center px-4 py-2 text-sm font-semibold">
+                        Посмотреть профиль
+                      </Link>
+                      {isClient && (bid.status === 'PENDING' || bid.status === 'ACCEPTED') && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveFreelancerId(bid.freelancerId)}
+                          className="secondary-action justify-center px-4 py-2 text-sm font-semibold"
+                        >
+                          Написать
+                        </button>
+                      )}
+                      {isClient && isSelectedBid && (
+                        <Link
+                          href={`/chats?orderId=${order.id}&freelancerId=${bid.freelancerId}`}
+                          className="primary-action justify-center px-4 py-2 text-sm font-semibold"
+                        >
+                          Открыть чат
+                        </Link>
+                      )}
+                      {canDecideBid && (
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                          <button
+                            type="button"
+                            onClick={() => hireBid(bid.id)}
+                            disabled={bidActionId === `hire-${bid.id}`}
+                            className="primary-action justify-center px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                          >
+                            {bidActionId === `hire-${bid.id}` ? 'Выбираем…' : 'Дать таск'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => declineBid(bid.id)}
+                            disabled={bidActionId === `decline-${bid.id}`}
+                            className="secondary-action justify-center px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                          >
+                            {bidActionId === `decline-${bid.id}` ? 'Отклоняем…' : 'Отклонить'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             );
@@ -533,13 +796,13 @@ export default function OrderDetailClient() {
       </section>
 
       {hasAcceptedBid && (
-        <section className="mb-6 rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
+        <section className="premium-panel mb-6 p-5">
           <h2 className="mb-4 font-serif text-xl text-stone-900">Этапы и сдача работы</h2>
 
           {hasMilestones ? (
             <div className="space-y-3">
               {milestones.map((milestone) => (
-                <div key={milestone.id} className="rounded-lg border border-stone-200 p-4">
+                <div key={milestone.id} className="interactive-card rounded-[1.5rem] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium">{milestone.title}</p>
                     <p className="font-semibold">{money(milestone.amount, order.currency)}</p>
@@ -553,7 +816,7 @@ export default function OrderDetailClient() {
                       <button
                         type="button"
                         onClick={() => openDeliverForm(milestone.id)}
-                        className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-dark"
+                        className="primary-action px-3 py-1.5 text-sm font-medium"
                       >
                         Сдать этап
                       </button>
@@ -563,7 +826,7 @@ export default function OrderDetailClient() {
                         type="button"
                         onClick={() => approve(milestone.id)}
                         disabled={busyAction === `approve-${milestone.id}`}
-                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                        className="primary-action px-3 py-1.5 text-sm font-medium disabled:opacity-50"
                       >
                         {busyAction === `approve-${milestone.id}` ? 'Принимаем…' : 'Принять и отпустить оплату'}
                       </button>
@@ -587,7 +850,7 @@ export default function OrderDetailClient() {
               ))}
             </div>
           ) : (
-            <div className="rounded-lg border border-stone-200 p-4">
+            <div className="rounded-2xl border border-stone-100 bg-stone-50/70 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-stone-600">Этапы не заведены — работа сдаётся заказом целиком.</p>
                 <div className="flex gap-2">
@@ -595,7 +858,7 @@ export default function OrderDetailClient() {
                     <button
                       type="button"
                       onClick={() => openDeliverForm('order')}
-                      className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-dark"
+                      className="primary-action px-3 py-1.5 text-sm font-medium"
                     >
                       Сдать работу
                     </button>
@@ -605,7 +868,7 @@ export default function OrderDetailClient() {
                       type="button"
                       onClick={() => approve('order')}
                       disabled={busyAction === 'approve-order'}
-                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                      className="primary-action px-3 py-1.5 text-sm font-medium disabled:opacity-50"
                     >
                       {busyAction === 'approve-order' ? 'Принимаем…' : 'Принять и отпустить оплату'}
                     </button>
@@ -640,7 +903,7 @@ export default function OrderDetailClient() {
                   placeholder="Название этапа"
                   value={milestoneForm.title}
                   onChange={(e) => setMilestoneForm((f) => ({ ...f, title: e.target.value }))}
-                  className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                  className="field-surface min-w-0 flex-1 px-3 py-2 text-sm"
                 />
                 <input
                   required
@@ -649,15 +912,15 @@ export default function OrderDetailClient() {
                   placeholder="Сумма"
                   value={milestoneForm.amount}
                   onChange={(e) => setMilestoneForm((f) => ({ ...f, amount: e.target.value }))}
-                  className="w-28 rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                  className="field-surface w-28 px-3 py-2 text-sm"
                 />
                 <input
                   type="date"
                   value={milestoneForm.dueDate}
                   onChange={(e) => setMilestoneForm((f) => ({ ...f, dueDate: e.target.value }))}
-                  className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                  className="field-surface px-3 py-2 text-sm"
                 />
-                <button type="submit" className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium hover:bg-stone-50">
+                <button type="submit" className="secondary-action px-3 py-2 text-sm font-medium">
                   Создать
                 </button>
               </form>
@@ -665,7 +928,7 @@ export default function OrderDetailClient() {
           )}
 
           {order.status === 'COMPLETED' && !reviewSubmitted && (isClient || isFreelancer) && (
-            <div className="mt-6 rounded-lg border border-stone-200 p-4">
+            <div className="mt-6 rounded-2xl border border-stone-100 bg-stone-50/70 p-4">
               <h3 className="mb-3 font-semibold">Оставить отзыв</h3>
               <form onSubmit={submitReview} className="space-y-3">
                 <div className="flex gap-1">
@@ -685,23 +948,23 @@ export default function OrderDetailClient() {
                   placeholder="Комментарий (необязательно)"
                   value={reviewComment}
                   onChange={(e) => setReviewComment(e.target.value)}
-                  className="min-h-20 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                  className="field-surface min-h-20 w-full px-3 py-2 text-sm"
                 />
-                <button type="submit" className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white">
+                <button type="submit" className="primary-action px-4 py-2 text-sm font-medium">
                   Отправить отзыв
                 </button>
               </form>
             </div>
           )}
           {reviewSubmitted && (
-            <div className="mt-6 flex items-center gap-3 rounded-lg bg-emerald-50 px-4 py-3">
-              <Mascot name="love" size="h-12 w-12" />
+            <div className="mt-6 flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3">
+              <Mascot name="successConfetti" size="h-12 w-12" />
               <p className="text-sm font-medium text-emerald-700">Спасибо за отзыв! Заказ закрыт.</p>
             </div>
           )}
 
           {order.status === 'COMPLETED' && isClient && acceptedBid?.freelancer?.profile?.skills && acceptedBid.freelancer.profile.skills.length > 0 && (
-            <div className="mt-6 rounded-lg border border-stone-200 p-4">
+            <div className="mt-6 rounded-2xl border border-stone-100 bg-stone-50/70 p-4">
               <h3 className="mb-3 font-semibold">Подтвердить навыки исполнителя</h3>
               <div className="flex flex-wrap gap-2">
                 {acceptedBid.freelancer.profile.skills.map(({ skill }) => {
@@ -729,7 +992,7 @@ export default function OrderDetailClient() {
 
       {canChat && (
         <section className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
+          <div className="premium-panel p-5">
             <h2 className="mb-4 flex items-center gap-2 font-serif text-xl text-stone-900">
               <ChatIcon className="h-8 w-8" />
               Чат заказа
@@ -756,7 +1019,7 @@ export default function OrderDetailClient() {
               <p className="text-sm text-stone-500">Выберите отклик выше, чтобы начать переписку.</p>
             ) : (
               <>
-                <div className="mb-4 max-h-[480px] space-y-3 overflow-y-auto rounded-2xl bg-stone-50 p-4">
+                <div className="mb-4 max-h-[480px] space-y-3 overflow-y-auto rounded-3xl bg-stone-50 p-4">
                   {messages.map((message) => {
                     const isOwn = message.senderId === me?.id;
                     const name = message.sender?.profile?.displayName ?? message.sender?.email ?? 'Участник';
@@ -769,13 +1032,10 @@ export default function OrderDetailClient() {
                         >
                           {name.charAt(0).toUpperCase()}
                         </div>
-                        <div className={`max-w-[75%] rounded-2xl p-3 shadow-sm ${isOwn ? 'rounded-br-sm bg-brand text-white' : 'rounded-bl-sm bg-white text-stone-900'}`}>
+                        <div className={`max-w-[75%] rounded-[1.5rem] p-3 shadow-sm ${isOwn ? 'bg-brand text-white' : 'bg-white text-stone-900'}`}>
                           <p className={`text-xs ${isOwn ? 'text-white/70' : 'text-stone-500'}`}>{name}</p>
                           {message.type === 'INVOICE' && message.invoice ? (
-                            <div className={`mt-2 rounded-lg border p-3 ${isOwn ? 'border-white/30 bg-white/10' : 'border-brand/20 bg-brand/10'}`}>
-                              <p className="font-semibold">Счёт на оплату {money(message.invoice.amount, message.invoice.currency)}</p>
-                              <p className={`text-sm ${isOwn ? 'text-white/80' : 'text-stone-600'}`}>{message.invoice.status}</p>
-                            </div>
+                            <InvoiceChatCard invoice={message.invoice} own={isOwn} canPay={isClient && !isOwn} onPayIntent={setPaymentConfirmInvoice} />
                           ) : (
                             <p className="mt-1 text-sm">{message.body}</p>
                           )}
@@ -792,9 +1052,9 @@ export default function OrderDetailClient() {
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
                     placeholder="Сообщение"
-                    className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2"
+                    className="field-surface min-w-0 flex-1 px-3 py-2"
                   />
-                  <button type="submit" className="rounded-lg bg-brand px-4 py-2 font-medium text-white">
+                  <button type="submit" className="primary-action px-4 py-2 font-medium">
                     Отправить
                   </button>
                 </form>
@@ -803,9 +1063,15 @@ export default function OrderDetailClient() {
           </div>
 
           {isFreelancer && (
-            <aside className="rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
+            <aside className="premium-panel p-5">
               <h2 className="mb-4 font-serif text-lg text-stone-900">Выставить счёт</h2>
-              <form onSubmit={issueInvoice} className="space-y-3">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setIssueInvoiceConfirmOpen(true);
+                }}
+                className="space-y-3"
+              >
                 <input
                   required
                   type="number"
@@ -813,25 +1079,50 @@ export default function OrderDetailClient() {
                   placeholder="Сумма"
                   value={invoiceAmount}
                   onChange={(e) => setInvoiceAmount(e.target.value)}
-                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                  className="field-surface w-full px-3 py-2"
                 />
                 <textarea
                   placeholder="Описание"
                   value={invoiceDescription}
                   onChange={(e) => setInvoiceDescription(e.target.value)}
-                  className="min-h-24 w-full rounded-lg border border-stone-300 px-3 py-2"
+                  className="field-surface min-h-24 w-full px-3 py-2"
                 />
-                <button type="submit" className="w-full rounded-lg bg-brand px-4 py-3 font-medium text-white">
-                  Выставить
+                <button type="submit" className="primary-action w-full px-4 py-3 font-medium">
+                  Подготовить счёт
                 </button>
               </form>
               {paymentAddress && (
-                <p className="mt-4 break-all rounded-lg bg-stone-50 p-3 text-xs text-stone-600">Pay address: {paymentAddress}</p>
+                <div className="mt-4 rounded-[1.5rem] border border-brand/15 bg-card-sand/70 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">Адрес оплаты</p>
+                  <p className="mt-2 break-all font-mono text-xs text-stone-700">{paymentAddress}</p>
+                  <p className="mt-2 text-xs leading-5 text-stone-500">Счёт уже ушёл в чат. После оплаты провайдер подтвердит платёж и откроет эскроу.</p>
+                </div>
               )}
             </aside>
           )}
         </section>
       )}
+
+      <ConfirmDialog
+        open={issueInvoiceConfirmOpen}
+        title="Отправить счёт заказчику?"
+        description={`Проверьте сумму: ${money(invoiceAmount || 0, order.currency)}. После подтверждения счёт появится в чате, а заказчик получит уведомление.`}
+        confirmLabel="Отправить счёт"
+        onCancel={() => setIssueInvoiceConfirmOpen(false)}
+        onConfirm={issueInvoice}
+      />
+      <ConfirmDialog
+        open={Boolean(paymentConfirmInvoice)}
+        title="Перейти к оплате счёта?"
+        description={
+          paymentConfirmInvoice
+            ? `Сумма счёта: ${money(paymentConfirmInvoice.amount, paymentConfirmInvoice.currency)}. После оплаты средства будут зарезервированы в эскроу TaskHunt. Сейчас backend должен вернуть платёжный адрес для этого счёта.`
+            : ''
+        }
+        confirmLabel="Понятно"
+        onCancel={() => setPaymentConfirmInvoice(null)}
+        onConfirm={() => setPaymentConfirmInvoice(null)}
+      />
 
       {similarOrders.length > 0 && (
         <section className="mt-6">
@@ -841,7 +1132,7 @@ export default function OrderDetailClient() {
               <Link
                 key={similar.id}
                 href={`/orders/${similar.id}`}
-                className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                className="interactive-card rounded-2xl p-4"
               >
                 <p className="line-clamp-2 font-medium text-stone-900">{similar.title}</p>
                 <p className="mt-2 text-sm font-semibold text-stone-700">{money(similar.budgetMin, similar.currency)}</p>
@@ -879,19 +1170,19 @@ function DeliveryForm({
   onSubmit,
 }: DeliveryFormProps) {
   return (
-    <form onSubmit={onSubmit} className="mt-3 space-y-3 rounded-lg bg-stone-50 p-3">
+    <form onSubmit={onSubmit} className="mt-3 space-y-3 rounded-2xl bg-stone-50 p-3">
       <textarea
         required
         placeholder="Что сделано"
         value={description}
         onChange={(e) => onDescriptionChange(e.target.value)}
-        className="min-h-20 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+        className="field-surface min-h-20 w-full px-3 py-2 text-sm"
       />
       <textarea
         placeholder="Заметки (необязательно)"
         value={notes}
         onChange={(e) => onNotesChange(e.target.value)}
-        className="min-h-16 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+        className="field-surface min-h-16 w-full px-3 py-2 text-sm"
       />
 
       <FileUpload multiple onUploaded={onFileUploaded} label="Прикрепить файлы сдачи" />
@@ -910,14 +1201,14 @@ function DeliveryForm({
         <button
           type="submit"
           disabled={busy}
-          className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="primary-action px-4 py-2 text-sm font-medium disabled:opacity-50"
         >
           {busy ? 'Отправляем…' : 'Отправить на проверку'}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-white"
+          className="secondary-action px-4 py-2 text-sm font-medium"
         >
           Отмена
         </button>

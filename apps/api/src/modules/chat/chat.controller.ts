@@ -51,3 +51,14 @@ export class ChatController {
     return this.chatService.softDeleteMessage(messageId, user.id);
   }
 }
+
+@UseGuards(JwtAuthGuard)
+@Controller('chat')
+export class ChatInboxController {
+  constructor(private readonly chatService: ChatService) {}
+
+  @Get('threads')
+  listMyThreads(@CurrentUser() user: AuthenticatedUser) {
+    return this.chatService.listMyThreads(user.id);
+  }
+}

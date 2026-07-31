@@ -3,7 +3,8 @@
 import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { saveTokens } from '@/lib/api';
-import { Logo } from '@/components/Logo';
+import { AuthShell } from '@/components/AuthShell';
+import { Mascot } from '@/components/Mascot';
 
 function OAuthCallbackInner() {
   const router = useRouter();
@@ -29,16 +30,22 @@ function OAuthCallbackInner() {
 
 export default function OAuthCallbackPage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6">
-      <div className="animate-float">
-        <Logo withWordmark={false} className="h-12 w-12" />
+    <AuthShell
+      eyebrow="OAuth"
+      title="Завершаем безопасный вход"
+      description="Проверяем ответ провайдера и переносим вас в рабочее пространство."
+    >
+      <div className="flex flex-col items-center justify-center gap-6 py-8">
+        <div className="animate-float">
+          <Mascot name="hello" size="h-20 w-20" />
+        </div>
+        <div className="h-1.5 w-40 overflow-hidden rounded-full bg-stone-200">
+          <div className="h-full w-1/3 animate-loading-bar rounded-full bg-brand" />
+        </div>
+        <Suspense fallback={<p className="text-sm text-stone-500">Входим…</p>}>
+          <OAuthCallbackInner />
+        </Suspense>
       </div>
-      <div className="h-1.5 w-40 overflow-hidden rounded-full bg-stone-200">
-        <div className="h-full w-1/3 animate-loading-bar rounded-full bg-brand" />
-      </div>
-      <Suspense fallback={<p className="text-sm text-stone-500">Входим…</p>}>
-        <OAuthCallbackInner />
-      </Suspense>
-    </main>
+    </AuthShell>
   );
 }

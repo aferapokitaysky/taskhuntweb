@@ -1,11 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
+  BidSubmittedEvent,
   BidAcceptedEvent,
   DisputeOpenedEvent,
   DomainEventName,
   EscrowReleasedEvent,
+  InvoiceIssuedEvent,
   InvoicePaidEvent,
+  OrderInviteCreatedEvent,
+  OrderInviteRespondedEvent,
   WorkSubmittedEvent,
 } from '@taskhunt/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -27,6 +31,55 @@ export class NotificationsEventsListener {
       title: 'Отклик принят',
       message: `Ваш отклик на заказ с суммой $${event.payload.amount} принят заказчиком.`,
       eventName: DomainEventName.BidAccepted,
+    });
+  }
+
+  @OnEvent(DomainEventName.BidSubmitted)
+  async handleBidSubmitted(event: BidSubmittedEvent) {
+    const order = await this.prisma.order.findUnique({ where: { id: event.payload.orderId } });
+    if (!order) return;
+    await this.createNotification({
+      userId: order.clientId,
+      title: 'Новый отклик',
+      message: `По заказу "${order.title}" пришёл новый отклик на сумму $${event.payload.amount}.`,
+      eventName: DomainEventName.BidSubmitted,
+    });
+  }
+
+  @OnEvent(DomainEventName.InvoiceIssued)
+  async handleInvoiceIssued(event: InvoiceIssuedEvent) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: event.payload.invoiceId },
+      include: { order: true },
+    });
+    if (!invoice) return;
+    const issuedBy = await this.prisma.user.findUnique({ where: { id: invoice.issuedById }, include: { profile: true } });
+    const sender = issuedBy?.profile?.displayName ?? issuedBy?.email ?? 'Фрилансер';
+    await this.createNotification({
+      userId: event.payload.payerId,
+      title: 'Вам выставили счёт',
+      message: `${sender} отправил счёт ${event.payload.amount} ${event.payload.currency} по заказу "${invoice.order.title}".`,
+      eventName: DomainEventName.InvoiceIssued,
+    });
+  }
+
+  @OnEvent(DomainEventName.OrderInviteCreated)
+  async handleOrderInviteCreated(event: OrderInviteCreatedEvent) {
+    await this.createNotification({
+      userId: event.payload.freelancerId,
+      title: 'Приглашение в заказ',
+      message: `Вас пригласили в заказ "${event.payload.orderTitle}".`,
+      eventName: DomainEventName.OrderInviteCreated,
+    });
+  }
+
+  @OnEvent(DomainEventName.OrderInviteResponded)
+  async handleOrderInviteResponded(event: OrderInviteRespondedEvent) {
+    await this.createNotification({
+      userId: event.payload.clientId,
+      title: event.payload.accepted ? 'Приглашение принято' : 'Приглашение отклонено',
+      message: `Фрилансер ${event.payload.accepted ? 'принял' : 'отклонил'} приглашение в заказ "${event.payload.orderTitle}".`,
+      eventName: DomainEventName.OrderInviteResponded,
     });
   }
 
