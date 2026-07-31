@@ -169,26 +169,26 @@ export default function CategoryOrdersPage() {
               {orders.map((order) => (
                 <article
                   key={order.id}
-                  className="interactive-card rounded-3xl border border-stone-100 bg-white p-5 shadow-sm"
+                  className="interactive-card min-w-0 rounded-3xl border border-stone-100 bg-white p-5 shadow-sm"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <Link href={`/orders/${order.id}`} className="text-lg font-semibold hover:text-brand">
+                  <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                    <Link href={`/orders/${order.id}`} className="min-w-0 max-w-full break-words text-lg font-semibold leading-snug hover:text-brand">
                       {order.title}
                     </Link>
-                    <div className="text-right">
-                      <p className="font-semibold">{money(order.budgetMin, order.currency)}</p>
+                    <div className="min-w-0 shrink-0 text-right">
+                      <p className="break-words font-semibold leading-tight">{money(order.budgetMin, order.currency)}</p>
                       {order.deadline && (
-                        <p className="text-xs text-stone-500">до {new Date(order.deadline).toLocaleDateString('ru-RU')}</p>
+                        <p className="break-words text-xs text-stone-500">до {new Date(order.deadline).toLocaleDateString('ru-RU')}</p>
                       )}
                     </div>
                   </div>
 
-                  <p className="mt-2 line-clamp-4 text-sm text-stone-600">{order.description}</p>
+                  <p className="mt-2 line-clamp-4 break-words text-sm leading-6 text-stone-600">{order.description}</p>
 
                   {order.tags && order.tags.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1">
                       {order.tags.map((tag) => (
-                        <span key={tag} className="rounded-full bg-card-sand px-2 py-0.5 text-xs text-stone-700">
+                        <span key={tag} className="max-w-full break-words rounded-full bg-card-sand px-2 py-0.5 text-xs text-stone-700">
                           {tag}
                         </span>
                       ))}
@@ -206,7 +206,7 @@ export default function CategoryOrdersPage() {
                     </span>
                     {isFreelancer && typeof order.compatibilityPercent === 'number' && (
                       <span
-                        className={`ml-auto flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${compatibilityColor(order.compatibilityPercent)}`}
+                        className={`min-w-0 break-words rounded-full px-2.5 py-1 text-xs font-medium sm:ml-auto sm:flex sm:items-center sm:gap-1 ${compatibilityColor(order.compatibilityPercent)}`}
                       >
                         <TargetIcon className="h-3.5 w-3.5" />
                         {order.compatibilityPercent}% по вашим навыкам
