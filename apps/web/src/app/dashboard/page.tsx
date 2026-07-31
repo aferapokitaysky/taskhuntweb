@@ -87,6 +87,9 @@ function DashboardContent() {
     tags: [] as string[],
   });
   const [tagInput, setTagInput] = useState('');
+  const [creatingOrder, setCreatingOrder] = useState(false);
+  const [savingOrderDraft, setSavingOrderDraft] = useState(false);
+  const [orderFormNotice, setOrderFormNotice] = useState<string | null>(null);
   const [bidForm, setBidForm] = useState({ amount: '', deliveryDays: '3', message: '' });
   const [showWithdrawForm, setShowWithdrawForm] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -210,6 +213,21 @@ function DashboardContent() {
   const isFreelancer = me?.roles.includes('FREELANCER') ?? false;
   const hasAside = isClient || !!selectedOrder;
   const flatCategories = categories.flatMap((category) => [category, ...(category.children ?? [])]);
+  const orderFormChecks = [
+    { label: 'Категория', done: Boolean(orderForm.categoryId) },
+    { label: 'Название 5+ символов', done: orderForm.title.trim().length >= 5 },
+    { label: 'Описание 20+ символов', done: orderForm.description.trim().length >= 20 },
+    { label: 'Бюджет от 1 $', done: Number(orderForm.budgetMin) > 0 },
+    { label: 'Стек или теги', done: orderForm.tags.length > 0 },
+  ];
+  const orderFormProgress = Math.round((orderFormChecks.filter((item) => item.done).length / orderFormChecks.length) * 100);
+  const orderFormReady = orderFormChecks.slice(0, 4).every((item) => item.done);
+  const orderFormBudgetPreview =
+    Number(orderForm.budgetMin) > 0
+      ? orderForm.budgetMax
+        ? `${money(orderForm.budgetMin, 'USD')} - ${money(orderForm.budgetMax, 'USD')}`
+        : `от ${money(orderForm.budgetMin, 'USD')}`
+      : 'Бюджет не указан';
 
   async function refreshOrders() {
     const params = new URLSearchParams();
@@ -312,6 +330,8 @@ function DashboardContent() {
   async function createOrder(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setOrderFormNotice(null);
+    setCreatingOrder(true);
     try {
       await api<Order>('/orders', {
         method: 'POST',
@@ -327,9 +347,38 @@ function DashboardContent() {
       });
       setOrderForm((current) => ({ ...current, title: '', description: '', budgetMin: '', budgetMax: '', deadline: '', tags: [] }));
       setTagInput('');
+      setOrderFormNotice('Заказ опубликован. Он уже виден фрилансерам в ленте.');
       await refreshOrders();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать заказ');
+    } finally {
+      setCreatingOrder(false);
+    }
+  }
+
+  async function saveOrderDraft() {
+    setError(null);
+    setOrderFormNotice(null);
+    setSavingOrderDraft(true);
+    try {
+      await api<Order>('/orders/drafts', {
+        method: 'POST',
+        body: JSON.stringify({
+          categoryId: orderForm.categoryId,
+          title: orderForm.title || undefined,
+          description: orderForm.description || undefined,
+          budgetMin: orderForm.budgetMin ? Number(orderForm.budgetMin) : undefined,
+          budgetMax: orderForm.budgetMax ? Number(orderForm.budgetMax) : undefined,
+          deadline: orderForm.deadline || undefined,
+          tags: orderForm.tags,
+        }),
+      });
+      setOrderFormNotice('Черновик сохранён. Его можно будет продолжить из ваших заказов.');
+      await refreshOrders();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось сохранить черновик');
+    } finally {
+      setSavingOrderDraft(false);
     }
   }
 
@@ -1143,27 +1192,41 @@ function DashboardContent() {
           )}
 
           {isClient && (
-            <section id="create-order" className="premium-panel rounded-[2rem] p-5">
-              <div className="mb-4 flex items-start justify-between gap-3">
+            <section id="create-order" className="premium-panel scroll-mt-28 overflow-hidden rounded-[2rem] p-0">
+              <div className="border-b border-stone-100 bg-gradient-to-br from-card-sand/65 via-white to-card-sage/45 p-5">
+                <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Публикация</p>
-                  <h2 className="mt-1 font-serif text-2xl text-stone-950">Создать заказ</h2>
-                  <p className="mt-1 text-sm leading-5 text-stone-500">Короткое ТЗ, бюджет, срок и стек — этого достаточно, чтобы собрать первые отклики.</p>
+                    <h2 className="mt-1 font-serif text-3xl leading-tight text-stone-950">Создать заказ</h2>
+                    <p className="mt-1 max-w-sm text-sm leading-5 text-stone-600">
+                      Чем яснее стартовый бриф, тем меньше лишних вопросов и тем быстрее появятся сильные отклики.
+                    </p>
                 </div>
                 <Mascot name="workLaptop" size="h-14 w-14" />
+                </div>
+                <div className="rounded-[1.5rem] bg-white/80 p-3 shadow-sm">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Готовность</span>
+                    <span className="rounded-full bg-card-sand px-2.5 py-1 text-xs font-semibold text-stone-700">{orderFormProgress}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-stone-100">
+                    <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${orderFormProgress}%` }} />
+                  </div>
+                </div>
               </div>
-              <div className="mb-4 grid gap-2 rounded-[1.75rem] bg-card-sand/45 p-3 text-xs font-semibold text-stone-700">
-                {[
-                  '1. Назовите результат, а не процесс',
-                  '2. Укажите стек и ограничения',
-                  '3. Поставьте бюджет и желаемый срок',
-                ].map((item) => (
-                  <div key={item} className="rounded-full bg-white/75 px-3 py-2">
-                    {item}
+
+              <div className="p-5">
+                <div className="mb-4 grid gap-2 text-xs font-semibold text-stone-700">
+                  {orderFormChecks.map((item) => (
+                    <div key={item.label} className="flex items-center justify-between gap-3 rounded-full bg-stone-50 px-3 py-2">
+                      <span className="break-words">{item.label}</span>
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.done ? 'bg-emerald-500' : 'bg-stone-300'}`} />
                   </div>
                 ))}
               </div>
               <form onSubmit={createOrder} className="space-y-3">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Категория</span>
                 <select
                   value={orderForm.categoryId}
                   onChange={(e) => setOrderForm({ ...orderForm, categoryId: e.target.value })}
@@ -1175,48 +1238,65 @@ function DashboardContent() {
                     </option>
                   ))}
                 </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Название результата</span>
                 <input
                   required
                   minLength={5}
-                  placeholder="Название"
+                      placeholder="Например: лендинг для SaaS с оплатой Stripe"
                   value={orderForm.title}
                   onChange={(e) => setOrderForm({ ...orderForm, title: e.target.value })}
                   className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
                 />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Описание задачи</span>
                 <textarea
                   required
                   minLength={20}
-                  placeholder="Описание задачи"
+                      placeholder="Что нужно сделать, какой результат ожидаете, какие ограничения, доступы, материалы и критерии готовности..."
                   value={orderForm.description}
                   onChange={(e) => setOrderForm({ ...orderForm, description: e.target.value })}
-                  className="field-surface min-h-32 w-full rounded-[1.35rem] px-3 py-3 text-sm"
+                      className="field-surface min-h-36 w-full rounded-[1.35rem] px-3 py-3 text-sm leading-6"
                 />
+                  </label>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <input
+                    <label className="field-surface block rounded-[1.35rem] px-3 py-3">
+                      <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Бюджет от</span>
+                      <input
                     required
                     type="number"
                     min="1"
-                    placeholder="Бюджет от"
+                        placeholder="0"
                     value={orderForm.budgetMin}
                     onChange={(e) => setOrderForm({ ...orderForm, budgetMin: e.target.value })}
-                    className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
+                        className="mt-1 w-full border-0 bg-transparent p-0 font-serif text-2xl leading-none text-stone-950 outline-none ring-0 placeholder:text-stone-300 focus:border-0 focus:ring-0"
                   />
-                  <input
+                    </label>
+                    <label className="field-surface block rounded-[1.35rem] px-3 py-3">
+                      <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">До</span>
+                      <input
                     type="number"
                     min="1"
-                    placeholder="До"
+                        placeholder="Необязательно"
                     value={orderForm.budgetMax}
                     onChange={(e) => setOrderForm({ ...orderForm, budgetMax: e.target.value })}
-                    className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
+                        className="mt-1 w-full border-0 bg-transparent p-0 font-serif text-2xl leading-none text-stone-950 outline-none ring-0 placeholder:text-stone-300 focus:border-0 focus:ring-0"
                   />
+                    </label>
                 </div>
-                <input
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Желаемый срок</span>
+                    <input
                   type="date"
                   value={orderForm.deadline}
                   onChange={(e) => setOrderForm({ ...orderForm, deadline: e.target.value })}
                   className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
                 />
+                  </label>
                 <div>
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Стек и теги</span>
                   <input
                     placeholder="Тэги/стек — Enter добавляет (React, Node.js…)"
                     value={tagInput}
@@ -1239,7 +1319,7 @@ function DashboardContent() {
                           key={tag}
                           type="button"
                           onClick={() => setOrderForm((f) => ({ ...f, tags: f.tags.filter((t) => t !== tag) }))}
-                          className="rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700 hover:line-through"
+                            className="max-w-full break-words rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700 hover:line-through"
                         >
                           {tag} ×
                         </button>
@@ -1247,10 +1327,31 @@ function DashboardContent() {
                     </div>
                   )}
                 </div>
-                <button type="submit" className="primary-action w-full rounded-[1.35rem] px-4 py-3 font-medium">
-                  Опубликовать
-                </button>
+                  <div className="rounded-[1.5rem] bg-stone-50 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Превью публикации</p>
+                    <p className="mt-1 break-words text-sm font-semibold text-stone-950">{orderForm.title || 'Название появится здесь'}</p>
+                    <p className="mt-1 text-xs font-semibold text-brand">{orderFormBudgetPreview}</p>
+                  </div>
+                  {orderFormNotice && <p className="rounded-[1.25rem] bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{orderFormNotice}</p>}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={saveOrderDraft}
+                      disabled={savingOrderDraft || !orderForm.categoryId}
+                      className="secondary-action rounded-[1.35rem] px-4 py-3 text-sm font-semibold disabled:opacity-50"
+                    >
+                      {savingOrderDraft ? 'Сохраняем...' : 'Сохранить черновик'}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={creatingOrder || !orderFormReady}
+                      className="primary-action rounded-[1.35rem] px-4 py-3 font-semibold disabled:opacity-50"
+                    >
+                      {creatingOrder ? 'Публикуем...' : 'Опубликовать'}
+                    </button>
+                  </div>
               </form>
+              </div>
             </section>
           )}
 
