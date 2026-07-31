@@ -12,6 +12,7 @@ import {
   OrderInviteRespondedEvent,
   WorkSubmittedEvent,
 } from '@taskhunt/shared-types';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -31,6 +32,11 @@ export class NotificationsEventsListener {
       title: 'Отклик принят',
       message: `Ваш отклик на заказ с суммой $${event.payload.amount} принят заказчиком.`,
       eventName: DomainEventName.BidAccepted,
+      metadata: {
+        orderId: event.payload.orderId,
+        bidId: event.payload.bidId,
+        href: `/orders/${event.payload.orderId}`,
+      },
     });
   }
 
@@ -43,6 +49,12 @@ export class NotificationsEventsListener {
       title: 'Новый отклик',
       message: `По заказу "${order.title}" пришёл новый отклик на сумму $${event.payload.amount}.`,
       eventName: DomainEventName.BidSubmitted,
+      metadata: {
+        orderId: event.payload.orderId,
+        bidId: event.payload.bidId,
+        freelancerId: event.payload.freelancerId,
+        href: `/orders/${event.payload.orderId}`,
+      },
     });
   }
 
@@ -60,6 +72,12 @@ export class NotificationsEventsListener {
       title: 'Вам выставили счёт',
       message: `${sender} отправил счёт ${event.payload.amount} ${event.payload.currency} по заказу "${invoice.order.title}".`,
       eventName: DomainEventName.InvoiceIssued,
+      metadata: {
+        orderId: event.payload.orderId,
+        invoiceId: event.payload.invoiceId,
+        freelancerId: invoice.issuedById,
+        href: `/chats?orderId=${event.payload.orderId}&freelancerId=${invoice.issuedById}`,
+      },
     });
   }
 
@@ -70,6 +88,12 @@ export class NotificationsEventsListener {
       title: 'Приглашение в заказ',
       message: `Вас пригласили в заказ "${event.payload.orderTitle}".`,
       eventName: DomainEventName.OrderInviteCreated,
+      metadata: {
+        inviteId: event.payload.inviteId,
+        orderId: event.payload.orderId,
+        clientId: event.payload.clientId,
+        href: `/orders/${event.payload.orderId}`,
+      },
     });
   }
 
@@ -80,6 +104,13 @@ export class NotificationsEventsListener {
       title: event.payload.accepted ? 'Приглашение принято' : 'Приглашение отклонено',
       message: `Фрилансер ${event.payload.accepted ? 'принял' : 'отклонил'} приглашение в заказ "${event.payload.orderTitle}".`,
       eventName: DomainEventName.OrderInviteResponded,
+      metadata: {
+        inviteId: event.payload.inviteId,
+        orderId: event.payload.orderId,
+        freelancerId: event.payload.freelancerId,
+        accepted: event.payload.accepted,
+        href: `/orders/${event.payload.orderId}`,
+      },
     });
   }
 
@@ -92,6 +123,12 @@ export class NotificationsEventsListener {
         title: 'Счёт оплачен',
         message: `Заказчик оплатил счёт на сумму $${event.payload.amount}.`,
         eventName: DomainEventName.InvoicePaid,
+        metadata: {
+          orderId: event.payload.orderId,
+          invoiceId: event.payload.invoiceId,
+          payerId: event.payload.payerId,
+          href: `/chats?orderId=${event.payload.orderId}&freelancerId=${event.payload.freelancerId}`,
+        },
       });
     }
   }
@@ -103,6 +140,10 @@ export class NotificationsEventsListener {
       title: 'Эскроу выплачен',
       message: `Средства в размере $${event.payload.amount} зачислены на ваш баланс.`,
       eventName: DomainEventName.EscrowReleased,
+      metadata: {
+        orderId: event.payload.orderId,
+        href: `/orders/${event.payload.orderId}`,
+      },
     });
   }
 
@@ -115,6 +156,12 @@ export class NotificationsEventsListener {
         title: 'Работа сдана',
         message: `Фрилансер отправил результат работы по заказу "${order.title}" на проверку.`,
         eventName: DomainEventName.WorkSubmitted,
+        metadata: {
+          orderId: event.payload.orderId,
+          deliveryId: event.payload.deliveryId,
+          submittedById: event.payload.submittedById,
+          href: `/orders/${event.payload.orderId}`,
+        },
       });
     }
   }
@@ -138,13 +185,25 @@ export class NotificationsEventsListener {
             title: 'Открыт спор',
             message: `По заказу "${order.title}" открыт спор по причине: ${event.payload.reason}`,
             eventName: DomainEventName.DisputeOpened,
+            metadata: {
+              orderId: event.payload.orderId,
+              disputeId: event.payload.disputeId,
+              openedById: event.payload.openedById,
+              href: `/orders/${event.payload.orderId}`,
+            },
           });
         }
       }
     }
   }
 
-  private async createNotification(data: { userId: string; title: string; message: string; eventName: string }) {
+  private async createNotification(data: {
+    userId: string;
+    title: string;
+    message: string;
+    eventName: string;
+    metadata?: Prisma.InputJsonValue;
+  }) {
     try {
       await this.prisma.notification.create({ data });
     } catch (err) {

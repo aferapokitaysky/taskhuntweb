@@ -132,4 +132,9 @@ export class WalletController {
   issueInvoice(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateInvoiceDto) {
     return this.invoiceService.issueInvoice(user.id, dto);
   }
+
+  @Get('invoices/:id/payment')
+  getInvoicePaymentDetails(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.invoiceService.getPaymentDetails(user.id, id);
+  }
 }

@@ -31,6 +31,9 @@ export function InvoiceChatCard({
   const pending = invoice.status === 'PENDING';
   const cancelled = invoice.status === 'CANCELLED' || invoice.status === 'EXPIRED';
   const shortId = invoice.id.slice(0, 8).toUpperCase();
+  const paymentLine = invoice.payAddress
+    ? `${invoice.payAmount ?? invoice.amount} ${invoice.payCurrency ?? invoice.currency}`
+    : null;
   const statusTone = paid
     ? 'bg-emerald-100 text-emerald-700'
     : cancelled
@@ -83,6 +86,15 @@ export function InvoiceChatCard({
             </div>
             <p className="break-all font-mono">{invoice.id}</p>
           </div>
+          {invoice.payAddress && pending && (
+            <div className="mt-3 grid gap-2 rounded-[1rem] bg-white p-2 text-[11px] text-stone-500 ring-1 ring-brand/10 dark:bg-stone-800">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold uppercase tracking-[0.12em] text-brand">Оплата</span>
+                <span className="font-bold text-stone-700">{paymentLine}</span>
+              </div>
+              <p className="break-all font-mono text-stone-600">{invoice.payAddress}</p>
+            </div>
+          )}
         </div>
       </div>
 

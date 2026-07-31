@@ -47,7 +47,12 @@ export class InvoiceService {
 
     const updated = await this.prisma.invoice.update({
       where: { id: invoice.id },
-      data: { nowPaymentsPaymentId: payment.paymentId },
+      data: {
+        nowPaymentsPaymentId: payment.paymentId,
+        payAddress: payment.payAddress,
+        payAmount: payment.payAmount,
+        payCurrency: payment.payCurrency,
+      },
     });
 
     await this.eventBus.publish(DomainEventName.InvoiceIssued, {
@@ -59,6 +64,36 @@ export class InvoiceService {
     });
 
     return { invoice: updated, payment };
+  }
+
+  async getPaymentDetails(userId: string, invoiceId: string) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { order: { include: { bids: { where: { status: 'ACCEPTED' } } } } },
+    });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+
+    const acceptedFreelancerId = invoice.order.bids[0]?.freelancerId;
+    const isParticipant =
+      invoice.payerId === userId ||
+      invoice.issuedById === userId ||
+      invoice.order.clientId === userId ||
+      acceptedFreelancerId === userId;
+    if (!isParticipant) {
+      throw new ForbiddenException('Not a participant of this invoice');
+    }
+
+    return {
+      invoiceId: invoice.id,
+      orderId: invoice.orderId,
+      amount: invoice.amount,
+      currency: invoice.currency,
+      status: invoice.status,
+      payAddress: invoice.payAddress,
+      payAmount: invoice.payAmount,
+      payCurrency: invoice.payCurrency,
+      paymentNetwork: invoice.payCurrency,
+    };
   }
 
   /** Вызывается из NowPaymentsController после проверки подписи IPN. */

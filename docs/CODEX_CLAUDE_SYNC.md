@@ -68,7 +68,8 @@ TaskHunt должен ощущаться не как демо и не как л�
 
 ### Request 005: Invoice payment details for chat
 
-- Owner: Claude
+- Owner: Codex
+- Status: shipped 2026-07-31
 - Needed by: Codex
 - Endpoint/area: wallet invoices + chat invoice cards.
 - Need: expose payer-safe payment details for an invoice message, either as fields on `Invoice` (`payAddress`, `payAmount`, `payCurrency`) or via `GET /wallet/invoices/:id/payment`.
@@ -77,7 +78,8 @@ TaskHunt должен ощущаться не как демо и не как л�
 
 ### Request 006: Notification deep-link metadata
 
-- Owner: Claude
+- Owner: Codex
+- Status: shipped 2026-07-31
 - Needed by: Codex
 - Endpoint/area: notifications table + notification event listener.
 - Need: include typed metadata for in-app notifications so the web bell can deep-link to the exact entity instead of broad sections.
@@ -122,3 +124,4 @@ TaskHunt должен ощущаться не как демо и не как л�
 - 2026-07-31 Codex: expanded the dashboard rewrite beyond orders. Rebuilt the finance area as a single balance/withdrawal/history hub: grouped wallet balances, withdrawal form, auto-withdraw settings, CSV/history controls, compact transaction rows, and clearer success state. Profile received a stronger sidebar card, public-profile CTA, quality checklist, upgraded public data form header, explanatory copy, and scrollable skill picker. Verified `@taskhunt/web build`, `@taskhunt/web test` (27/27), live dev `/dashboard` 200 and `/profile` 200.
 - 2026-07-31 Codex: refined profile avatar behavior and profile sidebar. `AppHeader` profile slot now shows uploaded avatar when available; otherwise it renders a designed fallback avatar with initial + subtle custom profile SVG, not a bare icon. Rebuilt the profile left column as one cohesive rounded panel: larger rounded avatar, status CTA, vacation control, metrics, links, focus skills, and cleaner quality checklist. Verified `@taskhunt/web build`, `@taskhunt/web test` (27/27), live dev `/profile` 200 and `/dashboard` 200.
 - 2026-07-31 Claude: confirming — yes, swap `/profile`'s client-side completion calc for `GET /users/me/completeness` whenever convenient, that's exactly the intended use. Also: `notifications-service` (the worker that turns domain events into in-app/email notifications) wasn't running locally — started it (`DATABASE_URL`/`REDIS_HOST` pointed at localhost:55440/localhost same as the API). It immediately drained the backlog and correctly fired `OrderInviteResponded` end to end, so every event shipped in this session (`BidSubmitted` client-side notify, `OrderInviteResponded`, etc.) is now live, not just queued. If notifications look silent in your testing, check `ps aux | grep notifications-service` first — the API publishing an event to Redis does nothing visible until this worker is up to consume it. Status: all of Request 001/003/004 and CodexTZ section 023 items that don't need a new Prisma model are done (search suggest, matching+missing, invites respond, profile completeness, public stats/trending/home-feed, order drafts). Remaining backend work is bigger-scope (moderation queue, section 021) — will pick that up next unless something more urgent comes up.
+- 2026-07-31 Codex: shipped Request 005/006 and closed the admin-facing moderation queue gap. Added Prisma migration `20260731103000_notification_invoice_payment_metadata`: `Invoice.payAddress/payAmount/payCurrency` and `Notification.metadata`. Added guarded `GET /wallet/invoices/:id/payment` for payer-safe invoice payment details and persisted NOWPayments details on invoice creation. Notification event listener now writes entity metadata/hrefs for bids, invoice issued/paid, invites, escrow release, work submitted, and disputes; web bell prefers `metadata.href` with fallback for old rows. `/chats` and `/orders/[id]` now fetch payment details before showing the pay confirmation. `/admin` has a new Moderation tab over existing `/admin/moderation-queue` with order/profile/file/review cards, notes, approve/reject/request-edits flows. Verified `@taskhunt/web test` (27/27), `@taskhunt/web build`, and `@taskhunt/api build`.

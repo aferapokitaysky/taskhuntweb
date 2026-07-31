@@ -22,6 +22,14 @@ interface Notification {
   title: string;
   message: string;
   eventName: string;
+  metadata?: {
+    href?: string;
+    orderId?: string;
+    freelancerId?: string;
+    invoiceId?: string;
+    bidId?: string;
+    disputeId?: string;
+  } | null;
   read: boolean;
   createdAt: string;
 }
@@ -78,6 +86,17 @@ function notificationMeta(eventName: string) {
   return { href: '/dashboard', label: 'Событие', tone: 'bg-stone-100 text-stone-700', Icon: ChatIcon };
 }
 
+function notificationHref(notification: Notification) {
+  if (notification.metadata?.href) return notification.metadata.href;
+  if (notification.metadata?.invoiceId && notification.metadata.orderId) {
+    const params = new URLSearchParams({ orderId: notification.metadata.orderId });
+    if (notification.metadata.freelancerId) params.set('freelancerId', notification.metadata.freelancerId);
+    return `/chats?${params.toString()}`;
+  }
+  if (notification.metadata?.orderId) return `/orders/${notification.metadata.orderId}`;
+  return notificationMeta(notification.eventName).href;
+}
+
 export function NotificationBell() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -127,10 +146,9 @@ export function NotificationBell() {
   }
 
   function openNotification(notification: Notification) {
-    const meta = notificationMeta(notification.eventName);
     if (!notification.read) void markRead(notification.id);
     setOpen(false);
-    router.push(meta.href);
+    router.push(notificationHref(notification));
   }
 
   useEffect(() => {

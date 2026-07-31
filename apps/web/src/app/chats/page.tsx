@@ -11,7 +11,7 @@ import { InvoiceChatCard } from '@/components/InvoiceChatCard';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 import { Mascot } from '@/components/Mascot';
 import { api, API_URL } from '@/lib/api';
-import type { ChatInboxThread, ChatMessage, Invoice, User } from '@/lib/types';
+import type { ChatInboxThread, ChatMessage, Invoice, InvoicePaymentDetails, User } from '@/lib/types';
 import { money } from '@/lib/types';
 
 type ActiveChat = { orderId: string; freelancerId: string; threadId?: string | null };
@@ -36,6 +36,7 @@ function ChatsContent() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentConfirmInvoice, setPaymentConfirmInvoice] = useState<Invoice | null>(null);
+  const [paymentDetailsLoading, setPaymentDetailsLoading] = useState(false);
 
   async function loadInbox(selectFirst = true) {
     const [user, list] = await Promise.all([api<User>('/users/me'), api<ChatInboxThread[]>('/chat/threads')]);
@@ -107,6 +108,32 @@ function ChatsContent() {
     } finally {
       setSending(false);
     }
+  }
+
+  async function openPaymentConfirm(invoice: Invoice) {
+    setPaymentConfirmInvoice(invoice);
+    setPaymentDetailsLoading(true);
+    try {
+      const details = await api<InvoicePaymentDetails>(`/wallet/invoices/${invoice.id}/payment`);
+      setPaymentConfirmInvoice({ ...invoice, ...details, id: details.invoiceId });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось получить реквизиты оплаты');
+    } finally {
+      setPaymentDetailsLoading(false);
+    }
+  }
+
+  function paymentDescription() {
+    if (!paymentConfirmInvoice) return '';
+    const address = paymentConfirmInvoice.payAddress;
+    if (!address) {
+      return paymentDetailsLoading
+        ? 'Получаем реквизиты оплаты для этого счёта...'
+        : 'Реквизиты оплаты пока недоступны. Обновите счёт или попросите исполнителя выставить новый.';
+    }
+    const payAmount = paymentConfirmInvoice.payAmount ?? paymentConfirmInvoice.amount;
+    const payCurrency = paymentConfirmInvoice.payCurrency ?? paymentConfirmInvoice.currency;
+    return `К оплате: ${payAmount} ${payCurrency}. Адрес: ${address}. После подтверждения провайдера сумма уйдёт в эскроу TaskHunt.`;
   }
 
   return (
@@ -231,7 +258,7 @@ function ChatsContent() {
                               invoice={message.invoice}
                               own={own}
                               canPay={activeThread?.role === 'CLIENT' && !own}
-                              onPayIntent={setPaymentConfirmInvoice}
+                              onPayIntent={openPaymentConfirm}
                             />
                           ) : (
                             <p className="whitespace-pre-wrap text-sm leading-6">{message.body}</p>
@@ -263,12 +290,9 @@ function ChatsContent() {
       <ConfirmDialog
         open={Boolean(paymentConfirmInvoice)}
         title="Перейти к оплате счёта?"
-        description={
-          paymentConfirmInvoice
-            ? `Сумма счёта: ${money(paymentConfirmInvoice.amount, paymentConfirmInvoice.currency)}. После оплаты средства будут зарезервированы в эскроу TaskHunt. Backend должен вернуть платёжный адрес для этого счёта.`
-            : ''
-        }
-        confirmLabel="Понятно"
+        description={paymentDescription()}
+        confirmLabel={paymentDetailsLoading ? 'Загружаем' : 'Готово'}
+        busy={paymentDetailsLoading}
         onCancel={() => setPaymentConfirmInvoice(null)}
         onConfirm={() => setPaymentConfirmInvoice(null)}
       />

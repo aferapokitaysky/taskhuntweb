@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { Toggle } from '@/components/Toggle';
@@ -23,7 +25,7 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-type Tab = 'users' | 'disputes' | 'flags' | 'commissions' | 'catalog' | 'metrics';
+type Tab = 'users' | 'disputes' | 'moderation' | 'flags' | 'commissions' | 'catalog' | 'metrics';
 
 interface AdminMetrics {
   revenue: { total: number; thisMonth: number };
@@ -31,6 +33,48 @@ interface AdminMetrics {
   ordersByStatus: Record<string, number>;
   newUsersThisWeek: number;
   activeSubscriptionsByTier: Record<string, number>;
+}
+
+type ModerationAction = 'APPROVE' | 'REJECT' | 'REQUEST_EDITS';
+
+interface ModerationQueue {
+  orders: Array<{
+    type: 'ORDER';
+    id: string;
+    severity: string;
+    reasons: string[];
+    riskScore: number;
+    order?: { id: string; title: string } | null;
+    user?: { id: string; displayName: string } | null;
+    createdAt: string;
+  }>;
+  profiles: Array<{
+    type: 'PROFILE';
+    id: string;
+    severity: string;
+    reasons: string[];
+    riskScore: number;
+    user?: { id: string; displayName: string } | null;
+    createdAt: string;
+  }>;
+  files: Array<{
+    type: 'FILE';
+    id: string;
+    url: string;
+    mimeType: string;
+    kind: string;
+    owner: { id: string; displayName: string };
+    createdAt: string;
+  }>;
+  reviews: Array<{
+    type: 'REVIEW';
+    id: string;
+    rating: number;
+    comment?: string | null;
+    author: { id: string; displayName: string };
+    target: { id: string; displayName: string };
+    createdAt: string;
+  }>;
 }
 
 export default function AdminPage() {
@@ -43,9 +87,11 @@ export default function AdminPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [moderation, setModeration] = useState<ModerationQueue | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newSkillName, setNewSkillName] = useState('');
   const [notesByDispute, setNotesByDispute] = useState<Record<string, string>>({});
+  const [notesByModeration, setNotesByModeration] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -67,6 +113,7 @@ export default function AdminPage() {
       if (tab === 'disputes') setDisputes(await api<Dispute[]>('/admin/disputes'));
       if (tab === 'flags') setFlags(await api<FeatureFlag[]>('/admin/feature-flags'));
       if (tab === 'commissions') setCommissions(await api<CommissionRule[]>('/admin/commission-rules'));
+      if (tab === 'moderation') setModeration(await api<ModerationQueue>('/admin/moderation-queue'));
       if (tab === 'catalog') {
         setCategories(await api<Category[]>('/categories'));
         setSkills(await api<Skill[]>('/skills'));
@@ -85,6 +132,17 @@ export default function AdminPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Операция не выполнена');
     }
+  }
+
+  async function resolveModeration(kind: 'orders' | 'profiles' | 'files' | 'reviews', id: string, action: ModerationAction = 'APPROVE') {
+    const note = notesByModeration[id];
+    const body = kind === 'files' ? undefined : JSON.stringify({ action, note });
+    await mutate(() =>
+      api(`/admin/moderation-queue/${kind}/${id}`, {
+        method: 'PATCH',
+        body,
+      }),
+    );
   }
 
   if (me && !me.isStaff) {
@@ -127,8 +185,10 @@ export default function AdminPage() {
                 <p className="text-[11px] uppercase text-stone-400">disputes</p>
               </div>
               <div className="hero-stat p-3">
-                <p className="font-serif text-2xl text-stone-950">{flags.length}</p>
-                <p className="text-[11px] uppercase text-stone-400">flags</p>
+                <p className="font-serif text-2xl text-stone-950">
+                  {moderation ? moderation.orders.length + moderation.profiles.length + moderation.files.length + moderation.reviews.length : flags.length}
+                </p>
+                <p className="text-[11px] uppercase text-stone-400">queue</p>
               </div>
             </div>
           </div>
@@ -140,6 +200,7 @@ export default function AdminPage() {
           ['metrics', 'Метрики'],
           ['users', 'Users'],
           ['disputes', 'Disputes'],
+          ['moderation', 'Moderation'],
           ['flags', 'Feature Flags'],
           ['commissions', 'Commissions'],
           ['catalog', 'Категории и навыки'],
@@ -248,6 +309,93 @@ export default function AdminPage() {
             </article>
           ))}
           {!loading && disputes.length === 0 && <EmptyState icon={<EscrowIcon />} title="Активных споров нет" />}
+        </section>
+      )}
+
+      {tab === 'moderation' && moderation && (
+        <section className="space-y-5">
+          <div className="grid gap-3 md:grid-cols-4">
+            {[
+              ['Заказы', moderation.orders.length, 'bg-card-sand'],
+              ['Профили', moderation.profiles.length, 'bg-card-lavender'],
+              ['Файлы', moderation.files.length, 'bg-card-rose'],
+              ['Отзывы', moderation.reviews.length, 'bg-card-sage'],
+            ].map(([label, value, colorClass]) => (
+              <div key={label} className={`interactive-card rounded-[1.6rem] ${colorClass} p-4`}>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{label}</p>
+                <p className="mt-1 font-serif text-3xl text-stone-950">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <ModerationGroup title="Флаги заказов" empty="Подозрительных заказов нет">
+            {moderation.orders.map((item) => (
+              <ModerationCard
+                key={item.id}
+                title={item.order?.title ?? 'Заказ без названия'}
+                eyebrow={`ORDER / ${item.severity} / риск ${item.riskScore}`}
+                description={item.reasons.join(', ') || 'Причина не указана'}
+                meta={item.user ? `Пользователь: ${item.user.displayName}` : `Flag ${item.id}`}
+                note={notesByModeration[item.id] ?? ''}
+                onNote={(note) => setNotesByModeration({ ...notesByModeration, [item.id]: note })}
+                onApprove={() => resolveModeration('orders', item.id, 'APPROVE')}
+                onReject={() => resolveModeration('orders', item.id, 'REJECT')}
+                onRequestEdits={() => resolveModeration('orders', item.id, 'REQUEST_EDITS')}
+                href={item.order ? `/orders/${item.order.id}` : undefined}
+              />
+            ))}
+          </ModerationGroup>
+
+          <ModerationGroup title="Флаги профилей" empty="Профили чистые">
+            {moderation.profiles.map((item) => (
+              <ModerationCard
+                key={item.id}
+                title={item.user?.displayName ?? 'Профиль без имени'}
+                eyebrow={`PROFILE / ${item.severity} / риск ${item.riskScore}`}
+                description={item.reasons.join(', ') || 'Причина не указана'}
+                meta={`Flag ${item.id}`}
+                note={notesByModeration[item.id] ?? ''}
+                onNote={(note) => setNotesByModeration({ ...notesByModeration, [item.id]: note })}
+                onApprove={() => resolveModeration('profiles', item.id, 'APPROVE')}
+                onReject={() => resolveModeration('profiles', item.id, 'REJECT')}
+                onRequestEdits={() => resolveModeration('profiles', item.id, 'REQUEST_EDITS')}
+                href={item.user ? `/freelancers/${item.user.id}` : undefined}
+              />
+            ))}
+          </ModerationGroup>
+
+          <ModerationGroup title="Файлы после сканирования" empty="Заражённых файлов нет">
+            {moderation.files.map((item) => (
+              <ModerationCard
+                key={item.id}
+                title={item.kind}
+                eyebrow={`FILE / ${item.mimeType}`}
+                description={item.url}
+                meta={`Владелец: ${item.owner.displayName}`}
+                note=""
+                onNote={() => undefined}
+                onApprove={() => resolveModeration('files', item.id)}
+                approveLabel="Снять с очереди"
+              />
+            ))}
+          </ModerationGroup>
+
+          <ModerationGroup title="Отзывы на проверке" empty="Отзывов на проверке нет">
+            {moderation.reviews.map((item) => (
+              <ModerationCard
+                key={item.id}
+                title={`${item.rating}/5 от ${item.author.displayName}`}
+                eyebrow="REVIEW"
+                description={item.comment ?? 'Без текста'}
+                meta={`Получатель: ${item.target.displayName}`}
+                note={notesByModeration[item.id] ?? ''}
+                onNote={(note) => setNotesByModeration({ ...notesByModeration, [item.id]: note })}
+                onApprove={() => resolveModeration('reviews', item.id, 'APPROVE')}
+                onReject={() => resolveModeration('reviews', item.id, 'REJECT')}
+                onRequestEdits={() => resolveModeration('reviews', item.id, 'REQUEST_EDITS')}
+              />
+            ))}
+          </ModerationGroup>
         </section>
       )}
 
@@ -449,6 +597,86 @@ export default function AdminPage() {
         </section>
       )}
     </main>
+  );
+}
+
+function ModerationGroup({ title, empty, children }: { title: string; empty: string; children: ReactNode }) {
+  const hasItems = Array.isArray(children) ? children.length > 0 : Boolean(children);
+  return (
+    <div className="premium-panel rounded-[2rem] p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h3 className="font-serif text-2xl text-stone-950">{title}</h3>
+        <Mascot name="alertWarning" size="h-12 w-12" />
+      </div>
+      {hasItems ? <div className="grid gap-3">{children}</div> : <EmptyState icon={<BuildIcon />} title={empty} />}
+    </div>
+  );
+}
+
+function ModerationCard({
+  title,
+  eyebrow,
+  description,
+  meta,
+  note,
+  onNote,
+  onApprove,
+  onReject,
+  onRequestEdits,
+  href,
+  approveLabel = 'Approve',
+}: {
+  title: string;
+  eyebrow: string;
+  description: string;
+  meta: string;
+  note: string;
+  onNote: (note: string) => void;
+  onApprove: () => void;
+  onReject?: () => void;
+  onRequestEdits?: () => void;
+  href?: string;
+  approveLabel?: string;
+}) {
+  return (
+    <article className="interactive-card rounded-[1.75rem] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">{eyebrow}</p>
+          <h4 className="mt-1 break-words font-serif text-xl text-stone-950">{title}</h4>
+          <p className="mt-2 break-words text-sm leading-6 text-stone-600">{description}</p>
+          <p className="mt-2 break-words text-xs font-medium text-stone-400">{meta}</p>
+        </div>
+        {href && (
+          <Link href={href} className="secondary-action px-3 py-2 text-xs font-semibold">
+            Открыть
+          </Link>
+        )}
+      </div>
+      {(onReject || onRequestEdits) && (
+        <textarea
+          placeholder="Заметка модератора"
+          value={note}
+          onChange={(e) => onNote(e.target.value)}
+          className="field-surface mt-4 min-h-20 w-full px-3 py-2 text-sm"
+        />
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" onClick={onApprove} className="primary-action px-3 py-2 text-sm font-semibold">
+          {approveLabel}
+        </button>
+        {onRequestEdits && (
+          <button type="button" onClick={onRequestEdits} className="secondary-action px-3 py-2 text-sm font-semibold">
+            Request edits
+          </button>
+        )}
+        {onReject && (
+          <button type="button" onClick={onReject} className="rounded-full bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700">
+            Reject
+          </button>
+        )}
+      </div>
+    </article>
   );
 }
 

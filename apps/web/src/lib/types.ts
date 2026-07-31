@@ -123,6 +123,22 @@ export interface Invoice {
   currency: string;
   description?: string | null;
   status: 'PENDING' | 'PAID' | 'CANCELLED' | 'EXPIRED';
+  payAddress?: string | null;
+  payAmount?: string | null;
+  payCurrency?: string | null;
+  paymentNetwork?: string | null;
+}
+
+export interface InvoicePaymentDetails {
+  invoiceId: string;
+  orderId: string;
+  amount: string;
+  currency: string;
+  status: Invoice['status'];
+  payAddress?: string | null;
+  payAmount?: string | null;
+  payCurrency?: string | null;
+  paymentNetwork?: string | null;
 }
 
 export interface ChatMessage {

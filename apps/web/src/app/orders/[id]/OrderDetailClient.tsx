@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { api, ensureFreshAccessToken } from '@/lib/api';
-import type { ChatMessage, ChatThreadSummary, Invoice, Order, User } from '@/lib/types';
+import type { ChatMessage, ChatThreadSummary, Invoice, InvoicePaymentDetails, Order, User } from '@/lib/types';
 import { money } from '@/lib/types';
 import { FileUpload, type UploadedFile } from '@/components/FileUpload';
 import { PaperclipIcon } from '@/components/icons/PaperclipIcon';
@@ -141,6 +141,7 @@ export default function OrderDetailClient() {
   const [paymentAddress, setPaymentAddress] = useState<string | null>(null);
   const [issueInvoiceConfirmOpen, setIssueInvoiceConfirmOpen] = useState(false);
   const [paymentConfirmInvoice, setPaymentConfirmInvoice] = useState<Invoice | null>(null);
+  const [paymentDetailsLoading, setPaymentDetailsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
@@ -470,6 +471,31 @@ export default function OrderDetailClient() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось выставить счёт');
     }
+  }
+
+  async function openPaymentConfirm(invoice: Invoice) {
+    setPaymentConfirmInvoice(invoice);
+    setPaymentDetailsLoading(true);
+    try {
+      const details = await api<InvoicePaymentDetails>(`/wallet/invoices/${invoice.id}/payment`);
+      setPaymentConfirmInvoice({ ...invoice, ...details, id: details.invoiceId });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось получить реквизиты оплаты');
+    } finally {
+      setPaymentDetailsLoading(false);
+    }
+  }
+
+  function paymentDescription() {
+    if (!paymentConfirmInvoice) return '';
+    if (!paymentConfirmInvoice.payAddress) {
+      return paymentDetailsLoading
+        ? 'Получаем реквизиты оплаты для этого счёта...'
+        : 'Реквизиты оплаты пока недоступны. Обновите счёт или попросите исполнителя выставить новый.';
+    }
+    const payAmount = paymentConfirmInvoice.payAmount ?? paymentConfirmInvoice.amount;
+    const payCurrency = paymentConfirmInvoice.payCurrency ?? paymentConfirmInvoice.currency;
+    return `К оплате: ${payAmount} ${payCurrency}. Адрес: ${paymentConfirmInvoice.payAddress}. После подтверждения провайдера сумма уйдёт в эскроу TaskHunt.`;
   }
 
   if (!order) {
@@ -1047,7 +1073,7 @@ export default function OrderDetailClient() {
                         <div className={`max-w-[75%] rounded-[1.5rem] p-3 shadow-sm ${isOwn ? 'bg-brand text-white' : 'bg-white text-stone-900'}`}>
                           <p className={`text-xs ${isOwn ? 'text-white/70' : 'text-stone-500'}`}>{name}</p>
                           {message.type === 'INVOICE' && message.invoice ? (
-                            <InvoiceChatCard invoice={message.invoice} own={isOwn} canPay={isClient && !isOwn} onPayIntent={setPaymentConfirmInvoice} />
+                            <InvoiceChatCard invoice={message.invoice} own={isOwn} canPay={isClient && !isOwn} onPayIntent={openPaymentConfirm} />
                           ) : (
                             <p className="mt-1 text-sm">{message.body}</p>
                           )}
@@ -1179,12 +1205,9 @@ export default function OrderDetailClient() {
       <ConfirmDialog
         open={Boolean(paymentConfirmInvoice)}
         title="Перейти к оплате счёта?"
-        description={
-          paymentConfirmInvoice
-            ? `Сумма счёта: ${money(paymentConfirmInvoice.amount, paymentConfirmInvoice.currency)}. После оплаты средства будут зарезервированы в эскроу TaskHunt. Сейчас backend должен вернуть платёжный адрес для этого счёта.`
-            : ''
-        }
-        confirmLabel="Понятно"
+        description={paymentDescription()}
+        confirmLabel={paymentDetailsLoading ? 'Загружаем' : 'Готово'}
+        busy={paymentDetailsLoading}
         onCancel={() => setPaymentConfirmInvoice(null)}
         onConfirm={() => setPaymentConfirmInvoice(null)}
       />

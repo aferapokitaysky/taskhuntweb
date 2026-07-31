@@ -607,6 +607,9 @@ model Invoice {
   status      InvoiceStatus @default(PENDING)
 
   nowPaymentsPaymentId String?   @unique
+  payAddress           String?
+  payAmount            Decimal?  @db.Decimal(18, 8)
+  payCurrency          String?
   paidAt               DateTime?
 
   chatMessage ChatMessage?
@@ -1055,6 +1058,7 @@ model Notification {
   title     String
   message   String
   eventName String
+  metadata  Json?
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
