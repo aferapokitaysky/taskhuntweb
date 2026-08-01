@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Invoice } from '@/lib/types';
 import { money } from '@/lib/types';
 import { BalanceEscrowIcon } from './icons/illustrated/BalanceEscrowIcon';
@@ -14,6 +14,30 @@ const INVOICE_STATUS_LABEL: Record<Invoice['status'], string> = {
   CANCELLED: 'Отменён',
   EXPIRED: 'Истёк',
 };
+
+const ACCEPTED_RECEIPTS_KEY = 'taskhunt:acceptedReceipts:v1';
+
+function loadAcceptedReceipts() {
+  if (typeof window === 'undefined') return new Set<string>();
+  try {
+    const raw = window.localStorage.getItem(ACCEPTED_RECEIPTS_KEY);
+    const ids = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function rememberAcceptedReceipt(invoiceId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const ids = loadAcceptedReceipts();
+    ids.add(invoiceId);
+    window.localStorage.setItem(ACCEPTED_RECEIPTS_KEY, JSON.stringify([...ids]));
+  } catch {
+    // localStorage can be unavailable in private mode; visual acceptance still works for this render.
+  }
+}
 
 export function InvoiceChatCard({
   invoice,
@@ -46,6 +70,10 @@ export function InvoiceChatCard({
   const receiptCardTone = receiptAccepted
     ? 'border-emerald-200 bg-emerald-50/90 text-emerald-900 shadow-emerald-900/5'
     : 'border-emerald-100 bg-white text-stone-900 shadow-stone-200/60';
+
+  useEffect(() => {
+    setReceiptAccepted(loadAcceptedReceipts().has(invoice.id));
+  }, [invoice.id]);
 
   async function copyValue(value: string, field: string) {
     await navigator.clipboard?.writeText(value).catch(() => undefined);
@@ -193,7 +221,10 @@ export function InvoiceChatCard({
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <button
               type="button"
-              onClick={() => setReceiptAccepted(true)}
+              onClick={() => {
+                setReceiptAccepted(true);
+                rememberAcceptedReceipt(invoice.id);
+              }}
               disabled={receiptAccepted}
               className="primary-action justify-center px-4 py-2 text-sm disabled:opacity-65"
             >
