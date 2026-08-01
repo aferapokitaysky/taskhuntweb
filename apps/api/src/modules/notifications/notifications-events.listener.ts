@@ -13,6 +13,7 @@ import {
   DeadlineExtensionRespondedEvent,
   OrderInviteCreatedEvent,
   OrderInviteRespondedEvent,
+  SubscriptionExpiringSoonEvent,
   WorkSubmittedEvent,
 } from '@taskhunt/shared-types';
 import { Prisma } from '@prisma/client';
@@ -264,6 +265,26 @@ export class NotificationsEventsListener {
         requestId: event.payload.requestId,
         clientId: event.payload.clientId,
         href: `/orders/${event.payload.orderId}`,
+      },
+    });
+  }
+
+  // Раньше это событие публиковалось (SubscriptionExpirationProcessor),
+  // но никто его не слушал — ни здесь, ни в notifications-service. Платящий
+  // пользователь узнавал об истечении подписки только постфактум, когда она
+  // уже истекла, без единого предупреждения.
+  @OnEvent(DomainEventName.SubscriptionExpiringSoon)
+  async handleSubscriptionExpiringSoon(event: SubscriptionExpiringSoonEvent) {
+    const expiresDate = new Date(event.payload.expiresAt).toLocaleDateString('ru-RU');
+    await this.createNotification({
+      userId: event.payload.userId,
+      title: 'Подписка скоро истечёт',
+      message: `Тариф "${event.payload.tierName}" истекает ${expiresDate}. Продлите, чтобы не потерять преимущества.`,
+      eventName: DomainEventName.SubscriptionExpiringSoon,
+      metadata: {
+        tierName: event.payload.tierName,
+        expiresAt: event.payload.expiresAt,
+        href: '/pricing',
       },
     });
   }

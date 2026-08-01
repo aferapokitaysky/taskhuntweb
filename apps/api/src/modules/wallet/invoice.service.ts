@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import * as PDFDocument from 'pdfkit';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NowPaymentsService } from './nowpayments.service';
 import { WalletService } from './wallet.service';
@@ -37,8 +38,27 @@ export class InvoiceService {
     });
     if (!order) throw new NotFoundException('Order not found');
 
+    // ID генерируем заранее (не полагаемся на дефолт Prisma) — NOWPayments
+    // требует order_id ДО того, как счёт реально существует в нашей БД
+    // (это ключ, по которому потом матчится IPN-вебхук). Раньше здесь
+    // сначала создавался Invoice-row, потом вызывался createPayment,
+    // и при сбое провайдера (недоступен/невалидный ключ) в базе оставался
+    // "битый" PENDING-счёт без payAddress — оплатить его было нельзя,
+    // а повторить попытку тоже (не было retry-эндпоинта). Теперь провайдер
+    // дёргается первым, и Invoice создаётся одной записью сразу с полными
+    // платёжными данными — при сбое в БД не остаётся никакого следа.
+    const invoiceId = randomUUID();
+    const payment = await this.nowPayments.createPayment({
+      priceAmount: dto.amount,
+      priceCurrency: order.currency,
+      payCurrency: 'usdttrc20',
+      orderId: invoiceId,
+      ipnCallbackUrl: `${process.env.API_PUBLIC_URL}/wallet/nowpayments/ipn`,
+    });
+
     const invoice = await this.prisma.invoice.create({
       data: {
+        id: invoiceId,
         orderId: dto.orderId,
         milestoneId: dto.milestoneId,
         issuedById: freelancerId,
@@ -47,20 +67,6 @@ export class InvoiceService {
         currency: order.currency,
         description: dto.description,
         status: 'PENDING',
-      },
-    });
-
-    const payment = await this.nowPayments.createPayment({
-      priceAmount: dto.amount,
-      priceCurrency: order.currency,
-      payCurrency: 'usdttrc20',
-      orderId: invoice.id,
-      ipnCallbackUrl: `${process.env.API_PUBLIC_URL}/wallet/nowpayments/ipn`,
-    });
-
-    const updated = await this.prisma.invoice.update({
-      where: { id: invoice.id },
-      data: {
         nowPaymentsPaymentId: payment.paymentId,
         payAddress: payment.payAddress,
         payAmount: payment.payAmount,
@@ -76,7 +82,7 @@ export class InvoiceService {
       currency: invoice.currency,
     });
 
-    return { invoice: updated, payment };
+    return { invoice, payment };
   }
 
   async getPaymentDetails(userId: string, invoiceId: string) {

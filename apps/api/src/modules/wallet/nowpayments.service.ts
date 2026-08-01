@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
@@ -15,6 +15,7 @@ export interface CreatePaymentResult {
  */
 @Injectable()
 export class NowPaymentsService {
+  private readonly logger = new Logger(NowPaymentsService.name);
   private readonly apiKey: string;
   private readonly ipnSecret: string;
   private readonly baseUrl: string;
@@ -45,7 +46,13 @@ export class NowPaymentsService {
     });
 
     if (!res.ok) {
-      throw new Error(`NOWPayments createPayment failed: ${res.status} ${await res.text()}`);
+      const body = await res.text();
+      this.logger.error(`createPayment failed: ${res.status} ${body}`);
+      // Голый Error здесь долетал до клиента как безликий 500 "Internal
+      // server error" — фрилансер, выставляющий счёт, не понимал, что
+      // произошло и что делать. ServiceUnavailableException даёт понятный
+      // статус (503) и сообщение, не течёт деталями провайдера наружу.
+      throw new ServiceUnavailableException('Платёжный провайдер временно недоступен. Попробуйте выставить счёт позже.');
     }
 
     const data = await res.json();
@@ -79,7 +86,9 @@ export class NowPaymentsService {
     });
 
     if (!res.ok) {
-      throw new Error(`NOWPayments createPayout failed: ${res.status} ${await res.text()}`);
+      const body = await res.text();
+      this.logger.error(`createPayout failed: ${res.status} ${body}`);
+      throw new ServiceUnavailableException('Платёжный провайдер временно недоступен. Выплата будет повторена позже.');
     }
 
     const data = await res.json();

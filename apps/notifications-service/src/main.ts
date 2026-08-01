@@ -10,6 +10,8 @@ import { handleEmailVerificationRequested, handlePasswordResetRequested } from '
 import {
   handleBidAccepted,
   handleBidSubmitted,
+  handleDeadlineExtensionRequested,
+  handleDeadlineExtensionResponded,
   handleDisputeOpened,
   handleEscrowLocked,
   handleEscrowReleased,
@@ -20,6 +22,7 @@ import {
   handleOrderInviteResponded,
   handleWorkSubmitted,
 } from './handlers/orders';
+import { handleSubscriptionExpiringSoon } from './handlers/subscriptions';
 
 const connection = new IORedis({
   host: process.env.REDIS_HOST ?? 'localhost',
@@ -75,6 +78,12 @@ async function route(event: DomainEvent) {
       return handleEmailVerificationRequested(event, context);
     case DomainEventName.PasswordResetRequested:
       return handlePasswordResetRequested(event, context);
+    case DomainEventName.SubscriptionExpiringSoon:
+      return handleSubscriptionExpiringSoon(event, context);
+    case DomainEventName.DeadlineExtensionRequested:
+      return handleDeadlineExtensionRequested(event, context);
+    case DomainEventName.DeadlineExtensionResponded:
+      return handleDeadlineExtensionResponded(event, context);
   }
 }
 

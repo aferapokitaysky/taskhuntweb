@@ -1,6 +1,8 @@
 import type {
   BidAcceptedEvent,
   BidSubmittedEvent,
+  DeadlineExtensionRequestedEvent,
+  DeadlineExtensionRespondedEvent,
   DisputeOpenedEvent,
   EscrowLockedEvent,
   EscrowReleasedEvent,
@@ -160,5 +162,39 @@ export function handleDisputeOpened(event: DisputeOpenedEvent, context: HandlerC
     title: 'Спор открыт',
     message: `По заказу ${event.payload.orderId} открыт спор.`,
     metadata: event.payload,
+  });
+}
+
+// Раньше эти два события имели in-app уведомление (см.
+// apps/api/.../notifications-events.listener.ts), но не email — фрилансер/
+// заказчик, не открывший вкладку с сайтом, не узнавал о запросе продления
+// дедлайна вовремя.
+export async function handleDeadlineExtensionRequested(event: DeadlineExtensionRequestedEvent, context: HandlerContext) {
+  const order = await context.prisma.order.findUnique({
+    where: { id: event.payload.orderId },
+    select: { clientId: true, title: true },
+  });
+  if (!order) return;
+
+  return notifyUser(context, event.payload.clientId, {
+    eventName: event.name,
+    title: 'Запрошено продление срока',
+    message: `Фрилансер просит продлить срок по заказу "${order.title}" до ${new Date(event.payload.newDeadline).toLocaleDateString('ru-RU')}.`,
+    metadata: { orderId: event.payload.orderId, requestId: event.payload.requestId, freelancerId: event.payload.freelancerId },
+  });
+}
+
+export async function handleDeadlineExtensionResponded(event: DeadlineExtensionRespondedEvent, context: HandlerContext) {
+  const order = await context.prisma.order.findUnique({
+    where: { id: event.payload.orderId },
+    select: { clientId: true, title: true },
+  });
+  if (!order) return;
+
+  return notifyUser(context, event.payload.freelancerId, {
+    eventName: event.name,
+    title: event.payload.approved ? 'Продление принято' : 'Продление отклонено',
+    message: `Заказчик ${event.payload.approved ? 'принял' : 'отклонил'} продление срока по заказу "${order.title}".`,
+    metadata: { orderId: event.payload.orderId, requestId: event.payload.requestId, clientId: event.payload.clientId },
   });
 }
