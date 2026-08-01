@@ -120,7 +120,7 @@ function RegisterForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-2.5 sm:gap-3">
-        <div className="grid gap-2.5 md:grid-cols-3">
+        <div className="grid gap-2.5">
           <label className="grid gap-1">
             <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500 sm:text-xs">Имя</span>
             <input
