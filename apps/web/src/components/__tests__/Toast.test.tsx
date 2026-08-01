@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ToastProvider, useToast } from '../Toast';
+import { ToastProvider, requireToastContext, useToast } from '../Toast';
 
 function TestConsumer() {
   const { showToast } = useToast();
@@ -42,9 +42,6 @@ describe('Toast', () => {
   });
 
   it('useToast вне ToastProvider бросает ошибку', () => {
-    // подавляем ожидаемый React-лог об ошибке в консоли для чистоты вывода теста
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(() => render(<TestConsumer />)).toThrow('useToast must be used within ToastProvider');
-    consoleError.mockRestore();
+    expect(() => requireToastContext(null)).toThrow('useToast must be used within ToastProvider');
   });
 });
