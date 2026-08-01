@@ -18,12 +18,16 @@ import {
 } from '@taskhunt/shared-types';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsGateway } from './notifications.gateway';
 
 @Injectable()
 export class NotificationsEventsListener {
   private readonly logger = new Logger(NotificationsEventsListener.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gateway: NotificationsGateway,
+  ) {}
 
   // EventBusService.publish() эмитит через EventEmitter2 не сырой payload,
   // а весь конверт { name, occurredAt, payload } (см. event-bus.service.ts) —
@@ -297,7 +301,12 @@ export class NotificationsEventsListener {
     metadata?: Prisma.InputJsonValue;
   }) {
     try {
-      await this.prisma.notification.create({ data });
+      const notification = await this.prisma.notification.create({ data });
+      // Раньше колокольчик узнавал о новом уведомлении только через
+      // polling раз в 30с (NotificationBell) — "отправил отклик, уведомление
+      // не пришло" было не багом, а просто ожиданием таймера. Теперь
+      // толкаем сразу через личный сокет-канал пользователя.
+      this.gateway.emitToUser(data.userId, 'notification', notification);
     } catch (err) {
       this.logger.error(`Failed to create in-app notification for user ${data.userId}: ${err}`);
     }

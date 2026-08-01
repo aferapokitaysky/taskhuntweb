@@ -11,6 +11,7 @@ function event<TName extends DomainEventName, TPayload>(name: TName, payload: TP
 
 describe('NotificationsEventsListener', () => {
   let prisma: any;
+  let gateway: any;
   let listener: NotificationsEventsListener;
 
   beforeEach(() => {
@@ -20,7 +21,8 @@ describe('NotificationsEventsListener', () => {
       user: { findUnique: jest.fn() },
       notification: { create: jest.fn().mockResolvedValue({ id: 'notification-1' }) },
     };
-    listener = new NotificationsEventsListener(prisma);
+    gateway = { emitToUser: jest.fn() };
+    listener = new NotificationsEventsListener(prisma, gateway);
   });
 
   it('уведомление о новом отклике ведёт заказчика в нужный заказ с bid/freelancer metadata', async () => {

@@ -467,8 +467,14 @@ export default function OrderDetailClient() {
   }, [canChat, chatFreelancerId, orderId]);
 
   // % совпадения тэгов заказа с навыками откликнувшихся — видно только заказчику.
+  // order?.id === orderId — обязательная проверка, не просто isClient:
+  // при переходе между заказами (client-side navigation) URL уже указывает
+  // на новый orderId, а order в стейте ещё хранит ПРЕДЫДУЩИЙ заказ, пока
+  // fetch не отработает. Если предыдущий заказ принадлежал этому клиенту,
+  // isClient успевает быть true один рендер раньше, чем order обновится —
+  // без этой проверки эффект стрелял бы запросом на чужой orderId (403 в консоли).
   useEffect(() => {
-    if (!isClient) return;
+    if (!isClient || order?.id !== orderId) return;
     api<{ bidId: string; compatibilityPercent: number | null }[]>(`/orders/${orderId}/recommended-freelancers`)
       .then((ranked) => {
         const map: Record<string, number | null> = {};
@@ -476,7 +482,7 @@ export default function OrderDetailClient() {
         setCompatibilityByBidId(map);
       })
       .catch(() => undefined);
-  }, [isClient, orderId]);
+  }, [isClient, orderId, order?.id]);
 
   async function sendMessage(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

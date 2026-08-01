@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { io, type Socket } from 'socket.io-client';
+import { api, ensureFreshAccessToken, API_URL } from '@/lib/api';
 import type { User } from '@/lib/types';
 import { pluralize } from '@/lib/pluralize';
 import { notificationHref, type NotificationRouteInput } from '@/lib/notificationHref';
@@ -154,11 +155,36 @@ export function NotificationBell() {
   useEffect(() => {
     load();
     loadMatches();
+    // Polling остаётся как fallback (сеть моргнула, сокет отвалился) —
+    // основной путь доставки теперь сокет ниже, поэтому раз в 30с достаточно.
     const interval = setInterval(() => {
       load();
       loadMatches();
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
+  }, []);
+
+  // Личный канал уведомлений — раньше колокольчик узнавал о новом событии
+  // только на следующий тик polling'а (до 30с), из-за чего "отправил отклик,
+  // уведомление не пришло" выглядело как баг. Теперь новое уведомление
+  // приходит сразу же, без перезагрузки страницы.
+  useEffect(() => {
+    let cancelled = false;
+    let socket: Socket | null = null;
+
+    ensureFreshAccessToken().then((token) => {
+      if (cancelled || !token) return;
+      socket = io(`${API_URL}/notifications`, { auth: { token } });
+      socket.on('notification', (notification: Notification) => {
+        setNotifications((current) => (current.some((n) => n.id === notification.id) ? current : [notification, ...current]));
+        setUnreadCount((count) => count + 1);
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      socket?.disconnect();
+    };
   }, []);
 
   useEffect(() => {
