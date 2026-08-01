@@ -33,18 +33,18 @@ export function AuthShell({
   sideDescription = 'TuskHunt соединяет поиск заказов, профили специалистов, чат, этапы, инвойсы и крипто-эскроу в одном спокойном рабочем процессе.',
 }: AuthShellProps) {
   return (
-    <main className="auth-page min-h-screen px-3 py-3 sm:px-4">
-      <div className="mx-auto grid min-h-[calc(100vh-1.5rem)] max-w-6xl overflow-hidden rounded-[2rem] border border-stone-100 bg-white/86 shadow-2xl shadow-stone-200/65 backdrop-blur lg:grid-cols-[minmax(420px,1fr)_minmax(0,0.9fr)]">
-        <section className="flex flex-col justify-start px-5 py-6 sm:px-10 lg:px-14 lg:py-9">
-          <Link href="/" className="mb-5 inline-flex w-fit transition-transform hover:scale-105 lg:hidden">
-            <Logo className="h-10" />
+    <main className="auth-page min-h-screen px-2 py-2 sm:px-4 sm:py-3">
+      <div className="mx-auto grid min-h-[calc(100vh-1rem)] max-w-6xl overflow-hidden rounded-[1.6rem] border border-stone-100 bg-white/86 shadow-2xl shadow-stone-200/65 backdrop-blur sm:min-h-[calc(100vh-1.5rem)] sm:rounded-[2rem] lg:grid-cols-[minmax(420px,1fr)_minmax(0,0.9fr)]">
+        <section className="flex flex-col justify-start px-4 py-4 sm:px-10 sm:py-6 lg:px-14 lg:py-9">
+          <Link href="/" className="mb-2 inline-flex w-fit transition-transform hover:scale-105 sm:mb-5 lg:hidden">
+            <Logo className="h-8 sm:h-10" />
           </Link>
-          <div className="mb-5">
-            <p className="text-sm font-semibold text-brand">{eyebrow}</p>
-            <h1 className="mt-2 font-serif text-3xl leading-tight text-stone-950 sm:text-4xl">{title}</h1>
-            <p className="mt-3 max-w-md text-sm leading-6 text-stone-600">{description}</p>
+          <div className="mb-3 sm:mb-5">
+            <p className="text-xs font-semibold text-brand sm:text-sm">{eyebrow}</p>
+            <h1 className="mt-1 font-serif text-2xl leading-tight text-stone-950 sm:mt-2 sm:text-4xl">{title}</h1>
+            <p className="mt-2 max-w-md text-sm leading-5 text-stone-600 sm:mt-3 sm:leading-6">{description}</p>
           </div>
-          <div className="rounded-[1.7rem] border border-stone-200 bg-card-sand/35 p-4 shadow-xl shadow-stone-200/45 sm:p-5">
+          <div className="rounded-[1.45rem] border border-stone-200 bg-card-sand/35 p-3 shadow-xl shadow-stone-200/45 sm:rounded-[1.7rem] sm:p-5">
             {children}
           </div>
         </section>

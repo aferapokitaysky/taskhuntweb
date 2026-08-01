@@ -80,26 +80,26 @@ function RegisterForm() {
       description="Выберите роль, заполните три поля и переходите к короткой настройке профиля. Роль можно сменить до отправки формы."
       sideTitle="Два сценария в одной системе: нанимайте и выполняйте безопасно"
     >
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[1.15rem] bg-white/72 px-3 py-2 text-sm shadow-sm">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-[1.15rem] bg-white/72 px-3 py-1.5 text-sm shadow-sm sm:mb-4 sm:py-2">
         <span className="font-medium text-stone-600">Уже есть аккаунт?</span>
         <Link href="/login" className="font-bold text-brand hover:text-brand-dark">
           Войти
         </Link>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-2">
+      <div className="mb-2 grid grid-cols-2 gap-2 sm:mb-4">
         <button
           type="button"
           onClick={() => setRole('CLIENT')}
           aria-pressed={role === 'CLIENT'}
-          className={`interactive-card group flex min-h-[104px] items-center gap-3 rounded-[1.25rem] bg-card-sand p-3 text-left ${
+          className={`interactive-card group flex min-h-[78px] items-center gap-2 rounded-[1.15rem] bg-card-sand p-2.5 text-left sm:min-h-[104px] sm:gap-3 sm:rounded-[1.25rem] sm:p-3 ${
             role === 'CLIENT' ? 'ring-2 ring-brand ring-offset-2 ring-offset-cream' : ''
           }`}
         >
           <div
-            className={`flex h-12 w-12 shrink-0 items-center justify-center transition-transform duration-300 ${role === 'CLIENT' ? 'animate-wiggle' : 'group-hover:animate-wiggle'}`}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center transition-transform duration-300 sm:h-12 sm:w-12 ${role === 'CLIENT' ? 'animate-wiggle' : 'group-hover:animate-wiggle'}`}
           >
-            <ClientIcon className="h-12 w-12" />
+            <ClientIcon className="h-10 w-10 sm:h-12 sm:w-12" />
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold text-stone-900">Заказчик</div>
@@ -110,14 +110,14 @@ function RegisterForm() {
           type="button"
           onClick={() => setRole('FREELANCER')}
           aria-pressed={role === 'FREELANCER'}
-          className={`interactive-card group flex min-h-[104px] items-center gap-3 rounded-[1.25rem] bg-card-sage p-3 text-left ${
+          className={`interactive-card group flex min-h-[78px] items-center gap-2 rounded-[1.15rem] bg-card-sage p-2.5 text-left sm:min-h-[104px] sm:gap-3 sm:rounded-[1.25rem] sm:p-3 ${
             role === 'FREELANCER' ? 'ring-2 ring-brand ring-offset-2 ring-offset-cream' : ''
           }`}
         >
           <div
-            className={`flex h-12 w-12 shrink-0 items-center justify-center transition-transform duration-300 ${role === 'FREELANCER' ? 'animate-wiggle' : 'group-hover:animate-wiggle'}`}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center transition-transform duration-300 sm:h-12 sm:w-12 ${role === 'FREELANCER' ? 'animate-wiggle' : 'group-hover:animate-wiggle'}`}
           >
-            <FreelancerIcon className="h-12 w-12" />
+            <FreelancerIcon className="h-10 w-10 sm:h-12 sm:w-12" />
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold text-stone-900">Фрилансер</div>
@@ -126,32 +126,32 @@ function RegisterForm() {
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <div className="grid gap-3 lg:grid-cols-3">
-          <label className="grid gap-1.5">
-            <span className="text-xs font-bold uppercase tracking-[0.14em] text-stone-500">Имя</span>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-2.5 sm:gap-3">
+        <div className="grid gap-2.5 lg:grid-cols-3">
+          <label className="grid gap-1">
+            <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500 sm:text-xs">Имя</span>
             <input
               type="text"
               placeholder="Как вас увидят другие"
               required
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="field-surface px-4 py-2.5"
+              className="field-surface px-4 py-2 sm:py-2.5"
             />
           </label>
-          <label className="grid gap-1.5">
-            <span className="text-xs font-bold uppercase tracking-[0.14em] text-stone-500">Email</span>
+          <label className="grid gap-1">
+            <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500 sm:text-xs">Email</span>
             <input
               type="email"
               placeholder="name@taskhunt.com"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="field-surface px-4 py-2.5"
+              className="field-surface px-4 py-2 sm:py-2.5"
             />
           </label>
-          <label className="grid gap-1.5">
-            <span className="text-xs font-bold uppercase tracking-[0.14em] text-stone-500">Пароль</span>
+          <label className="grid gap-1">
+            <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500 sm:text-xs">Пароль</span>
             <input
               type="password"
               placeholder="Мин. 8 символов"
@@ -159,7 +159,7 @@ function RegisterForm() {
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="field-surface px-4 py-2.5"
+              className="field-surface px-4 py-2 sm:py-2.5"
             />
           </label>
         </div>
@@ -184,7 +184,7 @@ function RegisterForm() {
         </button>
       </form>
 
-      <div className="mt-4">
+      <div className="mt-3 sm:mt-4">
         <OAuthButtons role={role} />
       </div>
     </AuthShell>

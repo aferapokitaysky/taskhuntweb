@@ -108,8 +108,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
         },
       });
       if (!retryRes.ok) {
-        const body = await retryRes.json().catch(() => ({}));
-        throw new Error(body.message ?? `Request failed: ${retryRes.status}`);
+        throw await toApiError(retryRes);
       }
       return retryRes.json();
     }
@@ -118,11 +117,28 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message ?? `Request failed: ${res.status}`);
+    throw await toApiError(res);
   }
 
   return res.json();
+}
+
+async function toApiError(res: Response): Promise<Error> {
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 429) {
+    return new Error('Слишком много запросов. Подождите минуту и попробуйте ещё раз.');
+  }
+  const rawMessage = body.message;
+  if (Array.isArray(rawMessage)) {
+    return new Error(rawMessage.join('. '));
+  }
+  if (typeof rawMessage === 'string' && rawMessage.trim()) {
+    if (/ThrottlerException|Too Many Requests/i.test(rawMessage)) {
+      return new Error('Слишком много запросов. Подождите минуту и попробуйте ещё раз.');
+    }
+    return new Error(rawMessage);
+  }
+  return new Error(`Запрос не выполнен: ${res.status}`);
 }
 
 /**
@@ -145,8 +161,7 @@ export async function downloadFile(path: string, filename: string): Promise<void
     res = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message ?? `Request failed: ${res.status}`);
+    throw await toApiError(res);
   }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
@@ -197,8 +212,7 @@ export async function uploadFile(file: File): Promise<UploadedFileAsset> {
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message ?? `Upload failed: ${res.status}`);
+    throw await toApiError(res);
   }
 
   return res.json();
@@ -229,8 +243,7 @@ export async function uploadAvatar(file: File): Promise<{ avatarUrl: string }> {
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message ?? `Upload failed: ${res.status}`);
+    throw await toApiError(res);
   }
 
   return res.json();
