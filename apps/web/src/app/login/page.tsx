@@ -101,29 +101,41 @@ export default function LoginPage() {
         </form>
       ) : (
         <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[1.2rem] bg-white/72 px-3 py-2 text-sm shadow-sm">
+            <span className="font-medium text-stone-600">Первый раз на TaskHunt?</span>
+            <Link href="/register" className="font-bold text-brand hover:text-brand-dark">
+              Создать аккаунт
+            </Link>
+          </div>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <input
-              type="email"
-              placeholder="Email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="field-surface px-4 py-3"
-            />
-            <input
-              type="password"
-              placeholder="Пароль"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="field-surface px-4 py-3"
-            />
+            <label className="grid gap-2">
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-stone-500">Email</span>
+              <input
+                type="email"
+                placeholder="admin@taskhunt.com"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="field-surface px-4 py-3"
+              />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-stone-500">Пароль</span>
+              <input
+                type="password"
+                placeholder="Введите пароль"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="field-surface px-4 py-3"
+              />
+            </label>
 
             <Link href="/forgot-password" className="text-right text-sm text-stone-500 hover:text-brand">
               Забыли пароль?
             </Link>
 
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && <p className="rounded-[1.1rem] bg-card-rose px-3 py-2 text-sm font-medium text-red-700">{error}</p>}
 
             <button
               type="submit"
@@ -134,11 +146,11 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6">
+          <div className="mt-4">
             <OAuthButtons />
           </div>
 
-          <p className="mt-6 text-sm text-stone-500">
+          <p className="mt-4 text-sm text-stone-500">
             Нет аккаунта?{' '}
             <Link href="/register" className="font-medium text-brand hover:text-brand-dark">
               Зарегистрироваться
