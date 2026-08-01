@@ -49,6 +49,9 @@ describe('OrdersService', () => {
         deleteMany: jest.fn(),
         findMany: jest.fn(),
       },
+      notification: {
+        create: jest.fn(),
+      },
       $transaction: jest.fn(async (cb: any) => cb(prisma)),
     };
 
@@ -297,6 +300,48 @@ describe('OrdersService', () => {
         }),
       );
       expect(res.status).toBe('IN_PROGRESS');
+    });
+  });
+
+  describe('rejectBid', () => {
+    it('отклоняет отклик и уведомляет фрилансера с причиной и deep link в заказ', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 'order-1',
+        clientId: 'client-1',
+        title: 'Landing page redesign',
+      });
+      prisma.bid.findUnique.mockResolvedValue({
+        id: 'bid-1',
+        orderId: 'order-1',
+        freelancerId: 'freelancer-1',
+        status: 'PENDING',
+      });
+      prisma.bid.update.mockResolvedValue({
+        id: 'bid-1',
+        status: 'REJECTED',
+        rejectionReason: 'Не подходит срок',
+      });
+
+      const result = await service.rejectBid('client-1', 'order-1', 'bid-1', 'Не подходит срок');
+
+      expect(prisma.bid.update).toHaveBeenCalledWith({
+        where: { id: 'bid-1' },
+        data: { status: 'REJECTED', rejectionReason: 'Не подходит срок' },
+      });
+      expect(prisma.notification.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'freelancer-1',
+          title: 'Отклик отклонён',
+          message: 'Ваш отклик на заказ «Landing page redesign» отклонён. Причина: Не подходит срок',
+          eventName: 'BidRejected',
+          metadata: {
+            orderId: 'order-1',
+            bidId: 'bid-1',
+            href: '/orders/order-1',
+          },
+        },
+      });
+      expect(result.status).toBe('REJECTED');
     });
   });
 
