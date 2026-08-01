@@ -216,6 +216,15 @@ export function InvoiceChatCard({
                 ? 'Чек принят и остаётся в истории сделки, чате и кошельке.'
                 : 'Оплата подтверждена. Примите чек, чтобы визуально закрыть платёж в переписке.'}
             </p>
+            <div
+              className={`mt-3 rounded-b-[1.15rem] border-t border-dashed px-3 py-2 text-center text-[11px] font-bold uppercase tracking-[0.16em] transition duration-500 ${
+                receiptAccepted
+                  ? 'translate-y-1 border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/50 dark:text-emerald-200'
+                  : 'border-stone-200 bg-stone-50 text-stone-400 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-500'
+              }`}
+            >
+              {receiptAccepted ? 'чек принят / использован' : 'чек ожидает приёмки'}
+            </div>
           </div>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
