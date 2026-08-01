@@ -50,6 +50,31 @@ describe('NotificationsEventsListener', () => {
     });
   });
 
+  it('уведомление о принятом отклике ведёт исполнителя в заказ', async () => {
+    await listener.handleBidAccepted(
+      event(DomainEventName.BidAccepted, {
+        bidId: 'bid-1',
+        orderId: 'order-1',
+        freelancerId: 'freelancer-1',
+        clientId: 'client-1',
+        amount: 800,
+      }),
+    );
+
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'freelancer-1',
+        title: 'Отклик принят',
+        eventName: DomainEventName.BidAccepted,
+        metadata: {
+          orderId: 'order-1',
+          bidId: 'bid-1',
+          href: '/orders/order-1',
+        },
+      }),
+    });
+  });
+
   it('уведомление о выставленном счёте ведёт плательщика сразу в чат по заказу', async () => {
     prisma.invoice.findUnique.mockResolvedValue({
       id: 'invoice-1',

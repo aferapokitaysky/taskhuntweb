@@ -10,6 +10,7 @@ describe('MatchingService', () => {
       bid: { findMany: jest.fn() },
       onboardingResponse: { findUnique: jest.fn() },
       order: { findMany: jest.fn(), findUniqueOrThrow: jest.fn() },
+      portfolioItem: { count: jest.fn().mockResolvedValue(0) },
       profile: { findUnique: jest.fn() },
     };
     service = new MatchingService(prisma);

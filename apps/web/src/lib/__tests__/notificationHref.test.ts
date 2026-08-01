@@ -36,11 +36,30 @@ describe('notificationHref', () => {
         metadata: { orderId: 'order-1', bidId: 'bid-1' },
       }),
     ).toBe('/orders/order-1');
+    expect(
+      notificationHref({
+        eventName: 'BidAccepted',
+        metadata: { orderId: 'order-1', bidId: 'bid-1' },
+      }),
+    ).toBe('/orders/order-1');
+    expect(
+      notificationHref({
+        eventName: 'BidRejected',
+        metadata: { orderId: 'order-1', bidId: 'bid-1' },
+      }),
+    ).toBe('/orders/order-1');
+    expect(
+      notificationHref({
+        eventName: 'EscrowReleased',
+        metadata: { orderId: 'order-1' },
+      }),
+    ).toBe('/orders/order-1');
   });
 
   it('возвращает раздел по типу события, если metadata нет', () => {
     expect(notificationHref({ eventName: 'ChatMessageCreated', metadata: null })).toBe('/chats');
     expect(notificationHref({ eventName: 'DisputeOpened' })).toBe('/support');
+    expect(notificationHref({ eventName: 'SupportMessageCreated' })).toBe('/support');
     expect(notificationHref({ eventName: 'UnknownEvent' })).toBe('/dashboard');
   });
 });
