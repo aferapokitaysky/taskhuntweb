@@ -23,6 +23,7 @@ import {
   handleWorkSubmitted,
 } from './handlers/orders';
 import { handleSubscriptionExpiringSoon } from './handlers/subscriptions';
+import { handleWalletDepositPaid } from './handlers/wallet';
 
 const connection = new IORedis({
   host: process.env.REDIS_HOST ?? 'localhost',
@@ -84,6 +85,8 @@ async function route(event: DomainEvent) {
       return handleDeadlineExtensionRequested(event, context);
     case DomainEventName.DeadlineExtensionResponded:
       return handleDeadlineExtensionResponded(event, context);
+    case DomainEventName.WalletDepositPaid:
+      return handleWalletDepositPaid(event, context);
   }
 }
 

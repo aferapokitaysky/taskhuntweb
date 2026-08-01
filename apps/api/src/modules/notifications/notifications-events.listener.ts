@@ -14,6 +14,7 @@ import {
   OrderInviteCreatedEvent,
   OrderInviteRespondedEvent,
   SubscriptionExpiringSoonEvent,
+  WalletDepositPaidEvent,
   WorkSubmittedEvent,
 } from '@taskhunt/shared-types';
 import { Prisma } from '@prisma/client';
@@ -290,6 +291,17 @@ export class NotificationsEventsListener {
         expiresAt: event.payload.expiresAt,
         href: '/pricing',
       },
+    });
+  }
+
+  @OnEvent(DomainEventName.WalletDepositPaid)
+  async handleWalletDepositPaid(event: WalletDepositPaidEvent) {
+    await this.createNotification({
+      userId: event.payload.userId,
+      title: 'Кошелёк пополнен',
+      message: `Баланс пополнен на ${event.payload.amount} ${event.payload.currency}.`,
+      eventName: DomainEventName.WalletDepositPaid,
+      metadata: { depositId: event.payload.depositId, href: '/dashboard' },
     });
   }
 

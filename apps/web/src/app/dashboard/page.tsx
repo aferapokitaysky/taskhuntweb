@@ -25,7 +25,8 @@ import { NextLevelWidget } from '@/components/NextLevelWidget';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api, API_URL, downloadFile } from '@/lib/api';
-import type { BidTemplate, Category, LedgerEntryItem, MyBid, Order, PaginatedOrders, PreviousFreelancer, SavedPayoutAddress, SavedSearch, User, WalletBalance } from '@/lib/types';
+import type { BidTemplate, Category, LedgerEntryItem, MyBid, Order, PaginatedOrders, PreviousFreelancer, SavedPayoutAddress, SavedSearch, User, WalletBalance, WalletDeposit } from '@/lib/types';
+import { PaymentConfirmDetails } from '@/components/PaymentConfirmDetails';
 import { money } from '@/lib/types';
 import { BID_STATUS_LABELS } from '@/lib/bidStatus';
 
@@ -108,6 +109,12 @@ function DashboardContent() {
     null,
   );
   const [withdrawing, setWithdrawing] = useState(false);
+  const [showDepositForm, setShowDepositForm] = useState(false);
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositCreating, setDepositCreating] = useState(false);
+  const [depositError, setDepositError] = useState<string | null>(null);
+  const [activeDeposit, setActiveDeposit] = useState<WalletDeposit | null>(null);
+  const [depositPaid, setDepositPaid] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [historyItems, setHistoryItems] = useState<LedgerEntryItem[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
@@ -575,6 +582,64 @@ function DashboardContent() {
     }
   }
 
+  async function submitDeposit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const amount = Number(depositAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    setDepositError(null);
+    setDepositCreating(true);
+    try {
+      const created = await api<{ id: string; amount: string; currency: string; status: WalletDeposit['status']; payAddress?: string | null; payAmount?: string | null; payCurrency?: string | null }>(
+        '/wallet/deposits',
+        { method: 'POST', body: JSON.stringify({ amount }) },
+      );
+      setActiveDeposit({
+        depositId: created.id,
+        amount: created.amount,
+        currency: created.currency,
+        status: created.status,
+        payAddress: created.payAddress,
+        payAmount: created.payAmount,
+        payCurrency: created.payCurrency,
+        paymentNetwork: created.payCurrency,
+      });
+      setDepositPaid(false);
+    } catch (err) {
+      setDepositError(err instanceof Error ? err.message : 'Не удалось создать пополнение');
+    } finally {
+      setDepositCreating(false);
+    }
+  }
+
+  // Пока открыт платёжный экран депозита — опрашиваем статус раз в 4с.
+  // NOWPayments подтверждает платёж асинхронно (IPN на бэкенд), у фронта
+  // нет другого способа узнать "уже пришло?", кроме поллинга.
+  useEffect(() => {
+    if (!activeDeposit || activeDeposit.status === 'PAID') return;
+    const interval = window.setInterval(async () => {
+      try {
+        const details = await api<WalletDeposit>(`/wallet/deposits/${activeDeposit.depositId}/payment`);
+        if (details.status === 'PAID') {
+          setActiveDeposit(details);
+          setDepositPaid(true);
+          const balance = await api<WalletBalance>('/wallet/balance');
+          setWallet(balance);
+        }
+      } catch {
+        // тихо — попробуем на следующем тике
+      }
+    }, 4000);
+    return () => window.clearInterval(interval);
+  }, [activeDeposit]);
+
+  function closeDepositForm() {
+    setShowDepositForm(false);
+    setActiveDeposit(null);
+    setDepositAmount('');
+    setDepositError(null);
+    setDepositPaid(false);
+  }
+
   async function loadHistory(cursor?: string | null) {
     setHistoryLoading(true);
     try {
@@ -679,13 +744,62 @@ function DashboardContent() {
                   Контролируйте доступные деньги, эскроу и заявки на вывод из одного спокойного блока.
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Mascot name="payoutWallet" size="h-14 w-14" />
+                <button type="button" onClick={() => setShowDepositForm((v) => !v)} className="secondary-action px-5 py-3 text-sm">
+                  {showDepositForm ? 'Свернуть пополнение' : 'Пополнить'}
+                </button>
                 <button type="button" onClick={() => setShowWithdrawForm((v) => !v)} className="primary-action px-5 py-3 text-sm">
                   {showWithdrawForm ? 'Свернуть вывод' : 'Вывести средства'}
                 </button>
               </div>
             </div>
+
+            {showDepositForm && (
+              <div className="mt-4 rounded-[2rem] border border-stone-100 bg-stone-50/70 p-4">
+                {!activeDeposit ? (
+                  <form onSubmit={submitDeposit} className="flex flex-wrap items-end gap-3">
+                    <label className="field-surface flex min-h-[6.5rem] flex-1 min-w-[10rem] flex-col justify-between p-4">
+                      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-400">Сумма пополнения, USD</span>
+                      <input
+                        required
+                        type="number"
+                        min="5"
+                        step="0.01"
+                        inputMode="decimal"
+                        placeholder="100"
+                        value={depositAmount}
+                        onChange={(e) => setDepositAmount(e.target.value)}
+                        className="mt-2 w-full bg-transparent font-serif text-2xl text-stone-950 outline-none"
+                      />
+                    </label>
+                    <button type="submit" disabled={depositCreating} className="primary-action px-5 py-3 text-sm disabled:opacity-60">
+                      {depositCreating ? 'Создаём счёт...' : 'Оплатить криптой'}
+                    </button>
+                    {depositError && <p className="w-full text-sm text-red-600">{depositError}</p>}
+                  </form>
+                ) : (
+                  <div>
+                    {depositPaid ? (
+                      <div className="flex items-center gap-3">
+                        <Mascot name="successConfetti" size="h-12 w-12" />
+                        <p className="text-sm font-medium text-emerald-700">
+                          Зачислено {money(activeDeposit.amount, activeDeposit.currency)}. Баланс обновлён.
+                        </p>
+                      </div>
+                    ) : (
+                      <PaymentConfirmDetails
+                        invoice={activeDeposit}
+                        confirmationHint="Отправьте точную сумму на указанный адрес. Как только сеть подтвердит платёж, баланс обновится автоматически — обычно это занимает несколько минут."
+                      />
+                    )}
+                    <button type="button" onClick={closeDepositForm} className="secondary-action mt-4 px-4 py-2 text-sm">
+                      {depositPaid ? 'Готово' : 'Отменить'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {wallet && (
               <div className="mt-5 grid gap-3 lg:grid-cols-[1.05fr_1fr]">

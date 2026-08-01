@@ -141,6 +141,18 @@ export interface Invoice {
   paidAt?: string | null;
 }
 
+/** Пополнение кошелька через NOWPayments (POST /wallet/deposits, GET /wallet/deposits/:id/payment). */
+export interface WalletDeposit {
+  depositId: string;
+  amount: string;
+  currency: string;
+  status: 'PENDING' | 'PAID' | 'CANCELLED' | 'EXPIRED';
+  payAddress?: string | null;
+  payAmount?: string | null;
+  payCurrency?: string | null;
+  paymentNetwork?: string | null;
+}
+
 export interface InvoicePaymentDetails {
   invoiceId: string;
   orderId: string;

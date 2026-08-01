@@ -9,6 +9,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { WalletService } from './wallet.service';
 import { InvoiceService } from './invoice.service';
+import { DepositService } from './deposit.service';
 import { PayoutAddressesService } from './payout-addresses.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { SetAutoWithdrawDto } from './dto/set-auto-withdraw.dto';
@@ -42,12 +43,19 @@ export class WithdrawDto {
   label?: string;
 }
 
+export class CreateDepositDto {
+  @IsNumber()
+  @IsPositive()
+  amount!: number;
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller('wallet')
 export class WalletController {
   constructor(
     private readonly walletService: WalletService,
     private readonly invoiceService: InvoiceService,
+    private readonly depositService: DepositService,
     private readonly payoutAddressesService: PayoutAddressesService,
     @InjectQueue(PAYOUT_QUEUE) private readonly payoutQueue: Queue<PayoutJobData>,
   ) {}
@@ -125,6 +133,17 @@ export class WalletController {
     });
 
     return { transaction, fee, netAmount, payoutQueued: true };
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('deposits')
+  createDeposit(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateDepositDto) {
+    return this.depositService.createDeposit(user.id, dto.amount);
+  }
+
+  @Get('deposits/:id/payment')
+  getDepositPaymentDetails(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.depositService.getPaymentDetails(user.id, id);
   }
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })

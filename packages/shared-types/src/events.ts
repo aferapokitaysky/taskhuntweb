@@ -24,6 +24,7 @@ export enum DomainEventName {
   SubscriptionExpiringSoon = 'SubscriptionExpiringSoon',
   DeadlineExtensionRequested = 'DeadlineExtensionRequested',
   DeadlineExtensionResponded = 'DeadlineExtensionResponded',
+  WalletDepositPaid = 'WalletDepositPaid',
 }
 
 export interface BaseDomainEvent<TName extends DomainEventName, TPayload> {
@@ -120,6 +121,11 @@ export type DeadlineExtensionRespondedEvent = BaseDomainEvent<
   { requestId: string; orderId: string; clientId: string; freelancerId: string; approved: boolean }
 >;
 
+export type WalletDepositPaidEvent = BaseDomainEvent<
+  DomainEventName.WalletDepositPaid,
+  { depositId: string; userId: string; amount: number; currency: string }
+>;
+
 export type DomainEvent =
   | UserRegisteredEvent
   | OrderCreatedEvent
@@ -137,4 +143,5 @@ export type DomainEvent =
   | PasswordResetRequestedEvent
   | SubscriptionExpiringSoonEvent
   | DeadlineExtensionRequestedEvent
-  | DeadlineExtensionRespondedEvent;
+  | DeadlineExtensionRespondedEvent
+  | WalletDepositPaidEvent;

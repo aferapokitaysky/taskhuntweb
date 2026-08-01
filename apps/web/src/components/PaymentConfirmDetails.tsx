@@ -1,14 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import type { Invoice } from '@/lib/types';
+
+type PayableDocument = {
+  amount: string | number;
+  currency: string;
+  payAmount?: string | number | null;
+  payCurrency?: string | null;
+  payAddress?: string | null;
+};
 
 export function PaymentConfirmDetails({
   invoice,
   loading,
+  confirmationHint = 'Проверьте сумму и адрес. После подтверждения провайдера деньги уйдут в эскроу TaskHunt.',
 }: {
-  invoice: Invoice | null;
+  invoice: PayableDocument | null;
   loading?: boolean;
+  confirmationHint?: string;
 }) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -38,7 +47,7 @@ export function PaymentConfirmDetails({
 
   return (
     <div className="space-y-3">
-      <p>Проверьте сумму и адрес. После подтверждения провайдера деньги уйдут в эскроу TaskHunt.</p>
+      <p>{confirmationHint}</p>
       <div className="grid gap-2 rounded-[1.35rem] bg-stone-50 p-2">
         <CopyPaymentRow
           label="К оплате"

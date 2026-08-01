@@ -77,6 +77,7 @@ model User {
   profile    Profile?
   wallet     Wallet?
   onboarding OnboardingResponse?
+  walletDeposits WalletDeposit[]
 
   ordersAsClient  Order[]  @relation("ClientOrders")
   bids            Bid[]
@@ -593,6 +594,31 @@ enum InvoiceStatus {
 }
 
 // Инвойс/счёт, выставляемый прямо в чате заказа
+// Пополнение кошелька пользователем через NOWPayments (не привязано к заказу,
+// в отличие от Invoice — это просто "занести деньги на платформу").
+model WalletDeposit {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount   Decimal       @db.Decimal(12, 2)
+  currency String        @default("USD")
+  status   InvoiceStatus @default(PENDING)
+
+  nowPaymentsPaymentId String?   @unique
+  payAddress           String?
+  payAmount            Decimal?  @db.Decimal(18, 8)
+  payCurrency          String?
+  paidAt               DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@map("wallet_deposits")
+}
+
 model Invoice {
   id          String     @id @default(uuid())
   orderId     String
