@@ -251,6 +251,48 @@ export class InvoiceService {
     return paid;
   }
 
+  /** Заказчик оплачивает свой же выставленный счёт с основного баланса кошелька — без нового крипто-платежа. */
+  async payFromBalance(userId: string, invoiceId: string) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { order: { include: { client: { include: { wallet: true } } } } },
+    });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.payerId !== userId) throw new ForbiddenException('Оплатить этот счёт может только заказчик');
+    if (invoice.status !== 'PENDING') throw new BadRequestException('Счёт уже оплачен или недействителен');
+    if (!invoice.order.client.wallet) throw new BadRequestException('Client wallet missing');
+
+    // Сначала двигаем деньги (бросит ForbiddenException, если баланса не
+    // хватает) — и только после успешного списания помечаем счёт оплаченным
+    // и публикуем событие. В markPaidAndLockEscrow (IPN-путь) порядок
+    // обратный осознанно (там leg уже подтверждён провайдером и не может
+    // "не хватить"), но здесь баланс могут списать позже, поэтому сначала
+    // проверка/списание, чтобы не пометить счёт оплаченным при отказе.
+    await this.wallet.lockEscrowFromMainBalance({
+      clientWalletId: invoice.order.client.wallet.id,
+      clientId: invoice.order.clientId,
+      amount: Number(invoice.amount),
+      invoiceId: invoice.id,
+      orderId: invoice.orderId,
+    });
+
+    const paid = await this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: 'PAID', paidAt: new Date() },
+    });
+
+    await this.eventBus.publish(DomainEventName.InvoicePaid, {
+      invoiceId: invoice.id,
+      orderId: invoice.orderId,
+      payerId: invoice.payerId,
+      freelancerId: invoice.issuedById,
+      amount: Number(invoice.amount),
+      currency: invoice.currency,
+    });
+
+    return paid;
+  }
+
   async exportOrderInvoicesCsv(userId: string, orderId: string): Promise<string> {
     await this.ensureOrderInvoiceAccess(userId, orderId);
 

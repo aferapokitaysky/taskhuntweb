@@ -55,6 +55,8 @@ function ChatsContent() {
   const [invoiceDescription, setInvoiceDescription] = useState('');
   const [issueInvoiceConfirmOpen, setIssueInvoiceConfirmOpen] = useState(false);
   const [issuingInvoice, setIssuingInvoice] = useState(false);
+  const [payingFromBalance, setPayingFromBalance] = useState(false);
+  const [payFromBalanceError, setPayFromBalanceError] = useState<string | null>(null);
 
   async function loadInbox(selectFirst = true) {
     const [user, list] = await Promise.all([api<User>('/users/me'), api<ChatInboxThread[]>('/chat/threads')]);
@@ -164,6 +166,7 @@ function ChatsContent() {
 
   async function openPaymentConfirm(invoice: Invoice) {
     setPaymentConfirmInvoice(invoice);
+    setPayFromBalanceError(null);
     setPaymentDetailsLoading(true);
     try {
       const details = await api<InvoicePaymentDetails>(`/wallet/invoices/${invoice.id}/payment`);
@@ -172,6 +175,26 @@ function ChatsContent() {
       setError(err instanceof Error ? err.message : 'Не удалось получить реквизиты оплаты');
     } finally {
       setPaymentDetailsLoading(false);
+    }
+  }
+
+  async function payInvoiceFromBalance() {
+    if (!paymentConfirmInvoice) return;
+    setPayingFromBalance(true);
+    setPayFromBalanceError(null);
+    try {
+      // Списание с MAIN — основной способ оплаты счёта (см. заметку в
+      // docs/CODEX_CLAUDE_SYNC.md: "деньги должны списываться из основного
+      // баланса"). Криптоплатёж ниже остаётся как запасной вариант, когда
+      // основного баланса не хватает.
+      await api(`/wallet/invoices/${paymentConfirmInvoice.id}/pay-from-balance`, { method: 'POST' });
+      // Статус счёта на PAID обновится сам через живой 'invoiceUpdated' —
+      // здесь просто закрываем диалог.
+      setPaymentConfirmInvoice(null);
+    } catch (err) {
+      setPayFromBalanceError(err instanceof Error ? err.message : 'Не удалось оплатить с основного баланса');
+    } finally {
+      setPayingFromBalance(false);
     }
   }
 
@@ -308,9 +331,13 @@ function ChatsContent() {
 
       {error && <ErrorNotice message={error} />}
 
-      <section className="grid min-h-[680px] gap-5 lg:grid-cols-[380px_1fr]">
-        <aside className="premium-panel overflow-hidden rounded-[2.25rem] p-0">
-          <div className="border-b border-stone-100 p-5">
+      {/* Фиксированная высота (не min-h!) — иначе flex-1/overflow-y-auto у
+          списка сообщений ниже не от чего было считать границу, и при
+          накоплении сообщений/счетов росла не внутренняя прокрутка, а вся
+          секция (и вместе с ней вся страница). */}
+      <section className="grid gap-5 lg:h-[calc(100vh-140px)] lg:min-h-[840px] lg:grid-rows-[1fr] lg:grid-cols-[380px_1fr]">
+        <aside className="premium-panel flex min-h-0 flex-col overflow-hidden rounded-[2.25rem] p-0">
+          <div className="shrink-0 border-b border-stone-100 p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Inbox</p>
             <div className="mt-1 flex items-center justify-between gap-3">
               <h2 className="font-serif text-2xl text-stone-950">Диалоги</h2>
@@ -319,7 +346,7 @@ function ChatsContent() {
               )}
             </div>
           </div>
-          <div className="max-h-[620px] overflow-y-auto p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {loading && <p className="p-4 text-sm text-stone-500">Загружаем...</p>}
             {!loading && threads.length === 0 && (
               <div className="p-4">
@@ -360,13 +387,13 @@ function ChatsContent() {
           </div>
         </aside>
 
-        <div className="premium-panel flex overflow-hidden rounded-[2.25rem] p-0">
+        <div className="premium-panel flex min-h-0 overflow-hidden rounded-[2.25rem] p-0">
           {!active ? (
             <div className="flex flex-1 items-center justify-center p-8">
               <EmptyState icon={<ChatIcon />} title="Выберите чат" description="Слева появятся диалоги по вашим заказам и откликам." />
             </div>
           ) : (
-            <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="border-b border-stone-100 bg-gradient-to-br from-white via-card-sand/35 to-card-sage/35 p-5 md:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="flex min-w-0 items-start gap-3">
@@ -549,10 +576,28 @@ function ChatsContent() {
       </section>
       <ConfirmDialog
         open={Boolean(paymentConfirmInvoice)}
-        title="Перейти к оплате счёта?"
-        description={<PaymentConfirmDetails invoice={paymentConfirmInvoice} loading={paymentDetailsLoading} />}
-        confirmLabel={paymentDetailsLoading ? 'Загружаем' : 'Готово'}
-        busy={paymentDetailsLoading}
+        title="Оплата счёта"
+        description={
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => void payInvoiceFromBalance()}
+              disabled={payingFromBalance || !paymentConfirmInvoice}
+              className="primary-action w-full justify-center px-4 py-3 text-sm disabled:opacity-60"
+            >
+              {payingFromBalance
+                ? 'Списываем...'
+                : `Оплатить ${paymentConfirmInvoice ? money(paymentConfirmInvoice.amount, paymentConfirmInvoice.currency) : ''} с основного баланса`}
+            </button>
+            {payFromBalanceError && <p className="text-xs text-red-600">{payFromBalanceError}</p>}
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+              <span className="h-px flex-1 bg-stone-200" /> или переводом в крипте <span className="h-px flex-1 bg-stone-200" />
+            </div>
+            <PaymentConfirmDetails invoice={paymentConfirmInvoice} loading={paymentDetailsLoading} />
+          </div>
+        }
+        confirmLabel="Готово"
+        busy={payingFromBalance}
         onCancel={() => setPaymentConfirmInvoice(null)}
         onConfirm={() => setPaymentConfirmInvoice(null)}
       />

@@ -193,12 +193,12 @@ export function InvoiceChatCard({
             } ${receiptCardTone} dark:border-emerald-900/50 dark:bg-stone-800 dark:text-stone-100`}
           >
             <div className="pointer-events-none absolute left-0 right-0 top-11 border-t border-dashed border-emerald-200 dark:border-emerald-900/60" />
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-600">
                   {receiptAccepted ? 'Чек принят' : 'Чек готов к приёмке'}
                 </p>
-                <p className="mt-4 font-serif text-2xl leading-none text-stone-950 dark:text-stone-50">{money(invoice.amount, invoice.currency)}</p>
+                <p className="mt-1.5 font-serif text-2xl leading-none text-stone-950 dark:text-stone-50">{money(invoice.amount, invoice.currency)}</p>
               </div>
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.1rem] bg-emerald-100 text-emerald-700 shadow-sm dark:bg-emerald-950/60">
                 <MailCheckIcon className="h-7 w-7" />

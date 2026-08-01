@@ -17,7 +17,6 @@ import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PaymentConfirmDetails } from '@/components/PaymentConfirmDetails';
 import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
-import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 import { BidAvatarIcon } from '@/components/icons/illustrated/BidAvatarIcon';
 import { BalanceEscrowIcon } from '@/components/icons/illustrated/BalanceEscrowIcon';
 import { BalanceMainIcon } from '@/components/icons/illustrated/BalanceMainIcon';
@@ -869,9 +868,21 @@ export default function OrderDetailClient() {
       </section>
 
       {hasAcceptedBid && (
-        <section className="premium-panel mb-6 p-5">
-          <h2 className="mb-4 font-serif text-xl text-stone-900">Этапы и сдача работы</h2>
+        <section className="premium-panel mb-6 overflow-hidden rounded-[2rem] p-5 md:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Ход сделки</p>
+              <h2 className="mt-1 font-serif text-2xl text-stone-950">Этапы и сдача работы</h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-stone-600">
+                {isFreelancer
+                  ? 'Когда результат готов — сдайте его здесь. Заказчик проверит и отпустит оплату из эскроу.'
+                  : 'Здесь появится сданная работа. Проверьте результат и отпустите оплату исполнителю.'}
+              </p>
+            </div>
+            <Mascot name="qualityChecklist" size="h-14 w-14" />
+          </div>
 
+          <div className="mt-5">
           {hasMilestones ? (
             <div className="space-y-3">
               {milestones.map((milestone) => (
@@ -923,15 +934,15 @@ export default function OrderDetailClient() {
               ))}
             </div>
           ) : (
-            <div className="rounded-2xl border border-stone-100 bg-stone-50/70 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="interactive-card rounded-[1.5rem] bg-card-sand/50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-stone-600">Этапы не заведены — работа сдаётся заказом целиком.</p>
                 <div className="flex gap-2">
                   {isFreelancer && order.status === 'IN_PROGRESS' && (
                     <button
                       type="button"
                       onClick={() => openDeliverForm('order')}
-                      className="primary-action px-3 py-1.5 text-sm font-medium"
+                      className="primary-action px-4 py-2.5 text-sm font-medium"
                     >
                       Сдать работу
                     </button>
@@ -941,7 +952,7 @@ export default function OrderDetailClient() {
                       type="button"
                       onClick={() => setApproveConfirmTarget('order')}
                       disabled={busyAction === 'approve-order'}
-                      className="primary-action px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                      className="primary-action px-4 py-2.5 text-sm font-medium disabled:opacity-50"
                     >
                       {busyAction === 'approve-order' ? 'Принимаем…' : 'Принять и отпустить оплату'}
                     </button>
@@ -964,6 +975,7 @@ export default function OrderDetailClient() {
               )}
             </div>
           )}
+          </div>
 
           {isClient && (
             <details className="mt-4">
@@ -1200,28 +1212,6 @@ export default function OrderDetailClient() {
         </section>
       )}
 
-      {canChat && (
-        <section className="premium-panel flex flex-wrap items-center justify-between gap-4 p-5">
-          <div className="flex items-center gap-3">
-            <ChatIcon className="h-8 w-8" />
-            <div>
-              <h2 className="font-serif text-xl text-stone-900">Чат заказа</h2>
-              <p className="mt-1 text-sm text-stone-500">
-                {threads.length > 0
-                  ? `Переписка (${threads.length}) теперь на одной странице со всеми вашими чатами — сообщения, счета и файлы приходят туда вживую.`
-                  : 'Напишите первым — переписка и выставление счетов теперь в одном месте со всеми вашими чатами.'}
-              </p>
-            </div>
-          </div>
-          <Link
-            href={`/chats?orderId=${orderId}${chatFreelancerId ? `&freelancerId=${chatFreelancerId}` : ''}`}
-            className="primary-action shrink-0 px-5 py-3 text-sm"
-          >
-            Открыть чат
-          </Link>
-        </section>
-      )}
-
       <ConfirmDialog
         open={Boolean(hireConfirmBid)}
         title="Дать таск этому исполнителю?"
@@ -1357,10 +1347,11 @@ function DeliveryForm({
   onSubmit,
 }: DeliveryFormProps) {
   return (
-    <form onSubmit={onSubmit} className="mt-3 space-y-3 rounded-2xl bg-stone-50 p-3">
+    <form onSubmit={onSubmit} className="mt-3 space-y-3 rounded-[1.5rem] bg-stone-50 p-4">
       <textarea
         required
-        placeholder="Что сделано"
+        minLength={5}
+        placeholder="Что сделано (минимум 5 символов)"
         value={description}
         onChange={(e) => onDescriptionChange(e.target.value)}
         className="field-surface min-h-20 w-full px-3 py-2 text-sm"

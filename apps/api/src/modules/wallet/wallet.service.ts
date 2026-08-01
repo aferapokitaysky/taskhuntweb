@@ -154,6 +154,46 @@ export class WalletService {
   }
 
   /**
+   * Оплата счёта с собственного основного баланса кошелька — без нового
+   * крипто-платежа через NOWPayments. В отличие от lockEscrowForInvoice
+   * (деньги "заходят" от внешнего мира через системный счёт), здесь это
+   * чисто внутренний перевод MAIN -> ESCROW ОДНОГО И ТОГО ЖЕ кошелька:
+   * баланс уже был пополнен раньше (см. DepositService), платить второй
+   * раз реальной криптой не нужно.
+   */
+  async lockEscrowFromMainBalance(params: {
+    clientWalletId: string;
+    clientId: string;
+    amount: number;
+    invoiceId: string;
+    orderId: string;
+  }) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { id: params.clientWalletId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+    if (Number(wallet.mainBalance) < params.amount) {
+      throw new ForbiddenException('Недостаточно средств на основном балансе для оплаты счёта');
+    }
+
+    await this.ledger.applyTransaction({
+      type: 'ESCROW_LOCK',
+      referenceType: 'INVOICE',
+      referenceId: params.invoiceId,
+      description: `Escrow lock for invoice ${params.invoiceId} (paid from main balance)`,
+      entries: [
+        { walletId: params.clientWalletId, balanceType: 'MAIN', direction: 'DEBIT', amount: params.amount },
+        { walletId: params.clientWalletId, balanceType: 'ESCROW', direction: 'CREDIT', amount: params.amount },
+      ],
+    });
+
+    await this.eventBus.publish(DomainEventName.EscrowLocked, {
+      orderId: params.orderId,
+      walletId: params.clientWalletId,
+      clientId: params.clientId,
+      amount: params.amount,
+    });
+  }
+
+  /**
    * Релиз эскроу фрилансеру при принятии сдачи работы. Комиссия платформы
    * удерживается тут же, одной сбалансированной транзакцией:
    *   DEBIT client.ESCROW (amount)

@@ -157,6 +157,12 @@ export class WalletController {
     return this.invoiceService.getPaymentDetails(user.id, id);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('invoices/:id/pay-from-balance')
+  payInvoiceFromBalance(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.invoiceService.payFromBalance(user.id, id);
+  }
+
   @Get('invoices/:id/receipt.pdf')
   async getInvoiceReceiptPdf(
     @CurrentUser() user: AuthenticatedUser,
