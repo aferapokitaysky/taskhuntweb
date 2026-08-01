@@ -43,6 +43,9 @@ export function InvoiceChatCard({
     : cancelled
       ? 'bg-red-100 text-red-700'
       : 'bg-brand/10 text-brand';
+  const receiptCardTone = receiptAccepted
+    ? 'border-emerald-200 bg-emerald-50/90 text-emerald-900 shadow-emerald-900/5'
+    : 'border-emerald-100 bg-white text-stone-900 shadow-stone-200/60';
 
   async function copyValue(value: string, field: string) {
     await navigator.clipboard?.writeText(value).catch(() => undefined);
@@ -56,7 +59,7 @@ export function InvoiceChatCard({
 
   return (
     <div
-      className={`relative mt-2 max-w-xl overflow-hidden rounded-[1.85rem] border shadow-lg ${
+      className={`relative mt-2 max-w-xl overflow-hidden rounded-[1.85rem] border shadow-lg transition duration-300 ${
         own ? 'border-white/25 bg-white/10 text-white shadow-stone-950/10' : 'border-brand/20 bg-white text-stone-900 shadow-stone-200/60 dark:border-stone-700 dark:bg-stone-900'
       }`}
     >
@@ -150,29 +153,58 @@ export function InvoiceChatCard({
         </div>
       )}
       {paid && (
-        <div
-          className={`grid gap-3 border-t border-stone-100 bg-white/80 p-3 text-xs leading-5 text-emerald-700 transition ${
-            receiptAccepted ? 'translate-y-1 opacity-80' : ''
-          } dark:border-stone-700 dark:bg-stone-900`}
-        >
-          <p>
-            {receiptAccepted
-              ? 'Чек принят. Он остаётся в истории сделки и кошелька.'
-              : 'Оплата подтверждена, средства находятся под защитой TaskHunt до приёмки работы.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => setReceiptAccepted(true)}
-            disabled={receiptAccepted}
-            className="secondary-action w-full justify-center px-4 py-2 text-sm disabled:opacity-60"
+        <div className="border-t border-dashed border-emerald-200 bg-white/82 p-3 dark:border-stone-700 dark:bg-stone-900">
+          <div
+            className={`relative overflow-hidden rounded-[1.45rem] border p-3 shadow-lg transition duration-500 ${
+              receiptAccepted ? 'translate-y-2 rotate-[-0.4deg]' : 'translate-y-0'
+            } ${receiptCardTone} dark:border-emerald-900/50 dark:bg-stone-800 dark:text-stone-100`}
           >
-            {receiptAccepted ? 'Чек принят' : 'Принять чек'}
-          </button>
-          {onDownloadPdf && (
-            <button type="button" onClick={() => onDownloadPdf(invoice)} className="secondary-action w-full justify-center px-4 py-2 text-sm">
-              Скачать PDF-чек
+            <div className="pointer-events-none absolute left-0 right-0 top-11 border-t border-dashed border-emerald-200 dark:border-emerald-900/60" />
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-600">
+                  {receiptAccepted ? 'Чек принят' : 'Чек готов к приёмке'}
+                </p>
+                <p className="mt-4 font-serif text-2xl leading-none text-stone-950 dark:text-stone-50">{money(invoice.amount, invoice.currency)}</p>
+              </div>
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.1rem] bg-emerald-100 text-emerald-700 shadow-sm dark:bg-emerald-950/60">
+                <MailCheckIcon className="h-7 w-7" />
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+              <div className="rounded-[1rem] bg-white/70 px-3 py-2 dark:bg-stone-900">
+                <span className="block font-semibold uppercase tracking-[0.12em] text-stone-400">Документ</span>
+                <span className="mt-1 block break-all font-mono text-stone-700 dark:text-stone-200">RC-{shortId}</span>
+              </div>
+              <div className="rounded-[1rem] bg-white/70 px-3 py-2 dark:bg-stone-900">
+                <span className="block font-semibold uppercase tracking-[0.12em] text-stone-400">Статус</span>
+                <span className="mt-1 block font-semibold text-emerald-700 dark:text-emerald-300">
+                  {receiptAccepted ? 'использован' : 'ожидает принятия'}
+                </span>
+              </div>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-stone-600 dark:text-stone-300">
+              {receiptAccepted
+                ? 'Чек принят и остаётся в истории сделки, чате и кошельке.'
+                : 'Оплата подтверждена. Примите чек, чтобы визуально закрыть платёж в переписке.'}
+            </p>
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setReceiptAccepted(true)}
+              disabled={receiptAccepted}
+              className="primary-action justify-center px-4 py-2 text-sm disabled:opacity-65"
+            >
+              {receiptAccepted ? 'Чек принят' : 'Принять чек'}
             </button>
-          )}
+            {onDownloadPdf && (
+              <button type="button" onClick={() => onDownloadPdf(invoice)} className="secondary-action w-full justify-center px-4 py-2 text-sm">
+                Скачать PDF-чек
+              </button>
+            )}
+          </div>
         </div>
       )}
       {cancelled && (
