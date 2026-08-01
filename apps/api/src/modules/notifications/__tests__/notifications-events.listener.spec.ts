@@ -113,6 +113,61 @@ describe('NotificationsEventsListener', () => {
     });
   });
 
+  it('уведомление об открытом эскроу ведёт исполнителя в историю платежей заказа', async () => {
+    prisma.order.findUnique.mockResolvedValue({
+      id: 'order-1',
+      title: 'Landing page',
+      currency: 'USD',
+      bids: [{ freelancerId: 'freelancer-1' }],
+    });
+
+    await listener.handleEscrowLocked(
+      event(DomainEventName.EscrowLocked, {
+        orderId: 'order-1',
+        walletId: 'wallet-1',
+        clientId: 'client-1',
+        amount: 500,
+      }),
+    );
+
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'freelancer-1',
+        title: 'Эскроу открыт',
+        eventName: DomainEventName.EscrowLocked,
+        metadata: {
+          orderId: 'order-1',
+          href: '/orders/order-1#payment-history',
+        },
+      }),
+    });
+  });
+
+  it('уведомление о выплате эскроу ведёт исполнителя в историю платежей заказа', async () => {
+    prisma.order.findUnique.mockResolvedValue({ id: 'order-1', title: 'Landing page', currency: 'USD' });
+
+    await listener.handleEscrowReleased(
+      event(DomainEventName.EscrowReleased, {
+        orderId: 'order-1',
+        walletId: 'wallet-1',
+        amount: 455,
+        toFreelancerId: 'freelancer-1',
+      }),
+    );
+
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'freelancer-1',
+        title: 'Эскроу выплачен',
+        eventName: DomainEventName.EscrowReleased,
+        metadata: {
+          orderId: 'order-1',
+          href: '/orders/order-1#payment-history',
+        },
+      }),
+    });
+  });
+
   it('уведомление о сдаче работы ведёт заказчика в заказ на проверку результата', async () => {
     prisma.order.findUnique.mockResolvedValue({ id: 'order-1', title: 'Landing page', clientId: 'client-1' });
 

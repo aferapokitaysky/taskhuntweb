@@ -1152,7 +1152,7 @@ export default function OrderDetailClient() {
       )}
 
       {(isClient || isFreelancer) && (
-        <section className="premium-panel mb-6 overflow-hidden rounded-[2rem] p-0">
+        <section id="payment-history" className="premium-panel mb-6 scroll-mt-24 overflow-hidden rounded-[2rem] p-0">
           <div className="border-b border-stone-100 bg-white/74 p-5 md:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>

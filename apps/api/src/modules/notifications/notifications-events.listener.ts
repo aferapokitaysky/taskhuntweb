@@ -151,7 +151,7 @@ export class NotificationsEventsListener {
       eventName: DomainEventName.EscrowLocked,
       metadata: {
         orderId: event.payload.orderId,
-        href: `/orders/${event.payload.orderId}#order-chat`,
+        href: `/orders/${event.payload.orderId}#payment-history`,
       },
     });
   }
@@ -166,7 +166,7 @@ export class NotificationsEventsListener {
       eventName: DomainEventName.EscrowReleased,
       metadata: {
         orderId: event.payload.orderId,
-        href: `/orders/${event.payload.orderId}`,
+        href: `/orders/${event.payload.orderId}#payment-history`,
       },
     });
   }
