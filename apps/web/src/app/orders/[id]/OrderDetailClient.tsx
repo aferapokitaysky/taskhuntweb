@@ -1384,13 +1384,18 @@ export default function OrderDetailClient() {
                     const isInvoice = message.type === 'INVOICE' && Boolean(message.invoice);
                     return (
                       <div key={message.id} className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
-                        <div
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-serif text-xs text-stone-900 ${
+                        <span
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-stone-200 shadow-sm ${
                             isOwn ? 'bg-card-sand' : 'bg-card-lavender'
                           }`}
                         >
-                          {name.charAt(0).toUpperCase()}
-                        </div>
+                          {message.sender?.profile?.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={`${API_URL}${message.sender.profile.avatarUrl}`} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <ChatIcon className="h-5 w-5" />
+                          )}
+                        </span>
                         <div
                           className={
                             isInvoice
@@ -1416,7 +1421,7 @@ export default function OrderDetailClient() {
                               <p className={`mt-1 text-xs ${isOwn ? 'text-white/70' : 'text-stone-500'}`}>Файл сохранён в истории сделки</p>
                             </div>
                           ) : (
-                            <p className="mt-1 text-sm">{message.body}</p>
+                            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6">{message.body}</p>
                           )}
                         </div>
                       </div>
@@ -1462,15 +1467,15 @@ export default function OrderDetailClient() {
                     </button>
                   ))}
                 </div>
-                <form onSubmit={sendMessage} className="flex gap-2">
+                <form onSubmit={sendMessage} className="flex flex-wrap gap-2 sm:flex-nowrap">
                   <input
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
                     placeholder="Сообщение"
-                    className="field-surface min-w-0 flex-1 px-3 py-2"
+                    className="field-surface min-w-[180px] flex-1 px-3 py-2"
                   />
                   <FileUpload onUploaded={(file) => void sendChatFile(file)} label="Файл" />
-                  <button type="submit" className="primary-action px-4 py-2 font-medium">
+                  <button type="submit" disabled={!body.trim()} className="primary-action px-4 py-2 font-medium disabled:opacity-50">
                     Отправить
                   </button>
                 </form>
