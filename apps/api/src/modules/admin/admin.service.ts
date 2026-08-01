@@ -726,4 +726,166 @@ export class AdminService {
       data: { moderatedAt: new Date(), hiddenAt: action === 'REJECT' ? new Date() : null },
     });
   }
+
+  // --- Финансы (баланс площадки, выплаты, эскроу в моменте) ---
+
+  /**
+   * "Сколько денег на кошельке / сколько выплачено" — то, чего раньше в
+   * админке не было вообще (только выручка и GMV из getMetrics). Все суммы
+   * читаются напрямую из леджера, не из денормализованных полей Wallet —
+   * так они остаются верными, даже если Wallet.* когда-нибудь разъедется
+   * с реальной историей проводок.
+   *
+   * ВАЖНО про systemMainBalance: это "виртуальный" баланс площадки в
+   * ledger-модели, а НЕ обязательно то, что физически лежит в реальном
+   * крипто-кошельке на NOWPayments прямо сейчас — при заявке на вывод
+   * (requestWithdrawal) вся сумма сразу зачисляется на system.MAIN как
+   * "зарезервировано под выплату", но при УСПЕШНОЙ отправке крипты через
+   * NOWPayments обратного списания нет (списывается только при ПРОВАЛЕ
+   * выплаты — тогда сумма возвращается пользователю). Это осознанный
+   * пробел ledger-модели, а не баг в этом методе: чтобы система.MAIN
+   * дословно совпадал с реальным ончейн-балансом, нужно отдельное событие
+   * webhook-подтверждения от NOWPayments по каждой выплате, которого сейчас
+   * в интеграции нет. totalNetPaidOut ниже — независимая от этого нюанса
+   * оценка "сколько реально ушло фрилансерам" по факту списания их
+   * WITHDRAWABLE, за вычетом того, что вернулось обратно из-за провалов.
+   */
+  async getFinanceOverview() {
+    const systemWalletId = await this.walletService.getSystemWalletId();
+    const systemWallet = await this.prisma.wallet.findUniqueOrThrow({ where: { id: systemWalletId } });
+
+    const [totalRevenueAgg, escrowLockedAgg, withdrawableDebitAgg, failedPayoutRefundAgg, subscriptionRevenueAgg] =
+      await Promise.all([
+        this.prisma.ledgerEntry.aggregate({
+          where: { walletId: systemWalletId, direction: 'CREDIT' },
+          _sum: { amount: true },
+        }),
+        this.prisma.wallet.aggregate({ _sum: { escrowBalance: true } }),
+        this.prisma.ledgerEntry.aggregate({
+          where: { balanceType: 'WITHDRAWABLE', direction: 'DEBIT' },
+          _sum: { amount: true },
+        }),
+        this.prisma.ledgerEntry.aggregate({
+          where: { balanceType: 'WITHDRAWABLE', direction: 'CREDIT', transaction: { referenceType: 'PAYOUT_FAILED' } },
+          _sum: { amount: true },
+        }),
+        this.prisma.ledgerEntry.aggregate({
+          where: { walletId: systemWalletId, direction: 'CREDIT', transaction: { referenceType: 'SUBSCRIPTION' } },
+          _sum: { amount: true },
+        }),
+      ]);
+
+    const totalNetPaidOut =
+      Number(withdrawableDebitAgg._sum.amount ?? 0) - Number(failedPayoutRefundAgg._sum.amount ?? 0);
+
+    return {
+      systemMainBalance: systemWallet.mainBalance,
+      totalRevenue: totalRevenueAgg._sum.amount ?? 0,
+      totalEscrowLocked: escrowLockedAgg._sum.escrowBalance ?? 0,
+      totalPaidOutToFreelancers: totalNetPaidOut,
+      // Только оплаты подписки с баланса пишут ledger-запись — оплаченные
+      // криптой (confirmFromIpn) просто активируют Subscription без
+      // проводки, поэтому это НЕ полная выручка по подпискам, только её
+      // отслеживаемая через леджер часть. Полную картину "кто на каком
+      // тарифе" даёт listSubscriptions ниже — не зависит от способа оплаты.
+      subscriptionRevenueFromBalancePayments: subscriptionRevenueAgg._sum.amount ?? 0,
+    };
+  }
+
+  // --- Подписки ---
+
+  async listSubscriptions(tierName?: string) {
+    const [subscriptions, counts] = await Promise.all([
+      this.prisma.subscription.findMany({
+        where: tierName ? { tier: { name: tierName as never } } : undefined,
+        include: { user: { include: { profile: true } }, tier: true },
+        orderBy: { startedAt: 'desc' },
+        take: 200,
+      }),
+      this.prisma.subscription.groupBy({
+        by: ['tierId'],
+        where: { status: 'ACTIVE', expiresAt: { gt: new Date() } },
+        _count: { id: true },
+      }),
+    ]);
+
+    const tiers = await this.prisma.subscriptionTier.findMany();
+    const tierById = new Map(tiers.map((t) => [t.id, t]));
+    const activeCountsByTierName = Object.fromEntries(
+      counts.map((c) => [tierById.get(c.tierId)?.name ?? c.tierId, c._count.id]),
+    );
+
+    return {
+      subscriptions: subscriptions.map((s) => ({
+        id: s.id,
+        userId: s.userId,
+        userEmail: s.user.email,
+        userDisplayName: s.user.profile?.displayName ?? s.user.email,
+        tierName: s.tier.name,
+        status: s.status,
+        startedAt: s.startedAt,
+        expiresAt: s.expiresAt,
+      })),
+      activeCountsByTierName,
+    };
+  }
+
+  /** Ручная выдача подписки — оплата картой/по договорённости вне платформы, поддержка и т.д. */
+  async grantSubscription(staffId: string, userId: string, tierName: 'PRO' | 'PREMIUM', days: number) {
+    const tier = await this.prisma.subscriptionTier.findUnique({ where: { name: tierName } });
+    if (!tier) throw new NotFoundException('Subscription tier not found');
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    return this.prisma.subscription.upsert({
+      where: { userId },
+      create: { userId, tierId: tier.id, status: 'ACTIVE', expiresAt },
+      update: { tierId: tier.id, status: 'ACTIVE', startedAt: new Date(), expiresAt },
+    });
+  }
+
+  /** Отмена подписки — откат на STARTER раньше срока (нарушение правил, чарджбэк и т.д.). */
+  async revokeSubscription(userId: string) {
+    const subscription = await this.prisma.subscription.findUnique({ where: { userId } });
+    if (!subscription) throw new NotFoundException('Subscription not found');
+
+    return this.prisma.subscription.update({
+      where: { userId },
+      data: { status: 'CANCELLED', expiresAt: new Date() },
+    });
+  }
+
+  // --- Логи действий staff ---
+
+  /** AuditLog уже писался при каждом @AuditLog-действии, но нигде не читался — эта ручка первая, которая его показывает. */
+  async listAuditLogs(params: { cursor?: string; actorId?: string; targetType?: string; limit?: number }) {
+    const limit = params.limit ?? 50;
+    const logs = await this.prisma.auditLog.findMany({
+      where: {
+        ...(params.actorId ? { actorId: params.actorId } : {}),
+        ...(params.targetType ? { targetType: params.targetType } : {}),
+      },
+      include: { actor: { include: { profile: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(params.cursor && { cursor: { id: params.cursor }, skip: 1 }),
+    });
+
+    const nextCursor = logs.length > limit ? logs.pop()!.id : null;
+
+    return {
+      items: logs.map((log) => ({
+        id: log.id,
+        actorId: log.actorId,
+        actorName: log.actor?.profile?.displayName ?? log.actor?.email ?? 'Система',
+        action: log.action,
+        targetType: log.targetType,
+        targetId: log.targetId,
+        metadata: log.metadata,
+        createdAt: log.createdAt,
+      })),
+      nextCursor,
+    };
+  }
 }

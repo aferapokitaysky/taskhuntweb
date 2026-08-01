@@ -233,10 +233,14 @@ export class WalletService {
     });
   }
 
-  /** Возврат эскроу заказчику целиком — при отмене заказа или решении спора в его пользу. */
+  /**
+   * Возврат эскроу заказчику целиком — при отмене заказа или решении спора
+   * в его пользу. КРИТИЧНО: кредитуется MAIN самого клиента, а не системный
+   * счёт — раньше здесь ошибочно стояло system.id, из-за чего разрешённый
+   * в пользу заказчика спор технически "съедал" его же деньги в пользу
+   * площадки вместо возврата (нашли при финансовом аудите ledger-потоков).
+   */
   async refundEscrow(params: { clientWalletId: string; amount: number; invoiceId: string }) {
-    const system = await this.getSystemWallet();
-
     await this.ledger.applyTransaction({
       type: 'REFUND',
       referenceType: 'INVOICE',
@@ -244,7 +248,7 @@ export class WalletService {
       description: `Escrow refund for invoice ${params.invoiceId}`,
       entries: [
         { walletId: params.clientWalletId, balanceType: 'ESCROW', direction: 'DEBIT', amount: params.amount },
-        { walletId: system.id, balanceType: 'MAIN', direction: 'CREDIT', amount: params.amount },
+        { walletId: params.clientWalletId, balanceType: 'MAIN', direction: 'CREDIT', amount: params.amount },
       ],
     });
   }

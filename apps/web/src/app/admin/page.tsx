@@ -25,7 +25,7 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-type Tab = 'users' | 'disputes' | 'moderation' | 'flags' | 'commissions' | 'catalog' | 'metrics';
+type Tab = 'users' | 'disputes' | 'moderation' | 'flags' | 'commissions' | 'catalog' | 'metrics' | 'finance' | 'subscriptions' | 'audit';
 
 interface AdminMetrics {
   revenue: { total: number; thisMonth: number };
@@ -33,6 +33,46 @@ interface AdminMetrics {
   ordersByStatus: Record<string, number>;
   newUsersThisWeek: number;
   activeSubscriptionsByTier: Record<string, number>;
+}
+
+interface FinanceOverview {
+  systemMainBalance: string;
+  totalRevenue: string;
+  totalEscrowLocked: string;
+  totalPaidOutToFreelancers: number;
+  subscriptionRevenueFromBalancePayments: string;
+}
+
+interface AdminSubscription {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userDisplayName: string;
+  tierName: 'STARTER' | 'PRO' | 'PREMIUM';
+  status: string;
+  startedAt: string | null;
+  expiresAt: string | null;
+}
+
+interface SubscriptionsResponse {
+  subscriptions: AdminSubscription[];
+  activeCountsByTierName: Record<string, number>;
+}
+
+interface AuditLogEntry {
+  id: string;
+  actorId: string | null;
+  actorName: string;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface AuditLogsResponse {
+  items: AuditLogEntry[];
+  nextCursor: string | null;
 }
 
 type ModerationAction = 'APPROVE' | 'REJECT' | 'REQUEST_EDITS';
@@ -92,6 +132,11 @@ export default function AdminPage() {
   const [newSkillName, setNewSkillName] = useState('');
   const [notesByDispute, setNotesByDispute] = useState<Record<string, string>>({});
   const [notesByModeration, setNotesByModeration] = useState<Record<string, string>>({});
+  const [finance, setFinance] = useState<FinanceOverview | null>(null);
+  const [subscriptionsData, setSubscriptionsData] = useState<SubscriptionsResponse | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [grantForm, setGrantForm] = useState({ userId: '', tierName: 'PRO' as 'PRO' | 'PREMIUM', days: '30' });
+  const [grantError, setGrantError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -119,6 +164,9 @@ export default function AdminPage() {
         setSkills(await api<Skill[]>('/skills'));
       }
       if (tab === 'metrics') setMetrics(await api<AdminMetrics>('/admin/metrics'));
+      if (tab === 'finance') setFinance(await api<FinanceOverview>('/admin/finance/overview'));
+      if (tab === 'subscriptions') setSubscriptionsData(await api<SubscriptionsResponse>('/admin/subscriptions'));
+      if (tab === 'audit') setAuditLogs((await api<AuditLogsResponse>('/admin/audit-logs')).items);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить данные');
     }
@@ -198,12 +246,15 @@ export default function AdminPage() {
       <div className="premium-panel mb-6 flex flex-wrap items-center gap-2 p-2">
         {[
           ['metrics', 'Метрики'],
+          ['finance', 'Финансы'],
+          ['subscriptions', 'Подписки'],
           ['users', 'Users'],
           ['disputes', 'Disputes'],
           ['moderation', 'Moderation'],
           ['flags', 'Feature Flags'],
           ['commissions', 'Commissions'],
           ['catalog', 'Категории и навыки'],
+          ['audit', 'Логи действий'],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -480,6 +531,173 @@ export default function AdminPage() {
                 ))}
               </div>
             </div>
+          </div>
+        </section>
+      )}
+
+      {tab === 'finance' && finance && (
+        <section className="space-y-6">
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {(
+              [
+                ['Баланс площадки (MAIN)', `$${finance.systemMainBalance}`, 'bg-card-sand'],
+                ['Всего заработано (комиссии)', `$${finance.totalRevenue}`, 'bg-card-sage'],
+                ['Сейчас в эскроу (у клиентов)', `$${finance.totalEscrowLocked}`, 'bg-card-lavender'],
+                ['Выплачено фрилансерам (нетто)', `$${finance.totalPaidOutToFreelancers}`, 'bg-card-rose'],
+                ['Оплаты подписок с баланса', `$${finance.subscriptionRevenueFromBalancePayments}`, 'bg-cream-200'],
+              ] as const
+            ).map(([label, value, colorClass]) => (
+              <div key={label} className={`interactive-card rounded-2xl ${colorClass} p-4`}>
+                <p className="text-xs uppercase text-stone-600">{label}</p>
+                <p className="mt-1 font-serif text-xl text-stone-900">{value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="premium-panel p-4 text-xs leading-5 text-stone-500">
+            <p>
+              <strong className="text-stone-700">Баланс площадки</strong> — это ledger-баланс системного счёта, не обязательно
+              дословно то, что физически лежит в крипто-кошельке на NOWPayments прямо сейчас: при заявке на вывод сумма сразу
+              учитывается как «зарезервировано под выплату», а обратного списания при успешной отправке крипты нет (списывается
+              только при провале выплаты). Для сверки с реальным ончейн-балансом нужен отдельный webhook подтверждения выплаты от
+              провайдера, которого сейчас в интеграции нет.
+            </p>
+            <p className="mt-2">
+              <strong className="text-stone-700">Оплаты подписок с баланса</strong> — только та часть выручки по подпискам, которая
+              прошла через списание с MAIN-баланса пользователя. Подписки, оплаченные криптой напрямую, не пишут проводку в
+              леджер — полную картину «кто на каком тарифе» смотрите на вкладке «Подписки».
+            </p>
+          </div>
+        </section>
+      )}
+
+      {tab === 'subscriptions' && subscriptionsData && (
+        <section className="space-y-6">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(['STARTER', 'PRO', 'PREMIUM'] as const).map((tierName) => (
+              <div key={tierName} className="interactive-card rounded-2xl bg-card-sand p-4">
+                <p className="text-xs uppercase text-stone-600">{tierName}</p>
+                <p className="mt-1 font-serif text-2xl text-stone-900">{subscriptionsData.activeCountsByTierName[tierName] ?? 0}</p>
+                <p className="text-[11px] text-stone-500">активных подписок</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="premium-panel p-5">
+            <h3 className="mb-3 font-semibold">Выдать подписку вручную</h3>
+            <p className="mb-3 text-xs text-stone-500">
+              Для поддержки/договорённостей вне платформы — например, оплата не через встроенный чекаут.
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setGrantError(null);
+                mutate(() =>
+                  api(`/admin/subscriptions/${grantForm.userId}/grant`, {
+                    method: 'POST',
+                    body: JSON.stringify({ tierName: grantForm.tierName, days: Number(grantForm.days) }),
+                  }),
+                ).catch((err) => setGrantError(err instanceof Error ? err.message : 'Не удалось выдать подписку'));
+              }}
+              className="flex flex-wrap items-end gap-2"
+            >
+              <label className="flex flex-col text-xs text-stone-500">
+                ID пользователя
+                <input
+                  required
+                  placeholder="uuid пользователя"
+                  value={grantForm.userId}
+                  onChange={(e) => setGrantForm((f) => ({ ...f, userId: e.target.value }))}
+                  className="field-surface mt-1 min-w-[16rem] px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="flex flex-col text-xs text-stone-500">
+                Тариф
+                <select
+                  value={grantForm.tierName}
+                  onChange={(e) => setGrantForm((f) => ({ ...f, tierName: e.target.value as 'PRO' | 'PREMIUM' }))}
+                  className="field-surface mt-1 px-3 py-2 text-sm"
+                >
+                  <option value="PRO">PRO</option>
+                  <option value="PREMIUM">PREMIUM</option>
+                </select>
+              </label>
+              <label className="flex flex-col text-xs text-stone-500">
+                Дней
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  value={grantForm.days}
+                  onChange={(e) => setGrantForm((f) => ({ ...f, days: e.target.value }))}
+                  className="field-surface mt-1 w-24 px-3 py-2 text-sm"
+                />
+              </label>
+              <button type="submit" className="primary-action px-4 py-2 text-sm font-medium">
+                Выдать
+              </button>
+            </form>
+            {grantError && <p className="mt-2 text-sm text-red-600">{grantError}</p>}
+          </div>
+
+          <div className="premium-panel overflow-hidden p-0">
+            <div className="border-b border-stone-100 p-4">
+              <h3 className="font-semibold">Последние 200 подписок</h3>
+            </div>
+            <div className="divide-y divide-stone-100">
+              {subscriptionsData.subscriptions.map((s) => (
+                <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+                  <div>
+                    <p className="font-semibold text-stone-900">{s.userDisplayName}</p>
+                    <p className="text-xs text-stone-500">{s.userEmail}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-full bg-card-sage px-3 py-1 text-xs font-semibold">{s.tierName}</span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${s.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>
+                      {s.status}
+                    </span>
+                    <span className="text-xs text-stone-400">
+                      {s.expiresAt ? `до ${new Date(s.expiresAt).toLocaleDateString('ru-RU')}` : '—'}
+                    </span>
+                    {s.status === 'ACTIVE' && (
+                      <button
+                        type="button"
+                        onClick={() => mutate(() => api(`/admin/subscriptions/${s.userId}/revoke`, { method: 'POST' }))}
+                        className="text-red-600 hover:underline"
+                      >
+                        Отозвать
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {subscriptionsData.subscriptions.length === 0 && (
+                <p className="p-4 text-sm text-stone-500">Подписок пока не было.</p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {tab === 'audit' && (
+        <section className="premium-panel overflow-hidden p-0">
+          <div className="border-b border-stone-100 p-4">
+            <h3 className="font-semibold">Логи действий staff</h3>
+            <p className="text-xs text-stone-500">Кто что сделал в админке и когда — бан юзера, снятие спора, изменение категорий и т.д.</p>
+          </div>
+          <div className="divide-y divide-stone-100">
+            {auditLogs.map((log) => (
+              <div key={log.id} className="flex flex-wrap items-start justify-between gap-3 p-4 text-sm">
+                <div>
+                  <p className="font-semibold text-stone-900">{log.action}</p>
+                  <p className="text-xs text-stone-500">
+                    {log.actorName} · {log.targetType}
+                    {log.targetId ? ` #${log.targetId.slice(0, 8)}` : ''}
+                  </p>
+                </div>
+                <span className="text-xs text-stone-400">{new Date(log.createdAt).toLocaleString('ru-RU')}</span>
+              </div>
+            ))}
+            {auditLogs.length === 0 && <p className="p-4 text-sm text-stone-500">Логов пока нет.</p>}
           </div>
         </section>
       )}

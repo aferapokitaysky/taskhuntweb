@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { BullBoardModule } from '@bull-board/nestjs';
@@ -12,6 +12,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { EventBusModule } from './common/events/event-bus.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { SubscriptionAwareThrottlerGuard } from './common/guards/subscription-aware-throttler.guard';
+import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -105,6 +106,11 @@ import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_GUARD, useClass: SubscriptionAwareThrottlerGuard },
+    // @AuditLog(...) на ~20 admin-роутов было проставлено, но интерцептор,
+    // который его читает, никогда не был зарегистрирован — ни глобально,
+    // ни на самом AdminController. Вся система аудит-логов молчала с
+    // момента, как её написали: метаданные есть, писать в БД некому.
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })
 export class AppModule {}

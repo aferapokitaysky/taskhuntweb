@@ -267,4 +267,51 @@ export class AdminController {
   reset2FA(@Param('id') id: string) {
     return this.adminService.resetUser2FA(id);
   }
+
+  // --- Финансы ---
+
+  @RequirePermissions(PermissionCode.FinanceViewReports)
+  @Get('finance/overview')
+  getFinanceOverview() {
+    return this.adminService.getFinanceOverview();
+  }
+
+  // --- Подписки ---
+
+  @RequirePermissions(PermissionCode.FinanceViewReports)
+  @Get('subscriptions')
+  listSubscriptions(@Query('tierName') tierName?: string) {
+    return this.adminService.listSubscriptions(tierName);
+  }
+
+  @RequirePermissions(PermissionCode.WalletAdjust)
+  @AuditLog('SUBSCRIPTION_GRANTED', 'Subscription', 'userId')
+  @Post('subscriptions/:userId/grant')
+  grantSubscription(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId') userId: string,
+    @Body('tierName') tierName: 'PRO' | 'PREMIUM',
+    @Body('days') days?: number,
+  ) {
+    return this.adminService.grantSubscription(user.id, userId, tierName, days ?? 30);
+  }
+
+  @RequirePermissions(PermissionCode.WalletAdjust)
+  @AuditLog('SUBSCRIPTION_REVOKED', 'Subscription', 'userId')
+  @Post('subscriptions/:userId/revoke')
+  revokeSubscription(@Param('userId') userId: string) {
+    return this.adminService.revokeSubscription(userId);
+  }
+
+  // --- Логи действий staff ---
+
+  @RequirePermissions(PermissionCode.FinanceViewReports)
+  @Get('audit-logs')
+  listAuditLogs(
+    @Query('cursor') cursor?: string,
+    @Query('actorId') actorId?: string,
+    @Query('targetType') targetType?: string,
+  ) {
+    return this.adminService.listAuditLogs({ cursor, actorId, targetType });
+  }
 }
