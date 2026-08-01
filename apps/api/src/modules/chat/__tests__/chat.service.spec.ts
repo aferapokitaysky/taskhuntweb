@@ -33,7 +33,8 @@ describe('ChatService', () => {
       },
     };
 
-    service = new ChatService(prisma);
+    const notificationsGateway = { emitToUser: jest.fn() } as any;
+    service = new ChatService(prisma, notificationsGateway);
   });
 
   describe('listMessages (создаёт/находит тред лениво)', () => {

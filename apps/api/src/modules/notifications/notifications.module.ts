@@ -11,6 +11,6 @@ import { NotificationDigestProcessor, NOTIFICATION_DIGEST_QUEUE } from './notifi
   imports: [BullModule.registerQueue({ name: NOTIFICATION_DIGEST_QUEUE }), JwtModule.register({})],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationsEventsListener, NotificationsGateway, NotificationDigestProcessor],
-  exports: [NotificationsService],
+  exports: [NotificationsService, NotificationsGateway],
 })
 export class NotificationsModule {}

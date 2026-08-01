@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api, API_URL } from '@/lib/api';
-import type { Order, PaginatedOrders, PortfolioItem, User } from '@/lib/types';
+import type { ChatInboxThread, Order, PaginatedOrders, PortfolioItem, User } from '@/lib/types';
 import { money } from '@/lib/types';
 import { TierBadge } from '@/components/TierBadge';
 import { FreelancerLevelBadge, type FreelancerLevel } from '@/components/FreelancerLevelBadge';
@@ -55,6 +55,7 @@ export default function FreelancerProfileClient() {
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [invitedOrderId, setInvitedOrderId] = useState<string | null>(null);
+  const [existingChat, setExistingChat] = useState<ChatInboxThread | null>(null);
 
   useEffect(() => {
     api<PublicProfile>(`/users/${params.id}`)
@@ -63,6 +64,15 @@ export default function FreelancerProfileClient() {
       .finally(() => setLoading(false));
     api<User>('/users/me')
       .then(setMe)
+      .catch(() => undefined);
+    // Открыть чат с этого профиля можно только если с этим человеком уже
+    // есть общий тред (переписка привязана к паре заказ+фрилансер, а не
+    // существует "в вакууме") — ищем среди своего инбокса самый свежий.
+    api<ChatInboxThread[]>('/chat/threads')
+      .then((threads) => {
+        const withThisPerson = threads.filter((t) => t.participant?.id === params.id);
+        setExistingChat(withThisPerson[0] ?? null);
+      })
       .catch(() => undefined);
   }, [params.id]);
 
@@ -177,6 +187,14 @@ export default function FreelancerProfileClient() {
                 >
                   Пригласить на заказ
                 </button>
+              )}
+              {existingChat && me && me.id !== data.id && (
+                <Link
+                  href={`/chats?orderId=${existingChat.orderId}&freelancerId=${existingChat.freelancerId}`}
+                  className="rounded-full bg-brand px-4 py-1.5 text-sm font-medium text-white transition hover:bg-brand-dark"
+                >
+                  Открыть чат
+                </Link>
               )}
             </div>
           </div>

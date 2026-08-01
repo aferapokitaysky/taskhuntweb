@@ -173,6 +173,9 @@ export interface ChatMessage {
   invoice?: Invoice | null;
   createdAt: string;
   sender?: User & { profile?: Profile | null };
+  /** Только на живых WebSocket-пушах (ChatGateway.broadcastToOrder) — нужны на /chats, где один сокет держит сразу все треды. REST-ответы их не возвращают. */
+  orderId?: string;
+  freelancerId?: string;
 }
 
 export type MilestoneStatus = 'PENDING' | 'FUNDED' | 'IN_PROGRESS' | 'DELIVERED' | 'APPROVED' | 'RELEASED' | 'DISPUTED';

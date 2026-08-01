@@ -20,7 +20,8 @@ describe('NotificationsService', () => {
       },
     };
 
-    service = new NotificationsService(prisma);
+    const gateway = { emitToUser: jest.fn() } as any;
+    service = new NotificationsService(prisma, gateway);
   });
 
   describe('getPreferences', () => {

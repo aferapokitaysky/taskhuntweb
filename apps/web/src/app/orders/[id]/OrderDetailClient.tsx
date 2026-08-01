@@ -3,9 +3,8 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { io, type Socket } from 'socket.io-client';
-import { api, downloadFile, ensureFreshAccessToken } from '@/lib/api';
-import type { ChatMessage, ChatThreadSummary, Invoice, InvoicePaymentDetails, Order, User } from '@/lib/types';
+import { api, downloadFile } from '@/lib/api';
+import type { ChatThreadSummary, Invoice, InvoicePaymentDetails, Order, User } from '@/lib/types';
 import { money } from '@/lib/types';
 import { FileUpload, type UploadedFile } from '@/components/FileUpload';
 import { PaperclipIcon } from '@/components/icons/PaperclipIcon';
@@ -16,7 +15,6 @@ import { AppHeader } from '@/components/AppHeader';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { InvoiceChatCard } from '@/components/InvoiceChatCard';
 import { PaymentConfirmDetails } from '@/components/PaymentConfirmDetails';
 import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
@@ -42,11 +40,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const RECENTLY_VIEWED_KEY = 'taskhunt:recentlyViewed';
 const MAX_RECENTLY_VIEWED = 10;
-const QUICK_CHAT_TEMPLATES = [
-  { label: 'Уточнить', text: 'Привет! Уточните, пожалуйста, детали по задаче.' },
-  { label: 'Старт', text: 'Готов начать, подтверждаю срок и бюджет.' },
-  { label: 'Счёт', text: 'Отправил счёт в чат, проверьте сумму и описание.' },
-];
 
 function getWorkflowGuidance(params: {
   status: Order['status'];
@@ -141,22 +134,12 @@ export default function OrderDetailClient() {
   const [cloning, setCloning] = useState(false);
   const [me, setMe] = useState<User | null>(null);
   const [order, setOrder] = useState<Order | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [orderInvoices, setOrderInvoices] = useState<Invoice[]>([]);
-  const [body, setBody] = useState('');
-  const [chatFilter, setChatFilter] = useState<'ALL' | 'INVOICES'>('ALL');
-  const [sendingFileId, setSendingFileId] = useState<string | null>(null);
-  const [invoiceAmount, setInvoiceAmount] = useState('');
-  const [invoiceDescription, setInvoiceDescription] = useState('');
-  const [paymentAddress, setPaymentAddress] = useState<string | null>(null);
   const [copiedInvoiceField, setCopiedInvoiceField] = useState<string | null>(null);
-  const [issueInvoiceConfirmOpen, setIssueInvoiceConfirmOpen] = useState(false);
   const [paymentConfirmInvoice, setPaymentConfirmInvoice] = useState<Invoice | null>(null);
   const [paymentDetailsLoading, setPaymentDetailsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [socket, setSocket] = useState<Socket | null>(null);
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
-  const [activeFreelancerId, setActiveFreelancerId] = useState<string | null>(null);
   const [compatibilityByBidId, setCompatibilityByBidId] = useState<Record<string, number | null>>({});
   const [similarOrders, setSimilarOrders] = useState<Order[]>([]);
 
@@ -274,15 +257,17 @@ export default function OrderDetailClient() {
   const canChat = isClient
     ? (order?.bids?.some((b) => b.status === 'PENDING' || b.status === 'ACCEPTED') ?? false)
     : hasActiveBid;
-  const chatFreelancerId = isClient ? activeFreelancerId : (me?.id ?? null);
+  // Заказчик переходит в чат с уже нанятым исполнителем (если такой есть) —
+  // остальных активных откликнувшихся он видит и открывает по отдельности
+  // из списка тредов на странице /chats. Фрилансер — всегда со своим
+  // собственным откликом, доступен и до найма (hasActiveBid).
+  const chatFreelancerId = isClient ? (acceptedBid?.freelancerId ?? null) : hasActiveBid ? (me?.id ?? null) : null;
   const milestones = useMemo(() => [...(order?.milestones ?? [])].sort((a, b) => a.position - b.position), [order]);
   const hasMilestones = milestones.length > 0;
   const pendingBidCount = order?.bids?.filter((bid) => bid.status === 'PENDING').length ?? 0;
   const bids = order?.bids ?? [];
   const selectedBidCount = bids.filter((bid) => bid.status === 'ACCEPTED').length;
   const closedBidCount = bids.filter((bid) => bid.status === 'REJECTED' || bid.status === 'WITHDRAWN').length;
-  const visibleMessages = chatFilter === 'INVOICES' ? messages.filter((message) => message.type === 'INVOICE') : messages;
-  const invoiceMessageCount = messages.filter((message) => message.type === 'INVOICE').length;
   const paidInvoiceCount = orderInvoices.filter((invoice) => invoice.status === 'PAID').length;
   const pendingInvoiceCount = orderInvoices.filter((invoice) => invoice.status === 'PENDING').length;
   const hireConfirmBid = order?.bids?.find((bid) => bid.id === hireConfirmBidId) ?? null;
@@ -414,57 +399,16 @@ export default function OrderDetailClient() {
     }
   }
 
-  // Список тредов — у клиента по одному на каждого активного откликнувшегося, у фрилансера свой.
+  // Список тредов держим только ради счётчика "Чатов" в статистике по
+  // откликам ниже — сама переписка теперь целиком живёт на /chats
+  // (см. компактный баннер "Открыть чат"), чтобы не дублировать один и тот
+  // же чат в двух местах интерфейса с разной свежестью данных.
   useEffect(() => {
     if (!canChat) return;
     api<ChatThreadSummary[]>(`/orders/${orderId}/chat/threads`)
-      .then((list) => {
-        setThreads(list);
-        if (isClient) {
-          setActiveFreelancerId((current) => current ?? list.find((t) => t.hasThread)?.freelancerId ?? list[0]?.freelancerId ?? null);
-        }
-      })
+      .then(setThreads)
       .catch(() => setThreads([]));
-  }, [canChat, orderId, isClient]);
-
-  useEffect(() => {
-    if (!canChat || !chatFreelancerId) return;
-    api<ChatMessage[]>(`/orders/${orderId}/chat/messages?freelancerId=${chatFreelancerId}`)
-      .then((list) => {
-        setMessages(list);
-        setThreads((current) =>
-          current.map((thread) =>
-            thread.freelancerId === chatFreelancerId ? { ...thread, unreadCount: 0 } : thread,
-          ),
-        );
-      })
-      .catch(() => setMessages([]));
-
-    let cancelled = false;
-    let nextSocket: Socket | null = null;
-    ensureFreshAccessToken().then((token) => {
-      if (cancelled || !token) return;
-      nextSocket = io(`${API_URL}/chat`, { auth: { token } });
-      nextSocket.on('connect', () => nextSocket?.emit('joinOrder', { orderId, freelancerId: chatFreelancerId }));
-      nextSocket.on('newMessage', (message: ChatMessage) => {
-        setMessages((current) => (current.some((item) => item.id === message.id) ? current : [...current, message]));
-        setThreads((current) =>
-          current.map((thread) =>
-            thread.freelancerId === chatFreelancerId ? { ...thread, unreadCount: 0 } : thread,
-          ),
-        );
-        if (message.invoice) {
-          setOrderInvoices((current) => (current.some((item) => item.id === message.invoice?.id) ? current : [message.invoice!, ...current]));
-        }
-      });
-      nextSocket.on('connect_error', () => setError('Не удалось подключиться к чату'));
-      setSocket(nextSocket);
-    });
-    return () => {
-      cancelled = true;
-      nextSocket?.disconnect();
-    };
-  }, [canChat, chatFreelancerId, orderId]);
+  }, [canChat, orderId]);
 
   // % совпадения тэгов заказа с навыками откликнувшихся — видно только заказчику.
   // order?.id === orderId — обязательная проверка, не просто isClient:
@@ -483,39 +427,6 @@ export default function OrderDetailClient() {
       })
       .catch(() => undefined);
   }, [isClient, orderId, order?.id]);
-
-  async function sendMessage(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!body.trim() || !chatFreelancerId) return;
-    const text = body.trim();
-    setBody('');
-    if (socket?.connected) {
-      socket.emit('sendMessage', { orderId, freelancerId: chatFreelancerId, body: text });
-      return;
-    }
-    const created = await api<ChatMessage>(`/orders/${orderId}/chat/messages?freelancerId=${chatFreelancerId}`, {
-      method: 'POST',
-      body: JSON.stringify({ body: text }),
-    });
-    setMessages((current) => [...current, created]);
-  }
-
-  async function sendChatFile(file: UploadedFile) {
-    if (!chatFreelancerId) return;
-    setSendingFileId(file.id);
-    setError(null);
-    try {
-      const created = await api<ChatMessage>(`/orders/${orderId}/chat/messages/file?freelancerId=${chatFreelancerId}`, {
-        method: 'POST',
-        body: JSON.stringify({ fileId: file.id, body: file.originalName }),
-      });
-      setMessages((current) => [...current, created]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось отправить файл в чат');
-    } finally {
-      setSendingFileId(null);
-    }
-  }
 
   async function exportOrderInvoices() {
     setError(null);
@@ -545,27 +456,11 @@ export default function OrderDetailClient() {
     }, 1300);
   }
 
-  async function issueInvoice() {
-    setError(null);
-    setIssueInvoiceConfirmOpen(false);
-    try {
-      const result = await api<{ payment: { payAddress: string } }>('/wallet/invoices', {
-        method: 'POST',
-        body: JSON.stringify({
-          orderId,
-          amount: Number(invoiceAmount),
-          description: invoiceDescription || undefined,
-        }),
-      });
-      setPaymentAddress(result.payment.payAddress);
-      setInvoiceAmount('');
-      setInvoiceDescription('');
-      await refreshOrderInvoices();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось выставить счёт');
-    }
-  }
-
+  // Выставление счёта переехало на /chats (см. sync-заметку в
+  // docs/CODEX_CLAUDE_SYNC.md) — здесь остаётся только чтение истории
+  // платежей, живое обновление статуса счёта приходит через сокет /chats,
+  // а этот 15с-поллинг остаётся страховкой конкретно для этой таблицы
+  // истории (она не подключена к сокету чата).
   useEffect(() => {
     if (!isClient && !isFreelancer) return;
     if (!orderInvoices.some((invoice) => invoice.status === 'PENDING')) return;
@@ -574,30 +469,6 @@ export default function OrderDetailClient() {
     }, 15000);
     return () => clearInterval(interval);
   }, [isClient, isFreelancer, orderInvoices]);
-
-  useEffect(() => {
-    if (orderInvoices.length === 0) return;
-    const invoiceById = new Map(orderInvoices.map((invoice) => [invoice.id, invoice]));
-    setMessages((current) => {
-      let changed = false;
-      const next = current.map((message) => {
-        if (!message.invoice) return message;
-        const freshInvoice = invoiceById.get(message.invoice.id);
-        if (!freshInvoice) return message;
-        if (
-          message.invoice.status === freshInvoice.status &&
-          message.invoice.payAddress === freshInvoice.payAddress &&
-          message.invoice.payAmount === freshInvoice.payAmount &&
-          message.invoice.payCurrency === freshInvoice.payCurrency
-        ) {
-          return message;
-        }
-        changed = true;
-        return { ...message, invoice: { ...message.invoice, ...freshInvoice } };
-      });
-      return changed ? next : current;
-    });
-  }, [orderInvoices]);
 
   async function openPaymentConfirm(invoice: Invoice) {
     setPaymentConfirmInvoice(invoice);
@@ -947,14 +818,13 @@ export default function OrderDetailClient() {
                       <Link href={`/freelancers/${bid.freelancerId}`} className="secondary-action justify-center px-4 py-2 text-sm font-semibold">
                         Посмотреть профиль
                       </Link>
-                      {isClient && (bid.status === 'PENDING' || bid.status === 'ACCEPTED') && (
-                        <button
-                          type="button"
-                          onClick={() => setActiveFreelancerId(bid.freelancerId)}
+                      {isClient && bid.status === 'PENDING' && (
+                        <Link
+                          href={`/chats?orderId=${order.id}&freelancerId=${bid.freelancerId}`}
                           className="secondary-action justify-center px-4 py-2 text-sm font-semibold"
                         >
                           Открыть чат
-                        </button>
+                        </Link>
                       )}
                       {isClient && isSelectedBid && (
                         <Link
@@ -1301,16 +1171,12 @@ export default function OrderDetailClient() {
                           Оплатить
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setChatFilter('INVOICES');
-                          document.getElementById('order-chat')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }}
+                      <Link
+                        href={`/chats?orderId=${orderId}${chatFreelancerId ? `&freelancerId=${chatFreelancerId}` : ''}`}
                         className="secondary-action px-4 py-2 text-sm font-semibold"
                       >
                         Открыть в чате
-                      </button>
+                      </Link>
                       <button type="button" onClick={() => void downloadInvoicePdf(invoice)} className="secondary-action px-4 py-2 text-sm font-semibold">
                         {paid ? 'PDF-чек' : 'PDF-счёт'}
                       </button>
@@ -1335,211 +1201,24 @@ export default function OrderDetailClient() {
       )}
 
       {canChat && (
-        <section id="order-chat" className="grid scroll-mt-24 gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="premium-panel p-5">
-            <h2 className="mb-4 flex items-center gap-2 font-serif text-xl text-stone-900">
-              <ChatIcon className="h-8 w-8" />
-              Чат заказа
-            </h2>
-
-            {isClient && threads.length > 1 && (
-              <div className="mb-4 flex flex-wrap gap-1.5 border-b border-stone-100 pb-4">
-                {threads.map((t) => (
-                  <button
-                    key={t.freelancerId}
-                    type="button"
-                    onClick={() => setActiveFreelancerId(t.freelancerId)}
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                      activeFreelancerId === t.freelancerId ? 'bg-brand/10 text-brand' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                    }`}
-                  >
-                    <span>{t.freelancer?.profile?.displayName ?? 'Фрилансер'}</span>
-                    {(t.unreadCount ?? 0) > 0 && (
-                      <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-bold text-white">
-                        {(t.unreadCount ?? 0) > 9 ? '9+' : t.unreadCount}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {!chatFreelancerId ? (
-              <p className="text-sm text-stone-500">Выберите отклик выше, чтобы начать переписку.</p>
-            ) : (
-              <>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex rounded-full bg-stone-100 p-1">
-                    {[
-                      ['ALL', `Все ${messages.length}`],
-                      ['INVOICES', `Счета/чеки ${invoiceMessageCount}`],
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setChatFilter(value as 'ALL' | 'INVOICES')}
-                        className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
-                          chatFilter === value ? 'bg-white text-brand shadow-sm' : 'text-stone-500 hover:text-stone-800'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  {sendingFileId && <span className="text-xs font-medium text-stone-500">Файл отправляется...</span>}
-                </div>
-
-                <div className="mb-4 max-h-[480px] space-y-3 overflow-y-auto rounded-3xl bg-stone-50 p-4">
-                  {visibleMessages.map((message) => {
-                    const isOwn = message.senderId === me?.id;
-                    const name = message.sender?.profile?.displayName ?? message.sender?.email ?? 'Участник';
-                    const isInvoice = message.type === 'INVOICE' && Boolean(message.invoice);
-                    return (
-                      <div key={message.id} className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
-                        <span
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-stone-200 shadow-sm ${
-                            isOwn ? 'bg-card-sand' : 'bg-card-lavender'
-                          }`}
-                        >
-                          {message.sender?.profile?.avatarUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={`${API_URL}${message.sender.profile.avatarUrl}`} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            <ChatIcon className="h-5 w-5" />
-                          )}
-                        </span>
-                        <div
-                          className={
-                            isInvoice
-                              ? 'max-w-[min(34rem,86%)]'
-                              : `max-w-[75%] rounded-[1.5rem] p-3 shadow-sm ${isOwn ? 'bg-brand text-white' : 'bg-white text-stone-900'}`
-                          }
-                        >
-                          <p className={`text-xs ${isOwn ? 'text-white/70' : 'text-stone-500'}`}>{name}</p>
-                          {isInvoice && message.invoice ? (
-                            <InvoiceChatCard
-                              invoice={message.invoice}
-                              own={isOwn}
-                              canPay={isClient && !isOwn}
-                              onPayIntent={openPaymentConfirm}
-                              onDownloadPdf={downloadInvoicePdf}
-                            />
-                          ) : message.type === 'FILE' ? (
-                            <div className="mt-2 rounded-[1.15rem] bg-white/12 p-3">
-                              <div className="flex items-center gap-2">
-                                <PaperclipIcon className="h-4 w-4" />
-                                <p className="break-words text-sm font-semibold">{message.body || 'Файл прикреплён'}</p>
-                              </div>
-                              <p className={`mt-1 text-xs ${isOwn ? 'text-white/70' : 'text-stone-500'}`}>Файл сохранён в истории сделки</p>
-                            </div>
-                          ) : (
-                            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6">{message.body}</p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {visibleMessages.length === 0 && (
-                    <EmptyState
-                      icon={<ChatIcon />}
-                      title={chatFilter === 'INVOICES' ? 'Счетов и чеков пока нет' : 'Сообщений пока нет'}
-                      description={chatFilter === 'INVOICES' ? 'Когда счёт или чек появится в чате, он будет виден в этом фильтре.' : 'Напишите первым — это ни к чему не обязывает.'}
-                    />
-                  )}
-                </div>
-                <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[1.35rem] border border-stone-100 bg-white/72 p-2 shadow-sm">
-                  <span className="px-2 text-xs font-bold uppercase tracking-wide text-stone-400">Действия</span>
-                  {isFreelancer && (
-                    <a href="#invoice-form" className="secondary-action px-3 py-2 text-sm font-semibold">
-                      Выставить счёт
-                    </a>
-                  )}
-                  {isClient && messages.some((message) => message.type === 'INVOICE') && (
-                    <span className="rounded-full bg-card-sand px-3 py-2 text-sm font-semibold text-stone-700">
-                      Счета и чеки приходят карточками в этом чате
-                    </span>
-                  )}
-                  <span className="rounded-full bg-stone-100 px-3 py-2 text-xs font-medium text-stone-500">
-                    Счета и чеки сохраняются в истории сделки
-                  </span>
-                </div>
-                <div className="mb-3 flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-full bg-stone-100 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-stone-400">
-                    Быстрые ответы
-                  </span>
-                  {QUICK_CHAT_TEMPLATES.map((template) => (
-                    <button
-                      key={template.label}
-                      type="button"
-                      title={template.text}
-                      onClick={() => setBody(template.text)}
-                      className="rounded-full bg-card-sand/80 px-3 py-1.5 text-xs font-semibold text-stone-700 transition hover:bg-card-sage"
-                    >
-                      {template.label}
-                    </button>
-                  ))}
-                </div>
-                <form onSubmit={sendMessage} className="flex flex-wrap gap-2 sm:flex-nowrap">
-                  <input
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    placeholder="Сообщение"
-                    className="field-surface min-w-[180px] flex-1 px-3 py-2"
-                  />
-                  <FileUpload onUploaded={(file) => void sendChatFile(file)} label="Файл" />
-                  <button type="submit" disabled={!body.trim()} className="primary-action px-4 py-2 font-medium disabled:opacity-50">
-                    Отправить
-                  </button>
-                </form>
-              </>
-            )}
+        <section className="premium-panel flex flex-wrap items-center justify-between gap-4 p-5">
+          <div className="flex items-center gap-3">
+            <ChatIcon className="h-8 w-8" />
+            <div>
+              <h2 className="font-serif text-xl text-stone-900">Чат заказа</h2>
+              <p className="mt-1 text-sm text-stone-500">
+                {threads.length > 0
+                  ? `Переписка (${threads.length}) теперь на одной странице со всеми вашими чатами — сообщения, счета и файлы приходят туда вживую.`
+                  : 'Напишите первым — переписка и выставление счетов теперь в одном месте со всеми вашими чатами.'}
+              </p>
+            </div>
           </div>
-
-          {isFreelancer && (
-            <aside id="invoice-form" className="premium-panel scroll-mt-24 p-5">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand">Счёт в чат</p>
-                  <h2 className="mt-1 font-serif text-lg text-stone-900">Выставить счёт</h2>
-                  <p className="mt-1 text-xs leading-5 text-stone-500">После подтверждения карточка счёта появится в переписке.</p>
-                </div>
-                <Mascot name="invoiceCoin" size="h-12 w-12" />
-              </div>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  setIssueInvoiceConfirmOpen(true);
-                }}
-                className="space-y-3"
-              >
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  placeholder="Сумма"
-                  value={invoiceAmount}
-                  onChange={(e) => setInvoiceAmount(e.target.value)}
-                  className="field-surface w-full px-3 py-2 text-lg font-semibold"
-                />
-                <textarea
-                  placeholder="За что счёт: этап, результат, доработка"
-                  value={invoiceDescription}
-                  onChange={(e) => setInvoiceDescription(e.target.value)}
-                  className="field-surface min-h-24 w-full px-3 py-2"
-                />
-                <button type="submit" className="primary-action w-full px-4 py-3 font-medium">
-                  Отправить счёт в чат
-                </button>
-              </form>
-              {paymentAddress && (
-                <div className="mt-4 rounded-[1.5rem] border border-brand/15 bg-card-sand/70 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">Адрес оплаты</p>
-                  <p className="mt-2 break-all font-mono text-xs text-stone-700">{paymentAddress}</p>
-                  <p className="mt-2 text-xs leading-5 text-stone-500">Счёт уже ушёл в чат. После оплаты провайдер подтвердит платёж и откроет эскроу.</p>
-                </div>
-              )}
-            </aside>
-          )}
+          <Link
+            href={`/chats?orderId=${orderId}${chatFreelancerId ? `&freelancerId=${chatFreelancerId}` : ''}`}
+            className="primary-action shrink-0 px-5 py-3 text-sm"
+          >
+            Открыть чат
+          </Link>
         </section>
       )}
 
@@ -1595,14 +1274,6 @@ export default function OrderDetailClient() {
         onConfirm={() => {
           if (approveConfirmTarget) void approve(approveConfirmTarget);
         }}
-      />
-      <ConfirmDialog
-        open={issueInvoiceConfirmOpen}
-        title="Отправить счёт заказчику?"
-        description={`Проверьте сумму: ${money(invoiceAmount || 0, order.currency)}. После подтверждения счёт появится в чате, а заказчик получит уведомление.`}
-        confirmLabel="Отправить счёт"
-        onCancel={() => setIssueInvoiceConfirmOpen(false)}
-        onConfirm={issueInvoice}
       />
       <ConfirmDialog
         open={Boolean(paymentConfirmInvoice)}

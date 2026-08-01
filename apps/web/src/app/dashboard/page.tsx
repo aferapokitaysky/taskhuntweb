@@ -95,7 +95,7 @@ function DashboardContent() {
   const [orderDrafts, setOrderDrafts] = useState<Order[]>([]);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
-  const [bidForm, setBidForm] = useState({ amount: '', deliveryDays: '3', message: '' });
+  const [bidForm, setBidForm] = useState({ amount: '', deliveryDays: '', message: '' });
   const [showWithdrawForm, setShowWithdrawForm] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawTarget, setWithdrawTarget] = useState<WithdrawTarget | null>(null);
@@ -510,7 +510,7 @@ function DashboardContent() {
           message: bidForm.message,
         }),
       });
-      setBidForm({ amount: '', deliveryDays: '3', message: '' });
+      setBidForm({ amount: '', deliveryDays: '', message: '' });
       setSelectedOrder(null);
       await refreshOrders();
     } catch (err) {
@@ -802,7 +802,7 @@ function DashboardContent() {
             )}
 
             {wallet && (
-              <div className="mt-5 grid gap-3 lg:grid-cols-[1.05fr_1fr]">
+              <div className="mt-5 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
                 <div className="interactive-card rounded-[2rem] border border-brand/15 bg-white/80 p-5 shadow-sm">
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -820,17 +820,17 @@ function DashboardContent() {
                   </p>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-4">
                   {[
                     { label: 'Основной', value: wallet.mainBalance, colorClass: 'bg-card-sand', Icon: BalanceMainIcon },
                     { label: 'В эскроу', value: wallet.escrowBalance, colorClass: 'bg-card-sage', Icon: BalanceEscrowIcon },
                     { label: 'Заблокировано', value: wallet.lockedBalance, colorClass: 'bg-card-rose', Icon: LockedFundsIcon },
                     { label: 'В обработке', value: wallet.pendingBalance, colorClass: 'bg-cream-200', Icon: BalancePendingIcon },
                   ].map(({ label, value, colorClass, Icon }) => (
-                    <div key={label} className={`interactive-card min-w-0 rounded-[1.7rem] ${colorClass} p-3.5 sm:p-4`}>
-                      <div className="flex min-w-0 items-center gap-1.5 text-stone-600">
+                    <div key={label} className={`interactive-card min-w-0 rounded-[1.7rem] ${colorClass} p-4 sm:p-5`}>
+                      <div className="flex min-w-0 items-center gap-2 text-stone-600">
                         <Icon className="h-6 w-6 shrink-0" />
-                        <p className="min-w-0 overflow-visible break-words text-[10px] font-semibold uppercase leading-[1.15] tracking-[0.04em] sm:text-[11px]">
+                        <p className="min-w-0 overflow-visible break-words text-[11px] font-semibold uppercase leading-[1.15] tracking-[0.04em] sm:text-xs">
                           {label}
                         </p>
                       </div>
@@ -1120,7 +1120,7 @@ function DashboardContent() {
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {canChatOnBid && (
-                        <Link href={`/chats?orderId=${bid.orderId}`} className="rounded-full bg-card-lavender px-3 py-1.5 text-xs font-semibold text-stone-800 transition hover:bg-card-lavender/70">
+                        <Link href={`/chats?orderId=${bid.orderId}&freelancerId=${bid.freelancerId}`} className="rounded-full bg-card-lavender px-3 py-1.5 text-xs font-semibold text-stone-800 transition hover:bg-card-lavender/70">
                           Открыть чат
                         </Link>
                       )}

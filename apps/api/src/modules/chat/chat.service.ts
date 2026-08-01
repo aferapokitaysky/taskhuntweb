@@ -1,11 +1,16 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   /**
    * Тред один на пару (заказ, фрилансер), а не один на заказ — заказчик
@@ -32,11 +37,26 @@ export class ChatService {
       throw new ForbiddenException('This freelancer has no active bid on the order');
     }
 
-    return this.prisma.chatThread.upsert({
-      where: { orderId_freelancerId: { orderId, freelancerId } },
-      create: { orderId, freelancerId },
-      update: {},
-    });
+    try {
+      return await this.prisma.chatThread.upsert({
+        where: { orderId_freelancerId: { orderId, freelancerId } },
+        create: { orderId, freelancerId },
+        update: {},
+      });
+    } catch (err) {
+      // Гонка: два запроса (например, joinOrder по сокету + REST-фолбэк
+      // одновременно из двух вкладок) прошли upsert параллельно — оба видят
+      // "записи ещё нет" до COMMIT первого, второй падает на уникальном
+      // индексе (orderId, freelancerId), хотя семантически это не ошибка,
+      // тред просто уже существует. Дочитываем его вместо падения запроса.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const existing = await this.prisma.chatThread.findUnique({
+          where: { orderId_freelancerId: { orderId, freelancerId } },
+        });
+        if (existing) return existing;
+      }
+      throw err;
+    }
   }
 
   /** Список тредов заказа, видимых текущему юзеру. */
@@ -192,7 +212,22 @@ export class ChatService {
     if (!thread) return; // теоретически не должно происходить — инвойс шлёт только тот, у кого уже есть тред
     return this.prisma.chatMessage.create({
       data: { threadId: thread.id, senderId: freelancerId, type: 'INVOICE', invoiceId },
+      // Без include фронт получал message.invoice === undefined в живом
+      // сокет-пуше (в отличие от REST listMessages, который его подтягивает)
+      // — карточка счёта рендерилась пустым текстовым сообщением, пока
+      // пользователь не перезагружал страницу и не получал полный REST-ответ.
+      include: { sender: { include: { profile: true } }, invoice: true, file: true },
     });
+  }
+
+  /** orderId/freelancerId нужны только для адресации комнаты, до которой сервис не имеет прямого доступа. */
+  async findThreadRoomForInvoice(invoiceId: string): Promise<{ orderId: string; freelancerId: string } | null> {
+    const message = await this.prisma.chatMessage.findFirst({
+      where: { invoiceId },
+      include: { thread: true },
+    });
+    if (!message) return null;
+    return { orderId: message.thread.orderId, freelancerId: message.thread.freelancerId };
   }
 
   private async markThreadRead(threadId: string, userId: string) {
@@ -241,7 +276,7 @@ export class ChatService {
             ? `${cleanBody.slice(0, 117)}...`
             : cleanBody || 'Новое сообщение';
 
-      await this.prisma.notification.create({
+      const notification = await this.prisma.notification.create({
         data: {
           userId: recipientId,
           title: 'Новое сообщение',
@@ -257,6 +292,10 @@ export class ChatService {
           },
         },
       });
+      // Раньше уведомление только писалось в БД — колокольчик узнавал о
+      // нём лишь на следующем 30с-поллинге. Толкаем сразу через тот же
+      // личный сокет-канал, что и NotificationsEventsListener.
+      this.notificationsGateway.emitToUser(recipientId, 'notification', notification);
     } catch (err) {
       this.logger.error(`Failed to create chat notification for message ${messageId}: ${err}`);
     }

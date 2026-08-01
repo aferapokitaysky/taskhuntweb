@@ -1,4 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
@@ -48,10 +48,15 @@ export class NowPaymentsService {
     if (!res.ok) {
       const body = await res.text();
       this.logger.error(`createPayment failed: ${res.status} ${body}`);
-      // Голый Error здесь долетал до клиента как безликий 500 "Internal
-      // server error" — фрилансер, выставляющий счёт, не понимал, что
-      // произошло и что делать. ServiceUnavailableException даёт понятный
-      // статус (503) и сообщение, не течёт деталями провайдера наружу.
+      // AMOUNT_MINIMAL_ERROR — это не сбой провайдера, а невалидный ввод
+      // (сумма счёта конвертируется в меньше минимально принимаемого
+      // провайдером объёма крипты). Раньше это тоже летело как 503
+      // "провайдер недоступен" — пользователь не понимал, что нужно просто
+      // увеличить сумму, и пробовал снова с той же суммой.
+      if (body.includes('AMOUNT_MINIMAL_ERROR')) {
+        throw new BadRequestException('Сумма слишком мала для оплаты в криптовалюте — минимальный платёж провайдера обычно около $10. Увеличьте сумму.');
+      }
+      // Остальные ошибки провайдера — 503, не течём деталями наружу.
       throw new ServiceUnavailableException('Платёжный провайдер временно недоступен. Попробуйте выставить счёт позже.');
     }
 

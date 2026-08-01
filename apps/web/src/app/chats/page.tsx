@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { io, type Socket } from 'socket.io-client';
 import { AppHeader } from '@/components/AppHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorNotice } from '@/components/ErrorNotice';
@@ -13,7 +14,7 @@ import { PaymentConfirmDetails } from '@/components/PaymentConfirmDetails';
 import { PaperclipIcon } from '@/components/icons/PaperclipIcon';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 import { Mascot } from '@/components/Mascot';
-import { api, API_URL, downloadFile } from '@/lib/api';
+import { api, API_URL, downloadFile, ensureFreshAccessToken } from '@/lib/api';
 import type { ChatInboxThread, ChatMessage, Invoice, InvoicePaymentDetails, User } from '@/lib/types';
 import { money } from '@/lib/types';
 
@@ -48,6 +49,12 @@ function ChatsContent() {
   const [error, setError] = useState<string | null>(null);
   const [paymentConfirmInvoice, setPaymentConfirmInvoice] = useState<Invoice | null>(null);
   const [paymentDetailsLoading, setPaymentDetailsLoading] = useState(false);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+  const [invoiceAmount, setInvoiceAmount] = useState('');
+  const [invoiceDescription, setInvoiceDescription] = useState('');
+  const [issueInvoiceConfirmOpen, setIssueInvoiceConfirmOpen] = useState(false);
+  const [issuingInvoice, setIssuingInvoice] = useState(false);
 
   async function loadInbox(selectFirst = true) {
     const [user, list] = await Promise.all([api<User>('/users/me'), api<ChatInboxThread[]>('/chat/threads')]);
@@ -115,14 +122,21 @@ function ChatsContent() {
     if (!active || !body.trim()) return;
     const text = body.trim();
     setBody('');
+    if (socket?.connected) {
+      // Сокет — сам отправитель тоже состоит в комнате и получит своё же
+      // сообщение обратно через 'newMessage' (см. эффект выше), поэтому
+      // здесь не добавляем его в messages локально — иначе будет дубль
+      // на долю секунды до прихода эха.
+      socket.emit('sendMessage', { orderId: active.orderId, freelancerId: active.freelancerId, body: text });
+      return;
+    }
     setSending(true);
     try {
       const created = await api<ChatMessage>(`/orders/${active.orderId}/chat/messages?freelancerId=${active.freelancerId}`, {
         method: 'POST',
         body: JSON.stringify({ body: text }),
       });
-      setMessages((current) => [...current, created]);
-      await loadInbox(false);
+      setMessages((current) => (current.some((item) => item.id === created.id) ? current : [...current, created]));
     } catch (err) {
       setBody(text);
       setError(err instanceof Error ? err.message : 'Не удалось отправить сообщение');
@@ -140,8 +154,7 @@ function ChatsContent() {
         method: 'POST',
         body: JSON.stringify({ fileId: file.id, body: file.originalName }),
       });
-      setMessages((current) => [...current, created]);
-      await loadInbox(false);
+      setMessages((current) => (current.some((item) => item.id === created.id) ? current : [...current, created]));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось отправить файл в чат');
     } finally {
@@ -172,16 +185,110 @@ function ChatsContent() {
     }
   }
 
-  useEffect(() => {
+  async function issueInvoice() {
     if (!active) return;
-    if (!messages.some((message) => message.invoice?.status === 'PENDING')) return;
-    const interval = setInterval(() => {
-      api<ChatMessage[]>(`/orders/${active.orderId}/chat/messages?freelancerId=${active.freelancerId}`)
-        .then(setMessages)
-        .catch(() => undefined);
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [active?.orderId, active?.freelancerId, messages]);
+    setError(null);
+    setIssueInvoiceConfirmOpen(false);
+    setIssuingInvoice(true);
+    try {
+      // Карточку счёта в переписке добавлять локально не нужно — она придёт
+      // сама через 'newMessage' (ChatEventsListener слушает InvoiceIssued
+      // и шлёт в комнату почти сразу после ответа этого запроса).
+      await api('/wallet/invoices', {
+        method: 'POST',
+        body: JSON.stringify({
+          orderId: active.orderId,
+          amount: Number(invoiceAmount),
+          description: invoiceDescription || undefined,
+        }),
+      });
+      setInvoiceAmount('');
+      setInvoiceDescription('');
+      setShowInvoiceForm(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось выставить счёт');
+    } finally {
+      setIssuingInvoice(false);
+    }
+  }
+
+  // Один сокет на весь инбокс — раньше здесь был 15с-поллинг только для
+  // открытого диалога с PENDING-счётом; теперь статус счёта и новые
+  // сообщения приходят вживую по ЛЮБОМУ треду, не только открытому.
+  useEffect(() => {
+    let cancelled = false;
+    let nextSocket: Socket | null = null;
+    ensureFreshAccessToken().then((token) => {
+      if (cancelled || !token) return;
+      nextSocket = io(`${API_URL}/chat`, { auth: { token } });
+      nextSocket.on('connect_error', () => setError('Не удалось подключиться к чату'));
+      setSocket(nextSocket);
+    });
+    return () => {
+      cancelled = true;
+      nextSocket?.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Вступаем в комнаты ВСЕХ тредов инбокса (не только открытого) — иначе
+  // превью последнего сообщения и счётчик непрочитанных слева не
+  // обновлялись бы вживую для чатов, которые сейчас не открыты.
+  useEffect(() => {
+    if (!socket) return;
+    const joinAll = () => {
+      for (const thread of threads) {
+        socket.emit('joinOrder', { orderId: thread.orderId, freelancerId: thread.freelancerId });
+      }
+      if (active) socket.emit('joinOrder', { orderId: active.orderId, freelancerId: active.freelancerId });
+    };
+    if (socket.connected) joinAll();
+    socket.on('connect', joinAll);
+    return () => {
+      socket.off('connect', joinAll);
+    };
+  }, [socket, threads, active]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    function onNewMessage(message: ChatMessage) {
+      const isActiveThread = Boolean(active) && message.orderId === active?.orderId && message.freelancerId === active?.freelancerId;
+      if (isActiveThread) {
+        setMessages((current) => (current.some((item) => item.id === message.id) ? current : [...current, message]));
+      }
+      setThreads((current) => {
+        const idx = current.findIndex((t) => t.orderId === message.orderId && t.freelancerId === message.freelancerId);
+        if (idx === -1) {
+          // Первое сообщение по треду, которого ещё не было в инбоксе — просто дозагрузим список целиком.
+          void loadInbox(false).catch(() => undefined);
+          return current;
+        }
+        const next = [...current];
+        const incrementUnread = !isActiveThread && message.senderId !== me?.id;
+        next[idx] = {
+          ...next[idx],
+          lastMessage: message,
+          unreadCount: incrementUnread ? (next[idx].unreadCount ?? 0) + 1 : isActiveThread ? 0 : next[idx].unreadCount,
+        };
+        return next;
+      });
+    }
+
+    function onInvoiceUpdated(invoice: Invoice) {
+      setMessages((current) =>
+        current.map((message) => (message.invoice?.id === invoice.id ? { ...message, invoice: { ...message.invoice, ...invoice } } : message)),
+      );
+    }
+
+    socket.on('newMessage', onNewMessage);
+    socket.on('invoiceUpdated', onInvoiceUpdated);
+    return () => {
+      socket.off('newMessage', onNewMessage);
+      socket.off('invoiceUpdated', onInvoiceUpdated);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, active?.orderId, active?.freelancerId, me?.id]);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8">
@@ -281,8 +388,52 @@ function ChatsContent() {
                         Профиль
                       </Link>
                     )}
+                    {activeThread?.role === 'FREELANCER' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowInvoiceForm((v) => !v)}
+                        className="primary-action px-4 py-2.5 text-sm"
+                      >
+                        {showInvoiceForm ? 'Свернуть счёт' : 'Выставить счёт'}
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {showInvoiceForm && activeThread?.role === 'FREELANCER' && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      setIssueInvoiceConfirmOpen(true);
+                    }}
+                    className="mt-4 flex flex-wrap items-end gap-2 rounded-[1.5rem] border border-brand/15 bg-white/80 p-3"
+                  >
+                    <label className="field-surface flex min-h-[4.5rem] flex-1 min-w-[8rem] flex-col justify-between px-3 py-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-stone-400">Сумма, USD</span>
+                      <input
+                        required
+                        type="number"
+                        min="1"
+                        placeholder="100"
+                        value={invoiceAmount}
+                        onChange={(e) => setInvoiceAmount(e.target.value)}
+                        className="mt-1 w-full bg-transparent font-serif text-xl text-stone-950 outline-none"
+                      />
+                    </label>
+                    <label className="field-surface flex min-h-[4.5rem] flex-[2] min-w-[12rem] flex-col justify-between px-3 py-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-stone-400">За что счёт</span>
+                      <input
+                        placeholder="Этап, результат, доработка"
+                        value={invoiceDescription}
+                        onChange={(e) => setInvoiceDescription(e.target.value)}
+                        className="mt-1 w-full bg-transparent text-sm text-stone-800 outline-none"
+                      />
+                    </label>
+                    <button type="submit" disabled={issuingInvoice} className="primary-action px-4 py-3 text-sm disabled:opacity-60">
+                      {issuingInvoice ? 'Отправляем...' : 'В чат'}
+                    </button>
+                  </form>
+                )}
                 {activeThread?.order && (
                   <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-stone-600">
                     <span className="rounded-full bg-white/80 px-3 py-1.5">{activeThread.order.category?.name ?? 'Категория'}</span>
@@ -404,6 +555,15 @@ function ChatsContent() {
         busy={paymentDetailsLoading}
         onCancel={() => setPaymentConfirmInvoice(null)}
         onConfirm={() => setPaymentConfirmInvoice(null)}
+      />
+      <ConfirmDialog
+        open={issueInvoiceConfirmOpen}
+        title="Отправить счёт заказчику?"
+        description={`Проверьте сумму: ${money(invoiceAmount || 0)}. После подтверждения счёт появится в чате, а заказчик получит уведомление.`}
+        confirmLabel="Отправить счёт"
+        busy={issuingInvoice}
+        onCancel={() => setIssueInvoiceConfirmOpen(false)}
+        onConfirm={issueInvoice}
       />
     </main>
   );
