@@ -136,6 +136,11 @@ export function InvoiceChatCard({
           </div>
           {invoice.payAddress && pending && (
             <div className="mt-3 grid gap-2 rounded-[1rem] bg-white p-2 text-[11px] text-stone-500 ring-1 ring-brand/10 dark:bg-stone-800">
+              {invoice.paymentNetwork && (
+                <div className="rounded-[0.9rem] bg-card-sage/70 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-stone-600 dark:bg-stone-900 dark:text-stone-300">
+                  Сеть: {invoice.paymentNetwork}
+                </div>
+              )}
               <CopyRow
                 label="Оплата"
                 value={paymentLine ?? money(invoice.amount, invoice.currency)}

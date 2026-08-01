@@ -1276,6 +1276,12 @@ export default function OrderDetailClient() {
                           onCopy={payLine ? () => copyInvoiceValue(invoice.id, 'pay-amount', payLine) : undefined}
                         />
                         <InvoiceCopyBox
+                          label="Сеть"
+                          value={invoice.paymentNetwork ?? 'Сеть появится вместе с реквизитами'}
+                          copied={copiedInvoiceField === `${invoice.id}:network`}
+                          onCopy={invoice.paymentNetwork ? () => copyInvoiceValue(invoice.id, 'network', invoice.paymentNetwork ?? '') : undefined}
+                        />
+                        <InvoiceCopyBox
                           label="Адрес"
                           value={invoice.payAddress ?? 'Адрес появится после создания платежа'}
                           copied={copiedInvoiceField === `${invoice.id}:address`}
@@ -1315,7 +1321,7 @@ export default function OrderDetailClient() {
               <EmptyState
                 icon={<BalanceMainIcon />}
                 title="Счетов и чеков по заказу пока нет"
-                description={isFreelancer ? 'Выставьте первый счёт из чата, и он появится в истории платежей.' : 'Когда исполнитель выставит счёт, здесь появится инвойс и дальнейший чек оплаты.'}
+                description={isFreelancer ? 'Выставьте первый счёт из чата, и он появится в истории платежей.' : 'Когда исполнитель выставит счёт, здесь появятся реквизиты и дальнейший чек оплаты.'}
               />
             )}
           </div>
