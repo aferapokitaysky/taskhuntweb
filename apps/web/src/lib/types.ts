@@ -119,6 +119,9 @@ export interface Bid {
 
 export interface Invoice {
   id: string;
+  orderId?: string;
+  milestoneId?: string | null;
+  milestone?: { id: string; title: string } | null;
   amount: string;
   currency: string;
   description?: string | null;
@@ -127,6 +130,8 @@ export interface Invoice {
   payAmount?: string | null;
   payCurrency?: string | null;
   paymentNetwork?: string | null;
+  createdAt?: string;
+  paidAt?: string | null;
 }
 
 export interface InvoicePaymentDetails {

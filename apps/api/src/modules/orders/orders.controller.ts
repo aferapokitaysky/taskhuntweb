@@ -345,6 +345,12 @@ export class OrdersController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get(':id/invoices')
+  listOrderInvoices(@CurrentUser() user: AuthenticatedUser, @Param('id') orderId: string) {
+    return this.invoiceService.listOrderInvoices(user.id, orderId);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get(':id/invoices/export.csv')
   async exportOrderInvoicesCsv(
     @CurrentUser() user: AuthenticatedUser,

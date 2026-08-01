@@ -135,15 +135,7 @@ export class InvoiceService {
   }
 
   async exportOrderInvoicesCsv(userId: string, orderId: string): Promise<string> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { bids: { where: { status: 'ACCEPTED' } } },
-    });
-    if (!order) throw new NotFoundException('Order not found');
-    const acceptedFreelancerId = order.bids[0]?.freelancerId;
-    if (order.clientId !== userId && acceptedFreelancerId !== userId) {
-      throw new ForbiddenException('Not a participant of this order');
-    }
+    await this.ensureOrderInvoiceAccess(userId, orderId);
 
     const invoices = await this.prisma.invoice.findMany({
       where: { orderId },
@@ -162,5 +154,27 @@ export class InvoiceService {
     });
 
     return header + rows.join('\n');
+  }
+
+  async listOrderInvoices(userId: string, orderId: string) {
+    await this.ensureOrderInvoiceAccess(userId, orderId);
+
+    return this.prisma.invoice.findMany({
+      where: { orderId },
+      include: { milestone: { select: { id: true, title: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private async ensureOrderInvoiceAccess(userId: string, orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { bids: { where: { status: 'ACCEPTED' } } },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    const acceptedFreelancerId = order.bids[0]?.freelancerId;
+    if (order.clientId !== userId && acceptedFreelancerId !== userId) {
+      throw new ForbiddenException('Not a participant of this order');
+    }
   }
 }

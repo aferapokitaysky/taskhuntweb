@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { api, ensureFreshAccessToken } from '@/lib/api';
+import { api, downloadFile, ensureFreshAccessToken } from '@/lib/api';
 import type { ChatMessage, ChatThreadSummary, Invoice, InvoicePaymentDetails, Order, User } from '@/lib/types';
 import { money } from '@/lib/types';
 import { FileUpload, type UploadedFile } from '@/components/FileUpload';
@@ -21,6 +21,7 @@ import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 import { BidAvatarIcon } from '@/components/icons/illustrated/BidAvatarIcon';
 import { BalanceEscrowIcon } from '@/components/icons/illustrated/BalanceEscrowIcon';
+import { BalanceMainIcon } from '@/components/icons/illustrated/BalanceMainIcon';
 import { Mascot } from '@/components/Mascot';
 import { OrderStatusBadge } from '@/components/OrderStatusBadge';
 import { OrderTimeline } from '@/components/OrderTimeline';
@@ -140,6 +141,7 @@ export default function OrderDetailClient() {
   const [me, setMe] = useState<User | null>(null);
   const [order, setOrder] = useState<Order | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [orderInvoices, setOrderInvoices] = useState<Invoice[]>([]);
   const [body, setBody] = useState('');
   const [chatFilter, setChatFilter] = useState<'ALL' | 'INVOICES'>('ALL');
   const [sendingFileId, setSendingFileId] = useState<string | null>(null);
@@ -239,12 +241,20 @@ export default function OrderDetailClient() {
     setOrder(fresh);
   }
 
+  async function refreshOrderInvoices() {
+    const invoices = await api<Invoice[]>(`/orders/${orderId}/invoices`);
+    setOrderInvoices(invoices);
+  }
+
   useEffect(() => {
     Promise.all([api<User>('/users/me'), api<Order>(`/orders/${orderId}`)])
       .then(([user, orderDetails]) => {
         setMe(user);
         setOrder(orderDetails);
         rememberRecentlyViewed(orderDetails.id, orderDetails.title);
+        if (user.id === orderDetails.clientId || orderDetails.bids?.some((bid) => bid.status === 'ACCEPTED' && bid.freelancerId === user.id)) {
+          void refreshOrderInvoices();
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Не удалось загрузить заказ'));
 
@@ -271,6 +281,8 @@ export default function OrderDetailClient() {
   const closedBidCount = bids.filter((bid) => bid.status === 'REJECTED' || bid.status === 'WITHDRAWN').length;
   const visibleMessages = chatFilter === 'INVOICES' ? messages.filter((message) => message.type === 'INVOICE') : messages;
   const invoiceMessageCount = messages.filter((message) => message.type === 'INVOICE').length;
+  const paidInvoiceCount = orderInvoices.filter((invoice) => invoice.status === 'PAID').length;
+  const pendingInvoiceCount = orderInvoices.filter((invoice) => invoice.status === 'PENDING').length;
   const hireConfirmBid = order?.bids?.find((bid) => bid.id === hireConfirmBidId) ?? null;
   const declineConfirmBid = order?.bids?.find((bid) => bid.id === declineConfirmBidId) ?? null;
   const approveConfirmMilestone =
@@ -427,6 +439,9 @@ export default function OrderDetailClient() {
       nextSocket.on('connect', () => nextSocket?.emit('joinOrder', { orderId, freelancerId: chatFreelancerId }));
       nextSocket.on('newMessage', (message: ChatMessage) => {
         setMessages((current) => (current.some((item) => item.id === message.id) ? current : [...current, message]));
+        if (message.invoice) {
+          setOrderInvoices((current) => (current.some((item) => item.id === message.invoice?.id) ? current : [message.invoice!, ...current]));
+        }
       });
       nextSocket.on('connect_error', () => setError('Не удалось подключиться к чату'));
       setSocket(nextSocket);
@@ -482,6 +497,15 @@ export default function OrderDetailClient() {
     }
   }
 
+  async function exportOrderInvoices() {
+    setError(null);
+    try {
+      await downloadFile(`/orders/${orderId}/invoices/export.csv`, `invoices-order-${orderId}.csv`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось скачать историю счетов');
+    }
+  }
+
   async function issueInvoice() {
     setError(null);
     setIssueInvoiceConfirmOpen(false);
@@ -497,6 +521,7 @@ export default function OrderDetailClient() {
       setPaymentAddress(result.payment.payAddress);
       setInvoiceAmount('');
       setInvoiceDescription('');
+      await refreshOrderInvoices();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось выставить счёт');
     }
@@ -1108,8 +1133,117 @@ export default function OrderDetailClient() {
         </section>
       )}
 
+      {(isClient || isFreelancer) && (
+        <section className="premium-panel mb-6 overflow-hidden rounded-[2rem] p-0">
+          <div className="border-b border-stone-100 bg-white/74 p-5 md:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand">История платежей</p>
+                <h2 className="mt-1 font-serif text-2xl text-stone-900">Счета и чеки заказа</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600">
+                  Все инвойсы заказа собраны здесь: можно проверить статус, скопировать реквизиты и открыть оплату.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void Promise.all([refreshOrder(), refreshOrderInvoices()])}
+                  className="secondary-action px-3 py-2 text-sm font-semibold"
+                >
+                  Обновить статус
+                </button>
+                <button type="button" onClick={exportOrderInvoices} className="secondary-action px-3 py-2 text-sm font-semibold">
+                  Экспорт CSV
+                </button>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-2 sm:grid-cols-3">
+              {[
+                ['Всего', orderInvoices.length, 'bg-card-sand/80'],
+                ['Ожидают', pendingInvoiceCount, 'bg-card-lavender/75'],
+                ['Оплачены', paidInvoiceCount, 'bg-card-sage/80'],
+              ].map(([label, value, tone]) => (
+                <div key={label} className={`rounded-[1.25rem] px-4 py-3 ${tone}`}>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-stone-500">{label}</p>
+                  <p className="mt-1 font-serif text-2xl text-stone-950">{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-3 p-5 md:p-6">
+            {orderInvoices.map((invoice) => {
+              const pending = invoice.status === 'PENDING';
+              const paid = invoice.status === 'PAID';
+              const payLine = invoice.payAddress ? `${invoice.payAmount ?? invoice.amount} ${invoice.payCurrency ?? invoice.currency}` : null;
+              return (
+                <article key={invoice.id} className="interactive-card rounded-[1.7rem] border border-stone-100 bg-white/78 p-4">
+                  <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            paid ? 'bg-emerald-100 text-emerald-700' : pending ? 'bg-card-sand text-stone-700' : 'bg-stone-100 text-stone-500'
+                          }`}
+                        >
+                          {paid ? 'Чек принят системой' : pending ? 'Ожидает оплату' : 'Закрыт'}
+                        </span>
+                        {invoice.createdAt && (
+                          <span className="text-xs font-medium text-stone-400">
+                            {new Date(invoice.createdAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-2 font-serif text-2xl text-stone-950">{money(invoice.amount, invoice.currency)}</p>
+                      {invoice.description && <p className="mt-1 break-words text-sm leading-6 text-stone-600">{invoice.description}</p>}
+                      {invoice.milestone?.title && (
+                        <p className="mt-2 inline-flex rounded-full bg-card-lavender/75 px-3 py-1 text-xs font-bold text-stone-600">
+                          Этап: {invoice.milestone.title}
+                        </p>
+                      )}
+                      <div className="mt-3 grid gap-2 text-xs text-stone-500 sm:grid-cols-2">
+                        <p className="break-all rounded-[1rem] bg-stone-50 px-3 py-2 font-mono">TH-{invoice.id.slice(0, 8).toUpperCase()}</p>
+                        <p className="break-all rounded-[1rem] bg-stone-50 px-3 py-2 font-mono">{payLine ?? 'Реквизиты появятся после создания платежа'}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                      {pending && isClient && (
+                        <button type="button" onClick={() => openPaymentConfirm(invoice)} className="primary-action px-4 py-2 text-sm font-semibold">
+                          Оплатить
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChatFilter('INVOICES');
+                          document.getElementById('order-chat')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                        className="secondary-action px-4 py-2 text-sm font-semibold"
+                      >
+                        Открыть в чате
+                      </button>
+                      <span className="rounded-full bg-stone-100 px-3 py-2 text-xs font-medium text-stone-500">
+                        PDF-чек появится в кошельке после ledger-записи
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+
+            {orderInvoices.length === 0 && (
+              <EmptyState
+                icon={<BalanceMainIcon />}
+                title="Счетов по заказу пока нет"
+                description={isFreelancer ? 'Выставьте первый счёт из чата, и он появится в истории платежей.' : 'Когда исполнитель выставит счёт, здесь появится инвойс и дальнейший чек оплаты.'}
+              />
+            )}
+          </div>
+        </section>
+      )}
+
       {canChat && (
-        <section className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <section id="order-chat" className="grid scroll-mt-24 gap-6 lg:grid-cols-[1fr_320px]">
           <div className="premium-panel p-5">
             <h2 className="mb-4 flex items-center gap-2 font-serif text-xl text-stone-900">
               <ChatIcon className="h-8 w-8" />
