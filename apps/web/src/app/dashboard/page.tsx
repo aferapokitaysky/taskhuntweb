@@ -1136,7 +1136,7 @@ function DashboardContent() {
         </section>
       )}
 
-      <div className={`grid gap-6 ${hasAside ? 'lg:grid-cols-[1fr_380px]' : ''}`}>
+      <div className="space-y-6">
         <section className="premium-panel overflow-hidden rounded-[2.25rem] p-0">
           <div className="border-b border-stone-100 bg-gradient-to-br from-white via-card-sand/35 to-card-sage/35 p-5 md:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1595,177 +1595,6 @@ function DashboardContent() {
             </section>
           )}
 
-          {isClient && (
-            <section id="create-order" className="premium-panel scroll-mt-28 overflow-hidden rounded-[2rem] p-0">
-              <div className="border-b border-stone-100 bg-gradient-to-br from-card-sand/65 via-white to-card-sage/45 p-5">
-                <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Публикация</p>
-                    <h2 className="mt-1 font-serif text-3xl leading-tight text-stone-950">Создать заказ</h2>
-                    <p className="mt-1 max-w-sm text-sm leading-5 text-stone-600">
-                      Чем яснее стартовый бриф, тем меньше лишних вопросов и тем быстрее появятся сильные отклики.
-                    </p>
-                </div>
-                <Mascot name="workLaptop" size="h-14 w-14" />
-                </div>
-                <div className="rounded-[1.5rem] bg-white/80 p-3 shadow-sm">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Готовность</span>
-                    <span className="rounded-full bg-card-sand px-2.5 py-1 text-xs font-semibold text-stone-700">{orderFormProgress}%</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-stone-100">
-                    <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${orderFormProgress}%` }} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-5">
-                <div className="mb-4 grid gap-2 text-xs font-semibold text-stone-700">
-                  {orderFormChecks.map((item) => (
-                    <div key={item.label} className="flex items-center justify-between gap-3 rounded-full bg-stone-50 px-3 py-2">
-                      <span className="break-words">{item.label}</span>
-                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.done ? 'bg-emerald-500' : 'bg-stone-300'}`} />
-                  </div>
-                ))}
-              </div>
-              <form onSubmit={createOrder} className="space-y-3">
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Категория</span>
-                <select
-                  value={orderForm.categoryId}
-                  onChange={(e) => setOrderForm({ ...orderForm, categoryId: e.target.value })}
-                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
-                >
-                  {flatCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Название результата</span>
-                <input
-                  required
-                  minLength={5}
-                      placeholder="Например: лендинг для SaaS с оплатой Stripe"
-                  value={orderForm.title}
-                  onChange={(e) => setOrderForm({ ...orderForm, title: e.target.value })}
-                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
-                />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Описание задачи</span>
-                <textarea
-                  required
-                  minLength={20}
-                      placeholder="Что нужно сделать, какой результат ожидаете, какие ограничения, доступы, материалы и критерии готовности..."
-                  value={orderForm.description}
-                  onChange={(e) => setOrderForm({ ...orderForm, description: e.target.value })}
-                      className="field-surface min-h-36 w-full rounded-[1.35rem] px-3 py-3 text-sm leading-6"
-                />
-                  </label>
-                <div className="grid gap-2 sm:grid-cols-2">
-                    <label className="field-surface block rounded-[1.35rem] px-3 py-3">
-                      <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Бюджет от</span>
-                      <input
-                    required
-                    type="number"
-                    min="1"
-                        placeholder="0"
-                    value={orderForm.budgetMin}
-                    onChange={(e) => setOrderForm({ ...orderForm, budgetMin: e.target.value })}
-                        className="mt-1 w-full border-0 bg-transparent p-0 font-serif text-2xl leading-none text-stone-950 outline-none ring-0 placeholder:text-stone-300 focus:border-0 focus:ring-0"
-                  />
-                    </label>
-                    <label className="field-surface block rounded-[1.35rem] px-3 py-3">
-                      <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">До</span>
-                      <input
-                    type="number"
-                    min="1"
-                        placeholder="Необязательно"
-                    value={orderForm.budgetMax}
-                    onChange={(e) => setOrderForm({ ...orderForm, budgetMax: e.target.value })}
-                        className="mt-1 w-full border-0 bg-transparent p-0 font-serif text-2xl leading-none text-stone-950 outline-none ring-0 placeholder:text-stone-300 focus:border-0 focus:ring-0"
-                  />
-                    </label>
-                </div>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Желаемый срок</span>
-                    <input
-                  type="date"
-                  value={orderForm.deadline}
-                  onChange={(e) => setOrderForm({ ...orderForm, deadline: e.target.value })}
-                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
-                />
-                  </label>
-                <div>
-                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Стек и теги</span>
-                  <input
-                    placeholder="Тэги/стек — Enter добавляет (React, Node.js…)"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter' || !tagInput.trim()) return;
-                      e.preventDefault();
-                      const tag = tagInput.trim();
-                      if (!orderForm.tags.includes(tag)) {
-                        setOrderForm((f) => ({ ...f, tags: [...f.tags, tag] }));
-                      }
-                      setTagInput('');
-                    }}
-                    className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
-                  />
-                  {orderForm.tags.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {orderForm.tags.map((tag) => (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() => setOrderForm((f) => ({ ...f, tags: f.tags.filter((t) => t !== tag) }))}
-                            className="max-w-full break-words rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700 hover:line-through"
-                        >
-                          {tag} ×
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                  <div className="rounded-[1.5rem] bg-stone-50 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Превью публикации</p>
-                    <p className="mt-1 break-words text-sm font-semibold text-stone-950">{orderForm.title || 'Название появится здесь'}</p>
-                    <p className="mt-1 text-xs font-semibold text-brand">{orderFormBudgetPreview}</p>
-                  </div>
-                  {editingDraftId && (
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-[1.25rem] bg-card-lavender/65 px-3 py-2">
-                      <p className="text-xs font-semibold text-stone-700">Редактируете сохранённый черновик</p>
-                      <button type="button" onClick={() => setEditingDraftId(null)} className="text-xs font-semibold text-brand hover:text-brand-dark">
-                        Создать новый
-                      </button>
-                    </div>
-                  )}
-                  {orderFormNotice && <p className="rounded-[1.25rem] bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{orderFormNotice}</p>}
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={saveOrderDraft}
-                      disabled={savingOrderDraft || !orderForm.categoryId}
-                      className="secondary-action rounded-[1.35rem] px-4 py-3 text-sm font-semibold disabled:opacity-50"
-                    >
-                      {savingOrderDraft ? 'Сохраняем...' : editingDraftId ? 'Обновить черновик' : 'Сохранить черновик'}
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={creatingOrder || !orderFormReady}
-                      className="primary-action rounded-[1.35rem] px-4 py-3 font-semibold disabled:opacity-50"
-                    >
-                      {creatingOrder ? 'Публикуем...' : editingDraftId ? 'Опубликовать черновик' : 'Опубликовать'}
-                    </button>
-                  </div>
-              </form>
-              </div>
-            </section>
-          )}
 
           {selectedOrder && (
             <section className="premium-panel rounded-[2rem] p-5">
@@ -1835,6 +1664,183 @@ function DashboardContent() {
         </aside>
         )}
       </div>
+      {isClient && (
+        <section id="create-order" className="premium-panel mt-6 scroll-mt-28 overflow-hidden rounded-[2rem] p-0">
+          <div className="border-b border-stone-100 bg-gradient-to-br from-card-sand/65 via-white to-card-sage/45 p-6 md:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Публикация</p>
+                <h2 className="mt-1 font-serif text-4xl leading-tight text-stone-950">Создать заказ</h2>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-stone-600">
+                  Чем яснее стартовый бриф, тем меньше лишних вопросов и тем быстрее появятся сильные отклики.
+                </p>
+              </div>
+              <Mascot name="workLaptop" size="h-16 w-16" />
+            </div>
+          </div>
+
+          <form onSubmit={createOrder} className="grid gap-6 p-6 md:p-8 lg:grid-cols-[1.3fr_1fr]">
+            <div className="space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Категория</span>
+                <select
+                  value={orderForm.categoryId}
+                  onChange={(e) => setOrderForm({ ...orderForm, categoryId: e.target.value })}
+                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
+                >
+                  {flatCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Название результата</span>
+                <input
+                  required
+                  minLength={5}
+                  placeholder="Например: лендинг для SaaS с оплатой Stripe"
+                  value={orderForm.title}
+                  onChange={(e) => setOrderForm({ ...orderForm, title: e.target.value })}
+                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Описание задачи</span>
+                <textarea
+                  required
+                  minLength={20}
+                  placeholder="Что нужно сделать, какой результат ожидаете, какие ограничения, доступы, материалы и критерии готовности..."
+                  value={orderForm.description}
+                  onChange={(e) => setOrderForm({ ...orderForm, description: e.target.value })}
+                  className="field-surface min-h-36 w-full rounded-[1.35rem] px-3 py-3 text-sm leading-6"
+                />
+              </label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="field-surface block rounded-[1.35rem] px-3 py-3">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Бюджет от</span>
+                  <input
+                    required
+                    type="number"
+                    min="1"
+                    placeholder="0"
+                    value={orderForm.budgetMin}
+                    onChange={(e) => setOrderForm({ ...orderForm, budgetMin: e.target.value })}
+                    className="mt-1 w-full border-0 bg-transparent p-0 font-serif text-2xl leading-none text-stone-950 outline-none ring-0 placeholder:text-stone-300 focus:border-0 focus:ring-0"
+                  />
+                </label>
+                <label className="field-surface block rounded-[1.35rem] px-3 py-3">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">До</span>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Необязательно"
+                    value={orderForm.budgetMax}
+                    onChange={(e) => setOrderForm({ ...orderForm, budgetMax: e.target.value })}
+                    className="mt-1 w-full border-0 bg-transparent p-0 font-serif text-2xl leading-none text-stone-950 outline-none ring-0 placeholder:text-stone-300 focus:border-0 focus:ring-0"
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Желаемый срок</span>
+                <input
+                  type="date"
+                  value={orderForm.deadline}
+                  onChange={(e) => setOrderForm({ ...orderForm, deadline: e.target.value })}
+                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
+                />
+              </label>
+              <div>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Стек и теги</span>
+                <input
+                  placeholder="Тэги/стек — Enter добавляет (React, Node.js…)"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || !tagInput.trim()) return;
+                    e.preventDefault();
+                    const tag = tagInput.trim();
+                    if (!orderForm.tags.includes(tag)) {
+                      setOrderForm((f) => ({ ...f, tags: [...f.tags, tag] }));
+                    }
+                    setTagInput('');
+                  }}
+                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
+                />
+                {orderForm.tags.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {orderForm.tags.map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => setOrderForm((f) => ({ ...f, tags: f.tags.filter((t) => t !== tag) }))}
+                        className="max-w-full break-words rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700 hover:line-through"
+                      >
+                        {tag} ×
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-[1.5rem] bg-white/80 p-4 shadow-sm">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Готовность</span>
+                  <span className="rounded-full bg-card-sand px-2.5 py-1 text-xs font-semibold text-stone-700">{orderFormProgress}%</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-stone-100">
+                  <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${orderFormProgress}%` }} />
+                </div>
+                <div className="mt-3 grid gap-2 text-xs font-semibold text-stone-700">
+                  {orderFormChecks.map((item) => (
+                    <div key={item.label} className="flex items-center justify-between gap-3 rounded-full bg-stone-50 px-3 py-2">
+                      <span className="break-words">{item.label}</span>
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.done ? 'bg-emerald-500' : 'bg-stone-300'}`} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-[1.5rem] bg-stone-50 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Превью публикации</p>
+                <p className="mt-1 break-words text-sm font-semibold text-stone-950">{orderForm.title || 'Название появится здесь'}</p>
+                <p className="mt-1 text-xs font-semibold text-brand">{orderFormBudgetPreview}</p>
+              </div>
+
+              {editingDraftId && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-[1.25rem] bg-card-lavender/65 px-3 py-2">
+                  <p className="text-xs font-semibold text-stone-700">Редактируете сохранённый черновик</p>
+                  <button type="button" onClick={() => setEditingDraftId(null)} className="text-xs font-semibold text-brand hover:text-brand-dark">
+                    Создать новый
+                  </button>
+                </div>
+              )}
+              {orderFormNotice && <p className="rounded-[1.25rem] bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{orderFormNotice}</p>}
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={saveOrderDraft}
+                  disabled={savingOrderDraft || !orderForm.categoryId}
+                  className="secondary-action rounded-[1.35rem] px-4 py-3 text-sm font-semibold disabled:opacity-50"
+                >
+                  {savingOrderDraft ? 'Сохраняем...' : editingDraftId ? 'Обновить черновик' : 'Сохранить черновик'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingOrder || !orderFormReady}
+                  className="primary-action rounded-[1.35rem] px-4 py-3 font-semibold disabled:opacity-50"
+                >
+                  {creatingOrder ? 'Публикуем...' : editingDraftId ? 'Опубликовать черновик' : 'Опубликовать'}
+                </button>
+              </div>
+            </div>
+          </form>
+        </section>
+      )}
     </main>
   );
 }

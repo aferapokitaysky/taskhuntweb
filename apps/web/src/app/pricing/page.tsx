@@ -57,6 +57,8 @@ export default function PricingPage() {
   const [checkoutTier, setCheckoutTier] = useState<string | null>(null);
   const [payment, setPayment] = useState<{ payAddress: string; payAmount: number; payCurrency: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [activatedTier, setActivatedTier] = useState<string | null>(null);
 
   useEffect(() => {
     api<SubscriptionTier[]>('/subscriptions/tiers')
@@ -75,6 +77,26 @@ export default function PricingPage() {
     setCheckoutTier(tierName);
     setError(null);
     setPayment(null);
+    setActivatedTier(null);
+    setCheckingOut(true);
+    try {
+      // Сначала пробуем списать с основного баланса — без нового
+      // крипто-платежа. Если средств не хватает (403), тихо переходим к
+      // обычной крипто-оплате ниже — это ожидаемый, не ошибочный путь.
+      await api('/subscriptions/checkout/from-balance', {
+        method: 'POST',
+        body: JSON.stringify({ tierName }),
+      });
+      setActivatedTier(tierName);
+      const mine = await api<MySubscription>('/subscriptions/me').catch(() => null);
+      if (mine) setMySubscription(mine);
+      return;
+    } catch {
+      // недостаточно средств на балансе (или баланс недоступен) — ниже пробуем крипто
+    } finally {
+      setCheckingOut(false);
+    }
+
     try {
       const result = await api<{ payment: { payAddress: string; payAmount: number; payCurrency: string } }>(
         '/subscriptions/checkout',
@@ -209,14 +231,26 @@ export default function PricingPage() {
                   ) : isFree ? (
                     <p className="secondary-action px-4 py-3 text-center text-sm">Тариф по умолчанию</p>
                   ) : (
-                    <button type="button" onClick={() => upgrade(tier.name)} className="primary-action w-full px-4 py-3 text-sm">
-                      Перейти на {meta.title}
+                    <button
+                      type="button"
+                      onClick={() => upgrade(tier.name)}
+                      disabled={checkingOut && checkoutTier === tier.name}
+                      className="primary-action w-full px-4 py-3 text-sm disabled:opacity-60"
+                    >
+                      {checkingOut && checkoutTier === tier.name ? 'Проверяем баланс...' : `Перейти на ${meta.title}`}
                     </button>
+                  )}
+
+                  {checkoutTier === tier.name && activatedTier === tier.name && (
+                    <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-xs font-semibold text-emerald-700">
+                      Тариф {meta.title} активирован — списано с основного баланса кошелька.
+                    </div>
                   )}
 
                   {checkoutTier === tier.name && payment && (
                     <div className="mt-4 rounded-2xl bg-card-sand p-4 text-xs text-stone-700">
-                      <p className="font-semibold text-stone-950">Оплата: {payment.payAmount} {payment.payCurrency}</p>
+                      <p className="font-semibold text-stone-950">Не хватает баланса — оплатите криптой</p>
+                      <p className="mt-2 font-semibold text-stone-950">Оплата: {payment.payAmount} {payment.payCurrency}</p>
                       <p className="mt-2 break-all text-stone-600">{payment.payAddress}</p>
                     </div>
                   )}

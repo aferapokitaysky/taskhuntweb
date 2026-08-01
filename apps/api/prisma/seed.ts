@@ -110,7 +110,7 @@ async function main() {
     },
     {
       name: 'PRO' as const,
-      priceUsd: 9.99,
+      priceUsd: 12,
       commissionPercent: 7,
       maxActiveBidsPerMonth: 50,
       maxActiveOrdersPerMonth: 20,

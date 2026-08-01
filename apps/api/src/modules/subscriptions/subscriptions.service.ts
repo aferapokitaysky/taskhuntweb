@@ -1,7 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { SubscriptionTierName } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NowPaymentsService } from '../wallet/nowpayments.service';
+import { WalletService } from '../wallet/wallet.service';
+import { LedgerService } from '../wallet/ledger.service';
 
 const SUBSCRIPTION_PERIOD_DAYS = 30;
 
@@ -10,6 +12,8 @@ export class SubscriptionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly nowPayments: NowPaymentsService,
+    private readonly wallet: WalletService,
+    private readonly ledger: LedgerService,
   ) {}
 
   listTiers() {
@@ -56,6 +60,41 @@ export class SubscriptionsService {
     return { tier, payment };
   }
 
+  /**
+   * Покупка/продление подписки с основного баланса кошелька — без нового
+   * крипто-платежа. Деньги реально уходят с платформы пользователю в
+   * систему (это заработок площадки, не эскроу), поэтому в отличие от
+   * lockEscrowFromMainBalance здесь MAIN клиента дебетуется, а MAIN
+   * системного счёта кредитуется — сумма покидает пользовательский контур
+   * насовсем, как и при обычной крипто-оплате через NOWPayments.
+   */
+  async checkoutFromBalance(userId: string, tierName: 'PRO' | 'PREMIUM') {
+    const tier = await this.prisma.subscriptionTier.findUnique({ where: { name: tierName } });
+    if (!tier) throw new NotFoundException('Subscription tier not found');
+
+    const userWallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!userWallet) throw new NotFoundException('Wallet not found');
+
+    const price = Number(tier.priceUsd);
+    if (Number(userWallet.mainBalance) < price) {
+      throw new ForbiddenException('Недостаточно средств на основном балансе для покупки подписки');
+    }
+
+    const systemWalletId = await this.wallet.getSystemWalletId();
+    await this.ledger.applyTransaction({
+      type: 'PROMO',
+      referenceType: 'SUBSCRIPTION',
+      referenceId: tier.id,
+      description: `Оплата подписки ${tierName} с основного баланса`,
+      entries: [
+        { walletId: userWallet.id, balanceType: 'MAIN', direction: 'DEBIT', amount: price },
+        { walletId: systemWalletId, balanceType: 'MAIN', direction: 'CREDIT', amount: price },
+      ],
+    });
+
+    return this.activateSubscription(userId, tierName);
+  }
+
   /** Вызывается из SubscriptionsController после проверки подписи IPN. */
   async confirmFromIpn(syntheticOrderId: string) {
     const parsed = /^subscription:([^:]+):(PRO|PREMIUM)$/.exec(syntheticOrderId);
@@ -63,7 +102,10 @@ export class SubscriptionsService {
       throw new BadRequestException(`Unrecognized subscription order_id: ${syntheticOrderId}`);
     }
     const [, userId, tierName] = parsed;
+    return this.activateSubscription(userId, tierName as 'PRO' | 'PREMIUM');
+  }
 
+  private async activateSubscription(userId: string, tierName: 'PRO' | 'PREMIUM') {
     const tier = await this.prisma.subscriptionTier.findUniqueOrThrow({
       where: { name: tierName as SubscriptionTierName },
     });
