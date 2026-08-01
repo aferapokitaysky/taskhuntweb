@@ -26,6 +26,7 @@ interface Notification {
     href?: string;
     orderId?: string;
     freelancerId?: string;
+    threadId?: string;
     invoiceId?: string;
     bidId?: string;
     disputeId?: string;
@@ -67,6 +68,9 @@ function formatNotificationTime(createdAt: string) {
 function notificationMeta(eventName: string) {
   if (eventName.includes('InvoiceIssued')) {
     return { href: '/chats', label: 'Счёт', tone: 'bg-card-sand text-stone-800', Icon: BalanceMainIcon };
+  }
+  if (eventName.includes('ChatMessageCreated')) {
+    return { href: '/chats', label: 'Чат', tone: 'bg-card-lavender text-stone-800', Icon: ChatIcon };
   }
   if (eventName.includes('InvoicePaid') || eventName.includes('EscrowReleased')) {
     return { href: '/dashboard', label: 'Финансы', tone: 'bg-card-sage text-stone-800', Icon: BalanceEscrowIcon };

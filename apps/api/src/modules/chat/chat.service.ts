@@ -1,8 +1,10 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -151,16 +153,22 @@ export class ChatService {
 
   async sendTextMessage(orderId: string, freelancerId: string, senderId: string, body: string) {
     const thread = await this.getOrCreateThread(orderId, freelancerId, senderId);
-    return this.prisma.chatMessage.create({
+    const message = await this.prisma.chatMessage.create({
       data: { threadId: thread.id, senderId, type: 'TEXT', body },
+      include: { sender: { include: { profile: true } }, invoice: true, file: true },
     });
+    await this.notifyChatRecipient(thread.id, orderId, freelancerId, senderId, message.id, 'TEXT', body);
+    return message;
   }
 
   async sendFileMessage(orderId: string, freelancerId: string, senderId: string, fileId: string, body?: string) {
     const thread = await this.getOrCreateThread(orderId, freelancerId, senderId);
-    return this.prisma.chatMessage.create({
+    const message = await this.prisma.chatMessage.create({
       data: { threadId: thread.id, senderId, type: 'FILE', fileId, body },
+      include: { sender: { include: { profile: true } }, invoice: true, file: true },
     });
+    await this.notifyChatRecipient(thread.id, orderId, freelancerId, senderId, message.id, 'FILE', body);
+    return message;
   }
 
   async softDeleteMessage(messageId: string, requesterId: string) {
@@ -193,6 +201,65 @@ export class ChatService {
       create: { threadId, userId, lastReadAt: new Date() },
       update: { lastReadAt: new Date() },
     });
+  }
+
+  private async notifyChatRecipient(
+    threadId: string,
+    orderId: string,
+    freelancerId: string,
+    senderId: string,
+    messageId: string,
+    type: 'TEXT' | 'FILE',
+    body?: string | null,
+  ) {
+    try {
+      const thread = await this.prisma.chatThread.findUnique({
+        where: { id: threadId },
+        include: {
+          freelancer: { include: { profile: true } },
+          order: { include: { client: { include: { profile: true } } } },
+        },
+      });
+      if (!thread) return;
+
+      const recipientId = senderId === thread.order.clientId ? thread.freelancerId : thread.order.clientId;
+      if (recipientId === senderId) return;
+
+      const sender =
+        senderId === thread.order.clientId
+          ? thread.order.client
+          : senderId === thread.freelancerId
+            ? thread.freelancer
+            : await this.prisma.user.findUnique({ where: { id: senderId }, include: { profile: true } });
+      const senderName = sender?.profile?.displayName ?? sender?.email ?? 'Участник';
+      const orderTitle = thread.order.title || 'заказ';
+      const cleanBody = (body ?? '').trim().replace(/\s+/g, ' ');
+      const preview =
+        type === 'FILE'
+          ? `Файл${cleanBody ? `: ${cleanBody.slice(0, 90)}` : ' во вложении'}`
+          : cleanBody.length > 120
+            ? `${cleanBody.slice(0, 117)}...`
+            : cleanBody || 'Новое сообщение';
+
+      await this.prisma.notification.create({
+        data: {
+          userId: recipientId,
+          title: 'Новое сообщение',
+          message: `${senderName} написал по заказу "${orderTitle}": ${preview}`,
+          eventName: 'ChatMessageCreated',
+          metadata: {
+            orderId,
+            freelancerId,
+            threadId,
+            messageId,
+            senderId,
+            href: `/chats?orderId=${orderId}&freelancerId=${freelancerId}`,
+          },
+        },
+      });
+    } catch (err) {
+      this.logger.error(`Failed to create chat notification for message ${messageId}: ${err}`);
+    }
   }
 
   private async getUnreadCountByThreadId(userId: string, threadIds: string[]) {
