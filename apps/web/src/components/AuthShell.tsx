@@ -2,7 +2,6 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Logo } from './Logo';
 import { Mascot } from './Mascot';
-import { MatchIcon } from './icons/illustrated/MatchIcon';
 import { BalanceEscrowIcon } from './icons/illustrated/BalanceEscrowIcon';
 import { BalanceMainIcon } from './icons/illustrated/BalanceMainIcon';
 
@@ -17,14 +16,12 @@ interface AuthShellProps {
 
 const TRUST_POINTS = [
   { icon: <BalanceEscrowIcon className="h-6 w-6" />, label: 'Эскроу защищает бюджет до приёмки' },
-  { icon: <MatchIcon className="h-6 w-6" />, label: 'Подбор по навыкам, рейтингу и истории' },
   { icon: <BalanceMainIcon className="h-6 w-6" />, label: 'Инвойсы, чат и выплаты в одном контуре' },
 ];
 
 const ACTIVITY_ITEMS = [
-  { label: 'Отклик', value: '3 кандидата', tone: 'bg-card-lavender' },
+  { label: 'Отклик', value: '3', tone: 'bg-card-lavender' },
   { label: 'Эскроу', value: '$820', tone: 'bg-card-sage' },
-  { label: 'Инвойс', value: 'к оплате', tone: 'bg-card-sand' },
 ];
 
 export function AuthShell({
@@ -52,47 +49,26 @@ export function AuthShell({
           </div>
         </section>
 
-        <aside className="relative hidden overflow-hidden border-l border-stone-100 bg-card-sand/55 p-8 lg:flex lg:flex-col lg:justify-between">
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(41,37,36,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(41,37,36,0.045)_1px,transparent_1px)] bg-[size:32px_32px]" />
-          <div className="relative z-10">
-            <Link href="/" className="inline-flex rounded-[1.4rem] bg-white/90 p-3 shadow-sm transition-transform hover:scale-105">
-              <Logo className="h-10" />
+        <aside className="relative hidden h-fit self-center overflow-hidden rounded-l-[1.8rem] border-l border-stone-100 bg-card-sand/45 p-5 lg:flex lg:flex-col">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(41,37,36,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(41,37,36,0.04)_1px,transparent_1px)] bg-[size:30px_30px]" />
+          <div className="relative z-10 rounded-[1.6rem] border border-white/80 bg-white/76 p-4 shadow-xl shadow-stone-200/45 backdrop-blur">
+            <Link href="/" className="inline-flex rounded-[1.15rem] bg-white/90 p-2 shadow-sm transition-transform hover:scale-105">
+              <Logo className="h-9" />
             </Link>
-            <div className="mt-10">
-              <div className="mb-4 flex items-center gap-3">
-                <p className="inline-flex rounded-full bg-white/78 px-4 py-2 text-sm font-bold text-brand shadow-sm">
-                  Безопасный фриланс-маркетплейс
-                </p>
-                <Mascot name="wave" size="h-16 w-16" />
+            <div className="mt-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand">Безопасный вход</p>
+                <h2 className="mt-2 max-w-sm font-serif text-2xl leading-tight text-stone-950">{sideTitle}</h2>
+                <p className="mt-2 max-w-sm text-sm leading-6 text-stone-600">{sideDescription}</p>
               </div>
-              <h2 className="max-w-md font-serif text-3xl leading-tight text-stone-950">{sideTitle}</h2>
-              <p className="mt-4 max-w-md text-sm leading-6 text-stone-600">{sideDescription}</p>
+              <Mascot name="wave" size="h-14 w-14" />
             </div>
-          </div>
 
-          <div className="relative z-10">
-            <div className="mb-4 rounded-[1.8rem] border border-white/80 bg-white/72 p-4 shadow-xl shadow-stone-200/55 backdrop-blur">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand">Живая сделка</p>
-                  <p className="mt-1 font-serif text-2xl text-stone-950">Landing page refresh</p>
-                </div>
-                <Mascot name="workLaptop" size="h-16 w-16" />
-              </div>
-              <div className="mt-4 grid grid-cols-4 gap-2">
-                {['Бриф', 'Чат', 'Инвойс', 'Приёмка'].map((item, index) => (
-                  <div key={item} className="rounded-[1rem] bg-stone-50 px-2 py-2 text-center">
-                    <p className="mx-auto flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-brand shadow-sm">{index + 1}</p>
-                    <p className="mt-1 text-[11px] font-semibold text-stone-500">{item}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="mb-4 grid grid-cols-3 gap-3">
+            <div className="mt-4 grid grid-cols-2 gap-2.5">
               {ACTIVITY_ITEMS.map((item, index) => (
                 <div
                   key={item.label}
-                  className={`interactive-card rounded-[1.25rem] p-3 text-stone-900 ${item.tone}`}
+                  className={`rounded-[1.05rem] p-3 text-stone-900 ${item.tone}`}
                   style={{ animationDelay: `${index * 80}ms` }}
                 >
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-600">{item.label}</p>
@@ -100,21 +76,25 @@ export function AuthShell({
                 </div>
               ))}
             </div>
-            <div className="mb-4 grid gap-3">
+
+            <div className="mt-3 grid grid-cols-4 gap-2">
+              {['Бриф', 'Чат', 'Счёт', 'Приёмка'].map((item, index) => (
+                <div key={item} className="rounded-[0.95rem] bg-stone-50 px-2 py-2 text-center">
+                  <p className="mx-auto flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-bold text-brand shadow-sm">{index + 1}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-stone-500">{item}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 grid gap-2">
               {TRUST_POINTS.map((point) => (
-                <div key={point.label} className="interactive-card flex items-center gap-3 rounded-[1.35rem] border border-white/80 bg-white/68 px-4 py-3 text-sm font-medium text-stone-700 shadow-sm">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.9rem] bg-card-sage text-brand">
+                <div key={point.label} className="flex items-center gap-3 rounded-[1rem] bg-white/70 px-3 py-2 text-sm font-medium text-stone-700 shadow-sm">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.75rem] bg-card-sage text-brand">
                     {point.icon}
                   </span>
                   {point.label}
                 </div>
               ))}
-            </div>
-            <div className="flex items-center gap-3 rounded-[1.7rem] border border-white/80 bg-white/76 p-4 shadow-sm">
-              <Mascot name="hello" size="h-16 w-16 animate-float" />
-              <p className="text-sm leading-6 text-stone-600">
-                Подсказки, статусы и уведомления помогают не терять следующий шаг сделки.
-              </p>
             </div>
           </div>
         </aside>
