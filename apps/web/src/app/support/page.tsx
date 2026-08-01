@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
 import { EmptyState } from '@/components/EmptyState';
@@ -64,6 +65,16 @@ const STATUS_TONE: Record<SupportTicket['status'], string> = {
 };
 
 export default function SupportPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto max-w-7xl px-4 py-8 text-stone-500">Загружаем поддержку...</main>}>
+      <SupportContent />
+    </Suspense>
+  );
+}
+
+function SupportContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selected, setSelected] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,6 +83,7 @@ export default function SupportPage() {
   const [creating, setCreating] = useState(false);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
+  const ticketIdFromQuery = searchParams.get('ticketId');
 
   const openTickets = useMemo(() => tickets.filter((ticket) => ticket.status === 'OPEN' || ticket.status === 'PENDING').length, [tickets]);
 
@@ -84,6 +96,12 @@ export default function SupportPage() {
       .catch(() => undefined)
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!ticketIdFromQuery) return;
+    if (selected?.id === ticketIdFromQuery) return;
+    void openTicket(ticketIdFromQuery);
+  }, [ticketIdFromQuery, selected?.id]);
 
   async function openTicket(id: string) {
     setError(null);
@@ -100,9 +118,11 @@ export default function SupportPage() {
     setCreating(true);
     setError(null);
     try {
-      await api('/support/tickets', { method: 'POST', body: JSON.stringify(newTicket) });
+      const created = await api<TicketDetail>('/support/tickets', { method: 'POST', body: JSON.stringify(newTicket) });
       setNewTicket({ subject: '', message: '' });
       await loadTickets();
+      setSelected(created);
+      router.replace(`/support?ticketId=${created.id}`, { scroll: false });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать тикет');
     } finally {
