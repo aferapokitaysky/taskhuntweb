@@ -112,7 +112,7 @@ export function InvoiceChatCard({
               </span>
               <div className="min-w-0">
                 <span className="block break-words font-serif text-lg text-stone-950">taskhunt</span>
-                <span className="block text-[11px] font-medium text-stone-400">secure invoice</span>
+                <span className="block text-[11px] font-medium text-stone-400">защищённый документ</span>
               </div>
             </div>
             <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${statusTone}`}>

@@ -72,7 +72,7 @@ const DEAL_FLOW = [
   {
     icon: <ChatIcon className="h-7 w-7" />,
     title: 'Чат по конкретной задаче',
-    description: 'Диалог, инвойсы, чеки и статусы живут рядом с заказом, а не в разрозненных вкладках.',
+    description: 'Диалог, счета, чеки и статусы живут рядом с заказом, а не в разрозненных вкладках.',
   },
   {
     icon: <BalanceEscrowIcon className="h-7 w-7" />,
@@ -82,7 +82,7 @@ const DEAL_FLOW = [
 ];
 
 const TRUST_ITEMS = [
-  { icon: <EscrowIcon className="h-8 w-8" />, title: 'Финансы прозрачны', text: 'Баланс, эскроу, инвойсы, вывод и чеки разделены по статусам.' },
+  { icon: <EscrowIcon className="h-8 w-8" />, title: 'Финансы прозрачны', text: 'Баланс, эскроу, счета, чеки и вывод разделены по статусам.' },
   { icon: <CodeIcon className="h-8 w-8" />, title: 'Профили работают на доверие', text: 'Навыки, портфолио, качество профиля и история заказов помогают выбрать быстрее.' },
   { icon: <ChatIcon className="h-8 w-8" />, title: 'Каждый диалог привязан к заказу', text: 'Заказчик видит, с кем говорит, по какой задаче и какой следующий шаг нужен.' },
 ];
@@ -161,7 +161,7 @@ export default async function HomePage() {
                 Найдите исполнителя и доведите заказ до оплаты в одном месте
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-8 text-stone-600">
-                TaskHunt соединяет поиск, отклики, чат, инвойсы, статусы заказа и эскроу. Заказчик видит понятный процесс, исполнитель понимает условия до старта.
+                TaskHunt соединяет поиск, отклики, чат, счета, чеки, статусы заказа и эскроу. Заказчик видит понятный процесс, исполнитель понимает условия до старта.
               </p>
 
               <form action="/search" method="GET" className="mt-7 rounded-[1.65rem] border border-stone-200 bg-white p-2 shadow-xl shadow-stone-200/70">
@@ -209,7 +209,7 @@ export default async function HomePage() {
               <div className="mt-5 grid gap-2">
                 {[
                   ['Отклики', '3 кандидата', 'bg-white/80'],
-                  ['Инвойс', '$820 к оплате', 'bg-card-sage/85'],
+                  ['Счёт', '$820 к оплате', 'bg-card-sage/85'],
                   ['Статус', 'на согласовании', 'bg-white/80'],
                 ].map(([label, value, tone]) => (
                   <div key={label} className={`flex items-center justify-between gap-3 rounded-[1.15rem] px-3 py-2.5 ${tone}`}>
@@ -252,7 +252,7 @@ export default async function HomePage() {
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand">Для заказчика</p>
                 <h2 className="mt-2 font-serif text-3xl text-stone-950">Разместить задачу и выбрать исполнителя</h2>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-stone-600">
-                  Создайте понятный бриф, сравните отклики, откройте чат с кандидатами и зафиксируйте оплату инвойсом.
+                  Создайте понятный бриф, сравните отклики, откройте чат с кандидатами и зафиксируйте оплату счётом.
                 </p>
               </div>
               <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[1.7rem] bg-white/72">

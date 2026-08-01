@@ -16,7 +16,7 @@ interface AuthShellProps {
 
 const TRUST_POINTS = [
   { icon: <BalanceEscrowIcon className="h-6 w-6" />, label: 'Эскроу защищает бюджет до приёмки' },
-  { icon: <BalanceMainIcon className="h-6 w-6" />, label: 'Инвойсы, чат и выплаты в одном контуре' },
+  { icon: <BalanceMainIcon className="h-6 w-6" />, label: 'Счета, чеки, чат и выплаты в одном контуре' },
 ];
 
 const ACTIVITY_ITEMS = [
@@ -30,7 +30,7 @@ export function AuthShell({
   description,
   children,
   sideTitle = 'Работайте как на большой job-платформе, но с безопасной сделкой',
-  sideDescription = 'TaskHunt соединяет поиск заказов, профили специалистов, чат, этапы, инвойсы и крипто-эскроу в одном спокойном рабочем процессе.',
+  sideDescription = 'TaskHunt соединяет поиск заказов, профили специалистов, чат, этапы, счета, чеки и крипто-эскроу в одном спокойном рабочем процессе.',
 }: AuthShellProps) {
   return (
     <main className="auth-page min-h-screen px-2 py-1 sm:px-4 sm:py-2">

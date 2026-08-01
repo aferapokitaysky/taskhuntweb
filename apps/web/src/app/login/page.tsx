@@ -64,7 +64,7 @@ export default function LoginPage() {
     <AuthShell
       eyebrow="Вход в рабочее пространство"
       title="Продолжайте сделки без потери контекста"
-      description="Заказы, отклики, инвойсы, уведомления и выплаты ждут в личном кабинете. Если включена 2FA, попросим код на следующем шаге."
+      description="Заказы, отклики, счета, чеки, уведомления и выплаты ждут в личном кабинете. Если включена 2FA, попросим код на следующем шаге."
     >
       {totpToken ? (
         <form onSubmit={handleVerifyTotp} className="flex w-full flex-col gap-3">
