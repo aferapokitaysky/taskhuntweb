@@ -23,6 +23,7 @@ describe('OrdersService', () => {
       },
       bid: {
         create: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
@@ -51,6 +52,7 @@ describe('OrdersService', () => {
       },
       notification: {
         create: jest.fn(),
+        createMany: jest.fn(),
       },
       $transaction: jest.fn(async (cb: any) => cb(prisma)),
     };
@@ -261,6 +263,7 @@ describe('OrdersService', () => {
         id: 'order-1',
         clientId: 'client-1',
         status: 'OPEN',
+        title: 'Landing page redesign',
       });
       prisma.bid.findUnique.mockResolvedValue({
         id: 'bid-1',
@@ -268,6 +271,10 @@ describe('OrdersService', () => {
         freelancerId: 'freelancer-1',
         amount: '150.00',
       });
+      prisma.bid.findMany.mockResolvedValue([
+        { id: 'bid-2', freelancerId: 'freelancer-2' },
+        { id: 'bid-3', freelancerId: 'freelancer-3' },
+      ]);
       prisma.order.update.mockResolvedValue({
         id: 'order-1',
         status: 'IN_PROGRESS',
@@ -288,6 +295,34 @@ describe('OrdersService', () => {
         where: { orderId_freelancerId: { orderId: 'order-1', freelancerId: 'freelancer-1' } },
         create: { orderId: 'order-1', freelancerId: 'freelancer-1' },
         update: {},
+      });
+      expect(prisma.notification.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            userId: 'freelancer-2',
+            title: 'Отклик закрыт',
+            message: 'Заказчик выбрал другого исполнителя по заказу «Landing page redesign». Ваш отклик закрыт автоматически.',
+            eventName: 'BidRejected',
+            metadata: {
+              orderId: 'order-1',
+              bidId: 'bid-2',
+              acceptedBidId: 'bid-1',
+              href: '/orders/order-1',
+            },
+          },
+          {
+            userId: 'freelancer-3',
+            title: 'Отклик закрыт',
+            message: 'Заказчик выбрал другого исполнителя по заказу «Landing page redesign». Ваш отклик закрыт автоматически.',
+            eventName: 'BidRejected',
+            metadata: {
+              orderId: 'order-1',
+              bidId: 'bid-3',
+              acceptedBidId: 'bid-1',
+              href: '/orders/order-1',
+            },
+          },
+        ],
       });
       expect(eventBus.publish).toHaveBeenCalledWith(
         DomainEventName.BidAccepted,

@@ -533,6 +533,10 @@ export class OrdersService {
     if (!bid || bid.orderId !== orderId) throw new NotFoundException('Bid not found');
 
     const result = await this.prisma.$transaction(async (tx) => {
+      const rejectedBids = await tx.bid.findMany({
+        where: { orderId, id: { not: bidId }, status: 'PENDING' },
+        select: { id: true, freelancerId: true },
+      });
       await tx.bid.update({ where: { id: bidId }, data: { status: 'ACCEPTED' } });
       await tx.bid.updateMany({
         where: { orderId, id: { not: bidId }, status: 'PENDING' },
@@ -548,6 +552,22 @@ export class OrdersService {
         create: { orderId, freelancerId: bid.freelancerId },
         update: {},
       });
+      if (rejectedBids.length > 0) {
+        await tx.notification.createMany({
+          data: rejectedBids.map((rejectedBid) => ({
+            userId: rejectedBid.freelancerId,
+            title: 'Отклик закрыт',
+            message: `Заказчик выбрал другого исполнителя по заказу «${order.title}». Ваш отклик закрыт автоматически.`,
+            eventName: 'BidRejected',
+            metadata: {
+              orderId,
+              bidId: rejectedBid.id,
+              acceptedBidId: bidId,
+              href: `/orders/${orderId}`,
+            },
+          })),
+        });
+      }
       return updatedOrder;
     });
 
