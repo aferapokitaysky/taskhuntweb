@@ -1,0 +1,175 @@
+import { DomainEventName } from '@taskhunt/shared-types';
+import { NotificationsEventsListener } from '../notifications-events.listener';
+
+function event<TName extends DomainEventName, TPayload>(name: TName, payload: TPayload) {
+  return {
+    name,
+    occurredAt: new Date('2026-08-01T12:00:00.000Z').toISOString(),
+    payload,
+  } as any;
+}
+
+describe('NotificationsEventsListener', () => {
+  let prisma: any;
+  let listener: NotificationsEventsListener;
+
+  beforeEach(() => {
+    prisma = {
+      order: { findUnique: jest.fn() },
+      invoice: { findUnique: jest.fn() },
+      user: { findUnique: jest.fn() },
+      notification: { create: jest.fn().mockResolvedValue({ id: 'notification-1' }) },
+    };
+    listener = new NotificationsEventsListener(prisma);
+  });
+
+  it('уведомление о новом отклике ведёт заказчика в нужный заказ с bid/freelancer metadata', async () => {
+    prisma.order.findUnique.mockResolvedValue({ id: 'order-1', title: 'Landing page', clientId: 'client-1' });
+
+    await listener.handleBidSubmitted(
+      event(DomainEventName.BidSubmitted, {
+        bidId: 'bid-1',
+        orderId: 'order-1',
+        freelancerId: 'freelancer-1',
+        amount: 800,
+      }),
+    );
+
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'client-1',
+        title: 'Новый отклик',
+        eventName: DomainEventName.BidSubmitted,
+        metadata: {
+          orderId: 'order-1',
+          bidId: 'bid-1',
+          freelancerId: 'freelancer-1',
+          href: '/orders/order-1',
+        },
+      }),
+    });
+  });
+
+  it('уведомление о выставленном счёте ведёт плательщика сразу в чат по заказу', async () => {
+    prisma.invoice.findUnique.mockResolvedValue({
+      id: 'invoice-1',
+      orderId: 'order-1',
+      issuedById: 'freelancer-1',
+      order: { id: 'order-1', title: 'Landing page' },
+    });
+    prisma.user.findUnique.mockResolvedValue({ id: 'freelancer-1', email: 'pro@test.dev', profile: { displayName: 'Pro Designer' } });
+
+    await listener.handleInvoiceIssued(
+      event(DomainEventName.InvoiceIssued, {
+        invoiceId: 'invoice-1',
+        orderId: 'order-1',
+        payerId: 'client-1',
+        amount: 500,
+        currency: 'USD',
+      }),
+    );
+
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'client-1',
+        title: 'Вам выставили счёт',
+        eventName: DomainEventName.InvoiceIssued,
+        metadata: {
+          orderId: 'order-1',
+          invoiceId: 'invoice-1',
+          freelancerId: 'freelancer-1',
+          href: '/chats?orderId=order-1&freelancerId=freelancer-1',
+        },
+      }),
+    });
+  });
+
+  it('уведомление об оплате счёта ведёт фрилансера в тот же рабочий чат', async () => {
+    prisma.invoice.findUnique.mockResolvedValue({ id: 'invoice-1', issuedById: 'freelancer-1' });
+
+    await listener.handleInvoicePaid(
+      event(DomainEventName.InvoicePaid, {
+        invoiceId: 'invoice-1',
+        orderId: 'order-1',
+        payerId: 'client-1',
+        freelancerId: 'freelancer-1',
+        amount: 500,
+        currency: 'USD',
+      }),
+    );
+
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'freelancer-1',
+        title: 'Счёт оплачен',
+        eventName: DomainEventName.InvoicePaid,
+        metadata: {
+          orderId: 'order-1',
+          invoiceId: 'invoice-1',
+          payerId: 'client-1',
+          href: '/chats?orderId=order-1&freelancerId=freelancer-1',
+        },
+      }),
+    });
+  });
+
+  it('уведомление о сдаче работы ведёт заказчика в заказ на проверку результата', async () => {
+    prisma.order.findUnique.mockResolvedValue({ id: 'order-1', title: 'Landing page', clientId: 'client-1' });
+
+    await listener.handleWorkSubmitted(
+      event(DomainEventName.WorkSubmitted, {
+        orderId: 'order-1',
+        deliveryId: 'delivery-1',
+        submittedById: 'freelancer-1',
+        clientId: 'client-1',
+      }),
+    );
+
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'client-1',
+        title: 'Работа сдана',
+        eventName: DomainEventName.WorkSubmitted,
+        metadata: {
+          orderId: 'order-1',
+          deliveryId: 'delivery-1',
+          submittedById: 'freelancer-1',
+          href: '/orders/order-1',
+        },
+      }),
+    });
+  });
+
+  it('уведомление о споре уходит всем участникам кроме инициатора и ведёт в заказ', async () => {
+    prisma.order.findUnique.mockResolvedValue({
+      id: 'order-1',
+      title: 'Landing page',
+      clientId: 'client-1',
+      bids: [{ freelancerId: 'freelancer-1' }],
+    });
+
+    await listener.handleDisputeOpened(
+      event(DomainEventName.DisputeOpened, {
+        disputeId: 'dispute-1',
+        orderId: 'order-1',
+        openedById: 'client-1',
+        reason: 'Нужна проверка результата',
+      }),
+    );
+
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1);
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'freelancer-1',
+        title: 'Открыт спор',
+        eventName: DomainEventName.DisputeOpened,
+        metadata: {
+          orderId: 'order-1',
+          disputeId: 'dispute-1',
+          openedById: 'client-1',
+          href: '/orders/order-1',
+        },
+      }),
+    });
+  });
+});
