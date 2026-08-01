@@ -123,11 +123,11 @@ export default async function HomePage() {
       {/* eslint-disable-next-line @next/next/no-danger */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <header className="relative z-20 mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-5">
+      <header className="relative z-20 mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-5 sm:gap-4">
         <Link href="/" className="shrink-0 transition-transform hover:scale-105">
           <Logo withWordmark className="h-12" />
         </Link>
-        <nav className="hidden items-center gap-1 rounded-full border border-stone-100 bg-white/72 p-1 text-sm font-bold text-stone-600 shadow-sm backdrop-blur md:flex">
+        <nav className="hidden items-center gap-1 rounded-full border border-stone-100 bg-white/72 p-1 text-sm font-bold text-stone-600 shadow-sm backdrop-blur lg:flex">
           <Link href="/categories" className="rounded-full px-3 py-2 hover:bg-card-sand hover:text-stone-950">
             Категории
           </Link>
@@ -141,11 +141,11 @@ export default async function HomePage() {
             Поддержка
           </Link>
         </nav>
-        <div className="flex items-center gap-2">
-          <Link href="/login" className="secondary-action px-4 py-2 text-sm">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <Link href="/login" className="secondary-action flex-1 justify-center px-3 py-2 text-sm sm:flex-none sm:px-4">
             Войти
           </Link>
-          <Link href="/register?role=CLIENT" className="primary-action px-4 py-2 text-sm">
+          <Link href="/register?role=CLIENT" className="primary-action flex-1 justify-center px-3 py-2 text-sm sm:flex-none sm:px-4">
             Разместить заказ
           </Link>
         </div>
