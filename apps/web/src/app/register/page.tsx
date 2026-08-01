@@ -80,12 +80,12 @@ function RegisterForm() {
       description="Выберите роль, заполните три поля и переходите к короткой настройке профиля. Роль можно сменить до отправки формы."
       sideTitle="Два сценария в одной системе: нанимайте и выполняйте безопасно"
     >
-      <div className="mb-2 grid gap-2 sm:mb-3 sm:grid-cols-2">
+      <div className="mb-2 grid gap-2 sm:mb-3">
         <button
           type="button"
           onClick={() => setRole('CLIENT')}
           aria-pressed={role === 'CLIENT'}
-          className={`interactive-card group flex min-h-[64px] items-center gap-2 rounded-[1.15rem] bg-card-sand p-2 text-left sm:min-h-[92px] sm:gap-3 sm:rounded-[1.25rem] sm:p-3 ${
+          className={`interactive-card group flex min-h-[64px] w-full items-center gap-2 rounded-[1.15rem] bg-card-sand p-2.5 text-left sm:min-h-[78px] sm:gap-3 sm:rounded-[1.25rem] sm:p-3 ${
             role === 'CLIENT' ? 'ring-2 ring-brand ring-offset-2 ring-offset-cream' : ''
           }`}
         >
@@ -103,7 +103,7 @@ function RegisterForm() {
           type="button"
           onClick={() => setRole('FREELANCER')}
           aria-pressed={role === 'FREELANCER'}
-          className={`interactive-card group flex min-h-[64px] items-center gap-2 rounded-[1.15rem] bg-card-sage p-2 text-left sm:min-h-[92px] sm:gap-3 sm:rounded-[1.25rem] sm:p-3 ${
+          className={`interactive-card group flex min-h-[64px] w-full items-center gap-2 rounded-[1.15rem] bg-card-sage p-2.5 text-left sm:min-h-[78px] sm:gap-3 sm:rounded-[1.25rem] sm:p-3 ${
             role === 'FREELANCER' ? 'ring-2 ring-brand ring-offset-2 ring-offset-cream' : ''
           }`}
         >
