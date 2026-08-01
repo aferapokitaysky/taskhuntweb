@@ -137,4 +137,16 @@ export class WalletController {
   getInvoicePaymentDetails(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.invoiceService.getPaymentDetails(user.id, id);
   }
+
+  @Get('invoices/:id/receipt.pdf')
+  async getInvoiceReceiptPdf(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.invoiceService.generateInvoiceReceiptPdf(user.id, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="invoice-${id}.pdf"`);
+    res.send(pdf);
+  }
 }

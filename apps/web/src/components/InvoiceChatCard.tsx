@@ -20,11 +20,13 @@ export function InvoiceChatCard({
   own,
   canPay,
   onPayIntent,
+  onDownloadPdf,
 }: {
   invoice: Invoice;
   own?: boolean;
   canPay?: boolean;
   onPayIntent?: (invoice: Invoice) => void;
+  onDownloadPdf?: (invoice: Invoice) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -126,6 +128,11 @@ export function InvoiceChatCard({
           <button type="button" onClick={() => onPayIntent?.(invoice)} className="primary-action px-4 py-2.5 text-sm">
             Оплатить счёт
           </button>
+          {onDownloadPdf && (
+            <button type="button" onClick={() => onDownloadPdf(invoice)} className="secondary-action w-full justify-center px-4 py-2 text-sm">
+              Скачать PDF-счёт
+            </button>
+          )}
           <p className="flex gap-2 text-xs leading-5 text-stone-500">
             <BalanceEscrowIcon className="h-5 w-5 shrink-0" />
             После оплаты провайдер подтвердит перевод, а сумма уйдёт в эскроу.
@@ -133,8 +140,13 @@ export function InvoiceChatCard({
         </div>
       )}
       {pending && !canPay && (
-        <div className="border-t border-stone-100 bg-white/70 p-3 text-xs leading-5 text-stone-500 dark:border-stone-700 dark:bg-stone-900">
-          Счёт отправлен заказчику. Когда платёж подтвердится, здесь появится чек.
+        <div className="grid gap-2 border-t border-stone-100 bg-white/70 p-3 text-xs leading-5 text-stone-500 dark:border-stone-700 dark:bg-stone-900">
+          <p>Счёт отправлен заказчику. Когда платёж подтвердится, здесь появится чек.</p>
+          {onDownloadPdf && (
+            <button type="button" onClick={() => onDownloadPdf(invoice)} className="secondary-action w-full justify-center px-4 py-2 text-sm">
+              Скачать PDF-счёт
+            </button>
+          )}
         </div>
       )}
       {paid && (
@@ -156,6 +168,11 @@ export function InvoiceChatCard({
           >
             {receiptAccepted ? 'Чек принят' : 'Принять чек'}
           </button>
+          {onDownloadPdf && (
+            <button type="button" onClick={() => onDownloadPdf(invoice)} className="secondary-action w-full justify-center px-4 py-2 text-sm">
+              Скачать PDF-чек
+            </button>
+          )}
         </div>
       )}
       {cancelled && (

@@ -12,7 +12,7 @@ import { InvoiceChatCard } from '@/components/InvoiceChatCard';
 import { PaperclipIcon } from '@/components/icons/PaperclipIcon';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 import { Mascot } from '@/components/Mascot';
-import { api, API_URL } from '@/lib/api';
+import { api, API_URL, downloadFile } from '@/lib/api';
 import type { ChatInboxThread, ChatMessage, Invoice, InvoicePaymentDetails, User } from '@/lib/types';
 import { money } from '@/lib/types';
 
@@ -160,6 +160,27 @@ function ChatsContent() {
       setPaymentDetailsLoading(false);
     }
   }
+
+  async function downloadInvoicePdf(invoice: Invoice) {
+    setError(null);
+    try {
+      const suffix = invoice.status === 'PAID' ? 'receipt' : 'invoice';
+      await downloadFile(`/wallet/invoices/${invoice.id}/receipt.pdf`, `${suffix}-TH-${invoice.id.slice(0, 8).toUpperCase()}.pdf`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось скачать PDF-документ');
+    }
+  }
+
+  useEffect(() => {
+    if (!active) return;
+    if (!messages.some((message) => message.invoice?.status === 'PENDING')) return;
+    const interval = setInterval(() => {
+      api<ChatMessage[]>(`/orders/${active.orderId}/chat/messages?freelancerId=${active.freelancerId}`)
+        .then(setMessages)
+        .catch(() => undefined);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [active?.orderId, active?.freelancerId, messages]);
 
   function paymentDescription() {
     if (!paymentConfirmInvoice) return '';
@@ -337,6 +358,7 @@ function ChatsContent() {
                               own={own}
                               canPay={activeThread?.role === 'CLIENT' && !own}
                               onPayIntent={openPaymentConfirm}
+                              onDownloadPdf={downloadInvoicePdf}
                             />
                           ) : (
                             <>

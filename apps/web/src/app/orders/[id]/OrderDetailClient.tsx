@@ -506,6 +506,16 @@ export default function OrderDetailClient() {
     }
   }
 
+  async function downloadInvoicePdf(invoice: Invoice) {
+    setError(null);
+    try {
+      const suffix = invoice.status === 'PAID' ? 'receipt' : 'invoice';
+      await downloadFile(`/wallet/invoices/${invoice.id}/receipt.pdf`, `${suffix}-TH-${invoice.id.slice(0, 8).toUpperCase()}.pdf`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось скачать PDF-документ');
+    }
+  }
+
   async function issueInvoice() {
     setError(null);
     setIssueInvoiceConfirmOpen(false);
@@ -526,6 +536,15 @@ export default function OrderDetailClient() {
       setError(err instanceof Error ? err.message : 'Не удалось выставить счёт');
     }
   }
+
+  useEffect(() => {
+    if (!isClient && !isFreelancer) return;
+    if (!orderInvoices.some((invoice) => invoice.status === 'PENDING')) return;
+    const interval = setInterval(() => {
+      void refreshOrderInvoices().catch(() => undefined);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [isClient, isFreelancer, orderInvoices]);
 
   async function openPaymentConfirm(invoice: Invoice) {
     setPaymentConfirmInvoice(invoice);
@@ -1222,8 +1241,11 @@ export default function OrderDetailClient() {
                       >
                         Открыть в чате
                       </button>
+                      <button type="button" onClick={() => void downloadInvoicePdf(invoice)} className="secondary-action px-4 py-2 text-sm font-semibold">
+                        {paid ? 'PDF-чек' : 'PDF-счёт'}
+                      </button>
                       <span className="rounded-full bg-stone-100 px-3 py-2 text-xs font-medium text-stone-500">
-                        PDF-чек появится в кошельке после ledger-записи
+                        Статус обновляется автоматически
                       </span>
                     </div>
                   </div>
@@ -1308,7 +1330,13 @@ export default function OrderDetailClient() {
                         <div className={`max-w-[75%] rounded-[1.5rem] p-3 shadow-sm ${isOwn ? 'bg-brand text-white' : 'bg-white text-stone-900'}`}>
                           <p className={`text-xs ${isOwn ? 'text-white/70' : 'text-stone-500'}`}>{name}</p>
                           {message.type === 'INVOICE' && message.invoice ? (
-                            <InvoiceChatCard invoice={message.invoice} own={isOwn} canPay={isClient && !isOwn} onPayIntent={openPaymentConfirm} />
+                            <InvoiceChatCard
+                              invoice={message.invoice}
+                              own={isOwn}
+                              canPay={isClient && !isOwn}
+                              onPayIntent={openPaymentConfirm}
+                              onDownloadPdf={downloadInvoicePdf}
+                            />
                           ) : message.type === 'FILE' ? (
                             <div className="mt-2 rounded-[1.15rem] bg-white/12 p-3">
                               <div className="flex items-center gap-2">
