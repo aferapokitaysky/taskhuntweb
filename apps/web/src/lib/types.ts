@@ -220,6 +220,7 @@ export interface ChatThreadSummary {
   hasThread: boolean;
   freelancer?: User & { profile?: Profile | null };
   lastMessage?: ChatMessage | null;
+  unreadCount?: number;
 }
 
 export interface ChatInboxThread {
@@ -231,6 +232,7 @@ export interface ChatInboxThread {
   order: Order;
   participant?: User & { profile?: Profile | null };
   lastMessage?: ChatMessage | null;
+  unreadCount?: number;
 }
 
 export interface SavedPayoutAddress {

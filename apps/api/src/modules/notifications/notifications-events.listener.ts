@@ -5,9 +5,12 @@ import {
   BidAcceptedEvent,
   DisputeOpenedEvent,
   DomainEventName,
+  EscrowLockedEvent,
   EscrowReleasedEvent,
   InvoiceIssuedEvent,
   InvoicePaidEvent,
+  DeadlineExtensionRequestedEvent,
+  DeadlineExtensionRespondedEvent,
   OrderInviteCreatedEvent,
   OrderInviteRespondedEvent,
   WorkSubmittedEvent,
@@ -133,12 +136,33 @@ export class NotificationsEventsListener {
     }
   }
 
+  @OnEvent(DomainEventName.EscrowLocked)
+  async handleEscrowLocked(event: EscrowLockedEvent) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: event.payload.orderId },
+      include: { bids: { where: { status: 'ACCEPTED' } } },
+    });
+    const freelancerId = order?.bids[0]?.freelancerId;
+    if (!order || !freelancerId) return;
+    await this.createNotification({
+      userId: freelancerId,
+      title: 'Эскроу открыт',
+      message: `Заказчик внёс ${event.payload.amount} ${order.currency} в эскроу по заказу "${order.title}". Можно спокойно продолжать работу.`,
+      eventName: DomainEventName.EscrowLocked,
+      metadata: {
+        orderId: event.payload.orderId,
+        href: `/orders/${event.payload.orderId}#order-chat`,
+      },
+    });
+  }
+
   @OnEvent(DomainEventName.EscrowReleased)
   async handleEscrowReleased(event: EscrowReleasedEvent) {
+    const order = await this.prisma.order.findUnique({ where: { id: event.payload.orderId } });
     await this.createNotification({
       userId: event.payload.toFreelancerId,
       title: 'Эскроу выплачен',
-      message: `Средства в размере $${event.payload.amount} зачислены на ваш баланс.`,
+      message: `Средства ${event.payload.amount} ${order?.currency ?? 'USD'} зачислены на доступный баланс.`,
       eventName: DomainEventName.EscrowReleased,
       metadata: {
         orderId: event.payload.orderId,
@@ -195,6 +219,40 @@ export class NotificationsEventsListener {
         }
       }
     }
+  }
+
+  @OnEvent(DomainEventName.DeadlineExtensionRequested)
+  async handleDeadlineExtensionRequested(event: DeadlineExtensionRequestedEvent) {
+    const order = await this.prisma.order.findUnique({ where: { id: event.payload.orderId } });
+    await this.createNotification({
+      userId: event.payload.clientId,
+      title: 'Запрошено продление срока',
+      message: `Исполнитель просит продлить срок по заказу "${order?.title ?? 'заказ'}" до ${new Date(event.payload.newDeadline).toLocaleDateString('ru-RU')}.`,
+      eventName: DomainEventName.DeadlineExtensionRequested,
+      metadata: {
+        orderId: event.payload.orderId,
+        requestId: event.payload.requestId,
+        freelancerId: event.payload.freelancerId,
+        href: `/orders/${event.payload.orderId}`,
+      },
+    });
+  }
+
+  @OnEvent(DomainEventName.DeadlineExtensionResponded)
+  async handleDeadlineExtensionResponded(event: DeadlineExtensionRespondedEvent) {
+    const order = await this.prisma.order.findUnique({ where: { id: event.payload.orderId } });
+    await this.createNotification({
+      userId: event.payload.freelancerId,
+      title: event.payload.approved ? 'Продление принято' : 'Продление отклонено',
+      message: `Заказчик ${event.payload.approved ? 'принял' : 'отклонил'} продление срока по заказу "${order?.title ?? 'заказ'}".`,
+      eventName: DomainEventName.DeadlineExtensionResponded,
+      metadata: {
+        orderId: event.payload.orderId,
+        requestId: event.payload.requestId,
+        clientId: event.payload.clientId,
+        href: `/orders/${event.payload.orderId}`,
+      },
+    });
   }
 
   private async createNotification(data: {

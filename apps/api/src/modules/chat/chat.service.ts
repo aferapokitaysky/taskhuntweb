@@ -58,11 +58,24 @@ export class ChatService {
       },
     });
     const threadByFreelancer = new Map(existingThreads.map((t) => [t.freelancerId, t]));
+    const unreadByThreadId = await this.getUnreadCountByThreadId(
+      userId,
+      existingThreads.map((thread) => thread.id),
+    );
 
     if (!isClient) {
       const own = threadByFreelancer.get(userId);
       return own
-        ? [{ freelancerId: userId, threadId: own.id, freelancer: own.freelancer, lastMessage: own.messages[0] ?? null, hasThread: true }]
+        ? [
+            {
+              freelancerId: userId,
+              threadId: own.id,
+              freelancer: own.freelancer,
+              lastMessage: own.messages[0] ?? null,
+              hasThread: true,
+              unreadCount: unreadByThreadId.get(own.id) ?? 0,
+            },
+          ]
         : [];
     }
 
@@ -75,6 +88,7 @@ export class ChatService {
         freelancer: thread?.freelancer ?? bid.freelancer,
         lastMessage: thread?.messages[0] ?? null,
         hasThread: Boolean(thread),
+        unreadCount: thread ? (unreadByThreadId.get(thread.id) ?? 0) : 0,
       };
     });
   }
@@ -102,6 +116,10 @@ export class ChatService {
         },
       },
     });
+    const unreadByThreadId = await this.getUnreadCountByThreadId(
+      userId,
+      threads.map((thread) => thread.id),
+    );
 
     return threads.map((thread) => {
       const isClientSide = thread.order.clientId === userId;
@@ -114,6 +132,7 @@ export class ChatService {
         participant,
         role: isClientSide ? 'CLIENT' : 'FREELANCER',
         lastMessage: thread.messages[0] ?? null,
+        unreadCount: unreadByThreadId.get(thread.id) ?? 0,
         createdAt: thread.createdAt,
       };
     });
@@ -121,11 +140,13 @@ export class ChatService {
 
   async listMessages(orderId: string, freelancerId: string, userId: string) {
     const thread = await this.getOrCreateThread(orderId, freelancerId, userId);
-    return this.prisma.chatMessage.findMany({
+    const messages = await this.prisma.chatMessage.findMany({
       where: { threadId: thread.id, deletedAt: null },
       orderBy: { createdAt: 'asc' },
       include: { sender: { include: { profile: true } }, invoice: true, file: true },
     });
+    await this.markThreadRead(thread.id, userId);
+    return messages;
   }
 
   async sendTextMessage(orderId: string, freelancerId: string, senderId: string, body: string) {
@@ -149,6 +170,11 @@ export class ChatService {
     return this.prisma.chatMessage.update({ where: { id: messageId }, data: { deletedAt: new Date() } });
   }
 
+  async markThreadReadByOrder(orderId: string, freelancerId: string, userId: string) {
+    const thread = await this.getOrCreateThread(orderId, freelancerId, userId);
+    return this.markThreadRead(thread.id, userId);
+  }
+
   /**
    * Вызывается ChatEventsListener в ответ на InvoiceIssued — счёт,
    * выставленный фрилансером, появляется в его треде с заказчиком.
@@ -159,5 +185,40 @@ export class ChatService {
     return this.prisma.chatMessage.create({
       data: { threadId: thread.id, senderId: freelancerId, type: 'INVOICE', invoiceId },
     });
+  }
+
+  private async markThreadRead(threadId: string, userId: string) {
+    return this.prisma.chatThreadRead.upsert({
+      where: { threadId_userId: { threadId, userId } },
+      create: { threadId, userId, lastReadAt: new Date() },
+      update: { lastReadAt: new Date() },
+    });
+  }
+
+  private async getUnreadCountByThreadId(userId: string, threadIds: string[]) {
+    const unreadByThreadId = new Map<string, number>();
+    if (threadIds.length === 0) return unreadByThreadId;
+
+    const reads = await this.prisma.chatThreadRead.findMany({
+      where: { userId, threadId: { in: threadIds } },
+    });
+    const readAtByThreadId = new Map(reads.map((read) => [read.threadId, read.lastReadAt]));
+
+    const incomingMessages = await this.prisma.chatMessage.findMany({
+      where: {
+        threadId: { in: threadIds },
+        senderId: { not: userId },
+        deletedAt: null,
+      },
+      select: { threadId: true, createdAt: true },
+    });
+
+    for (const message of incomingMessages) {
+      const lastReadAt = readAtByThreadId.get(message.threadId);
+      if (lastReadAt && message.createdAt <= lastReadAt) continue;
+      unreadByThreadId.set(message.threadId, (unreadByThreadId.get(message.threadId) ?? 0) + 1);
+    }
+
+    return unreadByThreadId;
   }
 }

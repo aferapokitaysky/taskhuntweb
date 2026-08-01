@@ -7,7 +7,9 @@ import { AppHeader } from '@/components/AppHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { FileUpload, type UploadedFile } from '@/components/FileUpload';
 import { InvoiceChatCard } from '@/components/InvoiceChatCard';
+import { PaperclipIcon } from '@/components/icons/PaperclipIcon';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 import { Mascot } from '@/components/Mascot';
 import { api, API_URL } from '@/lib/api';
@@ -15,6 +17,12 @@ import type { ChatInboxThread, ChatMessage, Invoice, InvoicePaymentDetails, User
 import { money } from '@/lib/types';
 
 type ActiveChat = { orderId: string; freelancerId: string; threadId?: string | null };
+
+const QUICK_CHAT_TEMPLATES = [
+  'Привет! Уточните, пожалуйста, один момент по задаче.',
+  'Готов двигаться дальше, подтверждаю сроки и следующий шаг.',
+  'Посмотрите, пожалуйста, счёт и реквизиты в чате.',
+];
 
 export default function ChatsPage() {
   return (
@@ -31,9 +39,11 @@ function ChatsContent() {
   const [active, setActive] = useState<ActiveChat | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [body, setBody] = useState('');
+  const [chatFilter, setChatFilter] = useState<'ALL' | 'INVOICES'>('ALL');
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendingFileId, setSendingFileId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paymentConfirmInvoice, setPaymentConfirmInvoice] = useState<Invoice | null>(null);
   const [paymentDetailsLoading, setPaymentDetailsLoading] = useState(false);
@@ -75,7 +85,14 @@ function ChatsContent() {
     setMessagesLoading(true);
     api<ChatMessage[]>(`/orders/${active.orderId}/chat/messages?freelancerId=${active.freelancerId}`)
       .then(setMessages)
-      .then(() => loadInbox(false).catch(() => undefined))
+      .then(() => {
+        setThreads((current) =>
+          current.map((thread) =>
+            thread.orderId === active.orderId && thread.freelancerId === active.freelancerId ? { ...thread, unreadCount: 0 } : thread,
+          ),
+        );
+        return loadInbox(false).catch(() => undefined);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : 'Не удалось открыть чат'))
       .finally(() => setMessagesLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,6 +105,9 @@ function ChatsContent() {
   const participant = activeThread?.participant;
   const participantName = participant?.profile?.displayName ?? participant?.email ?? 'Собеседник';
   const canOpenFreelancerProfile = participant?.roles?.includes('FREELANCER') || activeThread?.role === 'CLIENT';
+  const invoiceCount = messages.filter((message) => message.type === 'INVOICE').length;
+  const visibleMessages = chatFilter === 'INVOICES' ? messages.filter((message) => message.type === 'INVOICE') : messages;
+  const totalUnreadCount = threads.reduce((sum, thread) => sum + (thread.unreadCount ?? 0), 0);
 
   async function sendMessage(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -107,6 +127,24 @@ function ChatsContent() {
       setError(err instanceof Error ? err.message : 'Не удалось отправить сообщение');
     } finally {
       setSending(false);
+    }
+  }
+
+  async function sendChatFile(file: UploadedFile) {
+    if (!active) return;
+    setSendingFileId(file.id);
+    setError(null);
+    try {
+      const created = await api<ChatMessage>(`/orders/${active.orderId}/chat/messages/file?freelancerId=${active.freelancerId}`, {
+        method: 'POST',
+        body: JSON.stringify({ fileId: file.id, body: file.originalName }),
+      });
+      setMessages((current) => [...current, created]);
+      await loadInbox(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось отправить файл в чат');
+    } finally {
+      setSendingFileId(null);
     }
   }
 
@@ -158,7 +196,12 @@ function ChatsContent() {
         <aside className="premium-panel overflow-hidden rounded-[2.25rem] p-0">
           <div className="border-b border-stone-100 p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Inbox</p>
-            <h2 className="mt-1 font-serif text-2xl text-stone-950">Диалоги</h2>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <h2 className="font-serif text-2xl text-stone-950">Диалоги</h2>
+              {totalUnreadCount > 0 && (
+                <span className="rounded-full bg-brand px-3 py-1 text-xs font-bold text-white">{totalUnreadCount} новых</span>
+              )}
+            </div>
           </div>
           <div className="max-h-[620px] overflow-y-auto p-3">
             {loading && <p className="p-4 text-sm text-stone-500">Загружаем...</p>}
@@ -171,6 +214,7 @@ function ChatsContent() {
               const selected = thread.orderId === active?.orderId && thread.freelancerId === active?.freelancerId;
               const name = thread.participant?.profile?.displayName ?? thread.participant?.email ?? 'Собеседник';
               const preview = thread.lastMessage?.body || (thread.lastMessage?.type === 'INVOICE' ? 'Счёт в чате' : 'Сообщений пока нет');
+              const unread = thread.unreadCount ?? 0;
               return (
                 <button
                   key={thread.threadId}
@@ -184,8 +228,11 @@ function ChatsContent() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-semibold text-stone-950">{name}</span>
-                      <span className="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-500">
-                        {thread.role === 'CLIENT' ? 'Заказчик' : 'Фрилансер'}
+                      <span className="flex shrink-0 items-center gap-1">
+                        {unread > 0 && <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-white">{unread}</span>}
+                        <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-500">
+                          {thread.role === 'CLIENT' ? 'Заказчик' : 'Фрилансер'}
+                        </span>
                       </span>
                     </span>
                     <span className="mt-1 block line-clamp-1 text-xs font-medium text-stone-500">{thread.order.title}</span>
@@ -234,15 +281,46 @@ function ChatsContent() {
                     <span className="rounded-full bg-white/80 px-3 py-1.5">{activeThread.order.status}</span>
                   </div>
                 )}
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {[
+                    ['ALL', `Все ${messages.length}`],
+                    ['INVOICES', `Счета ${invoiceCount}`],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setChatFilter(value as 'ALL' | 'INVOICES')}
+                      className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                        chatFilter === value ? 'bg-brand text-white shadow-sm' : 'bg-white/80 text-stone-600 hover:bg-white'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  {QUICK_CHAT_TEMPLATES.map((template) => (
+                    <button
+                      key={template}
+                      type="button"
+                      onClick={() => setBody(template)}
+                      className="rounded-full bg-white/80 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:-translate-y-0.5 hover:bg-card-sand/70"
+                    >
+                      {template}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto bg-stone-50/70 p-4 md:p-6">
                 {messagesLoading && <p className="text-sm text-stone-500">Загружаем сообщения...</p>}
-                {!messagesLoading && messages.length === 0 && (
-                  <EmptyState icon={<ChatIcon />} title="Сообщений пока нет" description="Начните диалог с короткого сообщения по задаче." />
+                {!messagesLoading && visibleMessages.length === 0 && (
+                  <EmptyState
+                    icon={<ChatIcon />}
+                    title={chatFilter === 'INVOICES' ? 'Счетов пока нет' : 'Сообщений пока нет'}
+                    description={chatFilter === 'INVOICES' ? 'Когда в диалоге появится счёт или чек, он будет собран здесь.' : 'Начните диалог с короткого сообщения по задаче.'}
+                  />
                 )}
                 <div className="space-y-3">
-                  {messages.map((message) => {
+                  {visibleMessages.map((message) => {
                     const own = message.senderId === me?.id;
                     const name = message.sender?.profile?.displayName ?? message.sender?.email ?? 'Участник';
                     return (
@@ -261,7 +339,14 @@ function ChatsContent() {
                               onPayIntent={openPaymentConfirm}
                             />
                           ) : (
-                            <p className="whitespace-pre-wrap text-sm leading-6">{message.body}</p>
+                            <>
+                              {message.type === 'FILE' && (
+                                <span className={`mb-2 flex h-9 w-9 items-center justify-center rounded-[1rem] ${own ? 'bg-white/15' : 'bg-card-sand'}`}>
+                                  <PaperclipIcon className="h-5 w-5" />
+                                </span>
+                              )}
+                              <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.body}</p>
+                            </>
                           )}
                         </div>
                       </div>
@@ -271,7 +356,8 @@ function ChatsContent() {
               </div>
 
               <form onSubmit={sendMessage} className="border-t border-stone-100 bg-white/80 p-3 md:p-4">
-                <div className="flex gap-2 rounded-[1.75rem] bg-stone-50 p-2">
+                <div className="flex flex-wrap items-center gap-2 rounded-[1.75rem] bg-stone-50 p-2">
+                  <FileUpload onUploaded={(file) => void sendChatFile(file)} label={sendingFileId ? '...' : 'Файл'} />
                   <input
                     value={body}
                     onChange={(e) => setBody(e.target.value)}

@@ -80,6 +80,12 @@ function notificationMeta(eventName: string) {
   if (eventName.includes('DisputeOpened')) {
     return { href: '/support', label: 'Спор', tone: 'bg-card-rose text-stone-800', Icon: AlertIcon };
   }
+  if (eventName.includes('Support')) {
+    return { href: '/support', label: 'Поддержка', tone: 'bg-card-sage text-stone-800', Icon: MailCheckIcon };
+  }
+  if (eventName.includes('DeadlineExtension')) {
+    return { href: '/dashboard', label: 'Сроки', tone: 'bg-card-sand text-stone-800', Icon: RocketIcon };
+  }
   if (eventName.includes('OrderInvite')) {
     return { href: '/dashboard', label: 'Инвайт', tone: 'bg-card-sand text-stone-800', Icon: RocketIcon };
   }

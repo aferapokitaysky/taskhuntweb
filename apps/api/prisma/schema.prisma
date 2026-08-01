@@ -85,6 +85,7 @@ model User {
 
   sentChatMessages        ChatMessage[]    @relation("ChatSender")
   chatThreadsAsFreelancer ChatThread[]     @relation("ChatThreadFreelancer")
+  chatThreadReads         ChatThreadRead[]
   supportTickets          SupportTicket[]  @relation("TicketOwner")
   assignedTickets         SupportTicket[]  @relation("TicketAssignee")
   supportMessages         SupportMessage[]
@@ -636,10 +637,23 @@ model ChatThread {
   freelancerId String
   freelancer   User          @relation("ChatThreadFreelancer", fields: [freelancerId], references: [id])
   messages     ChatMessage[]
+  reads        ChatThreadRead[]
   createdAt    DateTime      @default(now())
 
   @@unique([orderId, freelancerId])
   @@map("chat_threads")
+}
+
+model ChatThreadRead {
+  threadId   String
+  thread     ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime   @default(now())
+
+  @@id([threadId, userId])
+  @@index([userId, lastReadAt])
+  @@map("chat_thread_reads")
 }
 
 enum ChatMessageType {

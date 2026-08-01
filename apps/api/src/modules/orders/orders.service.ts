@@ -857,6 +857,11 @@ export class OrdersService {
         title: 'Отклик отклонён',
         message: `Ваш отклик на заказ «${order.title}» отклонён.${reason ? ` Причина: ${reason}` : ''}`,
         eventName: 'BidRejected',
+        metadata: {
+          orderId,
+          bidId,
+          href: `/orders/${orderId}`,
+        },
       },
     });
 

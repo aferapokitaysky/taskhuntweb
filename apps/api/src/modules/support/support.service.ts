@@ -54,7 +54,7 @@ export class SupportService {
   }
 
   async addMessage(ticketId: string, senderId: string, isStaff: boolean, body: string, fileId?: string) {
-    await this.assertParticipant(ticketId, senderId, isStaff);
+    const ticket = await this.assertParticipant(ticketId, senderId, isStaff);
     const message = await this.prisma.supportMessage.create({
       data: { ticketId, senderId, body, fileId },
     });
@@ -62,6 +62,20 @@ export class SupportService {
       where: { id: ticketId },
       data: { status: isStaff ? 'PENDING' : 'OPEN', updatedAt: new Date() },
     });
+    if (isStaff && ticket.userId !== senderId) {
+      await this.prisma.notification.create({
+        data: {
+          userId: ticket.userId,
+          title: 'Поддержка ответила',
+          message: `По обращению "${ticket.subject}" появился новый ответ.`,
+          eventName: 'SupportMessageCreated',
+          metadata: {
+            ticketId,
+            href: `/support?ticketId=${ticketId}`,
+          },
+        },
+      });
+    }
     return message;
   }
 
@@ -73,6 +87,20 @@ export class SupportService {
   }
 
   async updateStatus(ticketId: string, status: 'OPEN' | 'PENDING' | 'RESOLVED' | 'CLOSED') {
-    return this.prisma.supportTicket.update({ where: { id: ticketId }, data: { status } });
+    const updated = await this.prisma.supportTicket.update({ where: { id: ticketId }, data: { status } });
+    await this.prisma.notification.create({
+      data: {
+        userId: updated.userId,
+        title: status === 'RESOLVED' || status === 'CLOSED' ? 'Обращение закрывается' : 'Статус поддержки изменён',
+        message: `Обращение "${updated.subject}" теперь в статусе ${status}.`,
+        eventName: 'SupportTicketStatusChanged',
+        metadata: {
+          ticketId,
+          status,
+          href: `/support?ticketId=${ticketId}`,
+        },
+      },
+    });
+    return updated;
   }
 }

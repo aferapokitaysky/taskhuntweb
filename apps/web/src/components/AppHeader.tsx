@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { ComponentType } from 'react';
 import { useEffect, useState } from 'react';
 import { api, API_URL } from '@/lib/api';
-import type { User } from '@/lib/types';
+import type { ChatInboxThread, User } from '@/lib/types';
 import { Logo } from './Logo';
 import { NotificationBell } from './NotificationBell';
 import { HeaderSearch } from './HeaderSearch';
@@ -43,11 +43,23 @@ const NAV_LINKS: NavLink[] = [
 export function AppHeader() {
   const pathname = usePathname();
   const [me, setMe] = useState<User | null>(null);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
 
   useEffect(() => {
     api<User>('/users/me')
       .then(setMe)
       .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    function loadChatUnread() {
+      api<ChatInboxThread[]>('/chat/threads')
+        .then((threads) => setChatUnreadCount(threads.reduce((sum, thread) => sum + (thread.unreadCount ?? 0), 0)))
+        .catch(() => undefined);
+    }
+    loadChatUnread();
+    const interval = setInterval(loadChatUnread, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const links: NavLink[] = [...NAV_LINKS, { href: '/admin', label: 'Admin', Icon: AdminNavIcon, staffOnly: true }].filter(
@@ -70,6 +82,7 @@ export function AppHeader() {
             {links.map((link) => {
               const active = pathname === link.href;
               const Icon = link.Icon;
+              const isChats = link.href === '/chats';
               return (
                 <Link
                   key={link.href}
@@ -83,6 +96,11 @@ export function AppHeader() {
                 >
                   <Icon className="h-5 w-5 shrink-0 transition group-hover:scale-105" />
                   <span className="app-nav-label whitespace-nowrap">{link.label}</span>
+                  {isChats && chatUnreadCount > 0 && (
+                    <span className="ml-0.5 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand px-1.5 text-[10px] font-bold leading-none text-white shadow-sm">
+                      {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}

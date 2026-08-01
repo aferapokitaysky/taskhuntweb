@@ -46,6 +46,15 @@ export class ChatController {
     return this.chatService.sendFileMessage(orderId, freelancerId ?? user.id, user.id, dto.fileId, dto.body);
   }
 
+  @Post('read')
+  markThreadRead(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('orderId') orderId: string,
+    @Query('freelancerId') freelancerId: string | undefined,
+  ) {
+    return this.chatService.markThreadReadByOrder(orderId, freelancerId ?? user.id, user.id);
+  }
+
   @Delete('messages/:messageId')
   deleteMessage(@CurrentUser() user: AuthenticatedUser, @Param('messageId') messageId: string) {
     return this.chatService.softDeleteMessage(messageId, user.id);
