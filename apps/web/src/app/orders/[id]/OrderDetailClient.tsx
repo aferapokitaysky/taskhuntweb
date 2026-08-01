@@ -148,6 +148,7 @@ export default function OrderDetailClient() {
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [invoiceDescription, setInvoiceDescription] = useState('');
   const [paymentAddress, setPaymentAddress] = useState<string | null>(null);
+  const [copiedInvoiceField, setCopiedInvoiceField] = useState<string | null>(null);
   const [issueInvoiceConfirmOpen, setIssueInvoiceConfirmOpen] = useState(false);
   const [paymentConfirmInvoice, setPaymentConfirmInvoice] = useState<Invoice | null>(null);
   const [paymentDetailsLoading, setPaymentDetailsLoading] = useState(false);
@@ -514,6 +515,15 @@ export default function OrderDetailClient() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось скачать PDF-документ');
     }
+  }
+
+  async function copyInvoiceValue(invoiceId: string, field: string, value: string) {
+    await navigator.clipboard?.writeText(value).catch(() => undefined);
+    const key = `${invoiceId}:${field}`;
+    setCopiedInvoiceField(key);
+    window.setTimeout(() => {
+      setCopiedInvoiceField((current) => (current === key ? null : current));
+    }, 1300);
   }
 
   async function issueInvoice() {
@@ -1195,6 +1205,7 @@ export default function OrderDetailClient() {
               const pending = invoice.status === 'PENDING';
               const paid = invoice.status === 'PAID';
               const payLine = invoice.payAddress ? `${invoice.payAmount ?? invoice.amount} ${invoice.payCurrency ?? invoice.currency}` : null;
+              const documentId = `TH-${invoice.id.slice(0, 8).toUpperCase()}`;
               return (
                 <article key={invoice.id} className="interactive-card rounded-[1.7rem] border border-stone-100 bg-white/78 p-4">
                   <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
@@ -1221,8 +1232,30 @@ export default function OrderDetailClient() {
                         </p>
                       )}
                       <div className="mt-3 grid gap-2 text-xs text-stone-500 sm:grid-cols-2">
-                        <p className="break-all rounded-[1rem] bg-stone-50 px-3 py-2 font-mono">TH-{invoice.id.slice(0, 8).toUpperCase()}</p>
-                        <p className="break-all rounded-[1rem] bg-stone-50 px-3 py-2 font-mono">{payLine ?? 'Реквизиты появятся после создания платежа'}</p>
+                        <InvoiceCopyBox
+                          label="Документ"
+                          value={documentId}
+                          copied={copiedInvoiceField === `${invoice.id}:document`}
+                          onCopy={() => copyInvoiceValue(invoice.id, 'document', documentId)}
+                        />
+                        <InvoiceCopyBox
+                          label="Сумма"
+                          value={money(invoice.amount, invoice.currency)}
+                          copied={copiedInvoiceField === `${invoice.id}:amount`}
+                          onCopy={() => copyInvoiceValue(invoice.id, 'amount', `${invoice.amount} ${invoice.currency}`)}
+                        />
+                        <InvoiceCopyBox
+                          label="К оплате"
+                          value={payLine ?? 'Реквизиты появятся после создания платежа'}
+                          copied={copiedInvoiceField === `${invoice.id}:pay-amount`}
+                          onCopy={payLine ? () => copyInvoiceValue(invoice.id, 'pay-amount', payLine) : undefined}
+                        />
+                        <InvoiceCopyBox
+                          label="Адрес"
+                          value={invoice.payAddress ?? 'Адрес появится после создания платежа'}
+                          copied={copiedInvoiceField === `${invoice.id}:address`}
+                          onCopy={invoice.payAddress ? () => copyInvoiceValue(invoice.id, 'address', invoice.payAddress ?? '') : undefined}
+                        />
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 lg:justify-end">
@@ -1552,6 +1585,32 @@ export default function OrderDetailClient() {
         </section>
       )}
     </main>
+  );
+}
+
+function InvoiceCopyBox({
+  label,
+  value,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  copied: boolean;
+  onCopy?: () => void;
+}) {
+  return (
+    <div className="rounded-[1rem] bg-stone-50 px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold uppercase tracking-[0.12em] text-stone-400">{label}</span>
+        {onCopy && (
+          <button type="button" onClick={onCopy} className="shrink-0 font-semibold text-brand hover:text-brand-dark">
+            {copied ? 'Скопировано' : 'Копировать'}
+          </button>
+        )}
+      </div>
+      <p className="mt-1 break-all font-mono text-stone-600">{value}</p>
+    </div>
   );
 }
 
