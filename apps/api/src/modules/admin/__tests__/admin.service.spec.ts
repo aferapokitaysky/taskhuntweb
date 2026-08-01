@@ -42,6 +42,7 @@ describe('AdminService', () => {
         findFirst: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 500 }, _avg: { amount: 100 } }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       ledgerEntry: {
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 50 } }),
@@ -51,6 +52,7 @@ describe('AdminService', () => {
         groupBy: jest.fn().mockResolvedValue([{ status: 'OPEN', _count: { id: 3 } }]),
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(5),
+        update: jest.fn(),
       },
       subscription: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -164,6 +166,7 @@ describe('AdminService', () => {
       prisma.dispute.findUnique.mockResolvedValue({
         id: 'disp-1',
         orderId: 'order-1',
+        status: 'OPEN',
         order: { client: { wallet: { id: 'client-wallet-id' } } },
       });
       prisma.bid.findFirst.mockResolvedValue({
@@ -186,6 +189,7 @@ describe('AdminService', () => {
       prisma.dispute.findUnique.mockResolvedValue({
         id: 'disp-1',
         orderId: 'order-1',
+        status: 'OPEN',
         order: { client: { wallet: { id: 'client-wallet-id' } } },
       });
       prisma.bid.findFirst.mockResolvedValue({
@@ -230,6 +234,7 @@ describe('AdminService', () => {
       prisma.dispute.findUnique.mockResolvedValue({
         id: 'disp-1',
         orderId: 'order-1',
+        status: 'OPEN',
         order: { client: { wallet: { id: 'client-wallet-id' } } },
       });
       prisma.bid.findFirst.mockResolvedValue({

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api, API_URL, createSkill, downloadFile, uploadAvatar } from '@/lib/api';
+import { api, API_URL, clearTokens, createSkill, downloadFile, uploadAvatar } from '@/lib/api';
 import type { BidTemplate, PortfolioItem, SessionItem, Skill, User } from '@/lib/types';
 import { AppHeader } from '@/components/AppHeader';
 import { GithubIcon } from '@/components/icons/GithubIcon';
@@ -399,6 +399,15 @@ export default function ProfilePage() {
       .catch(() => showToast('Не удалось завершить сессии', 'error'));
   }
 
+  async function logout() {
+    const currentSessionId = sessions?.find((s) => s.isCurrent)?.id;
+    if (currentSessionId) {
+      await api(`/auth/sessions/${currentSessionId}`, { method: 'DELETE' }).catch(() => undefined);
+    }
+    clearTokens();
+    router.push('/login');
+  }
+
   function deviceLabel(userAgent?: string | null): string {
     if (!userAgent) return 'Неизвестное устройство';
     if (/mobile|iphone|android/i.test(userAgent)) return 'Мобильное устройство';
@@ -739,6 +748,16 @@ export default function ProfilePage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="border-t border-stone-100 p-5">
+              <button
+                type="button"
+                onClick={logout}
+                className="flex w-full items-center justify-center gap-2 rounded-full border border-stone-200 bg-white/70 px-4 py-2.5 text-sm font-semibold text-stone-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+              >
+                Выйти из аккаунта
+              </button>
             </div>
           </aside>
         </div>

@@ -58,6 +58,14 @@ const TICKET_PRIORITY_LABEL: Record<string, string> = {
   URGENT: 'Срочный',
 };
 
+const FEATURE_FLAG_LABEL: Record<string, { title: string; description: string }> = {
+  AI_FRAUD_SCORING: { title: 'AI-скоринг фрода', description: 'Автоматическая оценка риска заказов/профилей моделью — вне модели используется только rule-based антифрод.' },
+  REFERRALS: { title: 'Реферальная программа', description: 'Вкладка «Партнёрка» и начисление реферальных вознаграждений.' },
+  MILESTONES: { title: 'Этапы (milestones)', description: 'Разбивка заказа на оплачиваемые этапы вместо оплаты целиком.' },
+  TELEGRAM_NOTIFICATIONS: { title: 'Уведомления в Telegram', description: 'Дублирование уведомлений в Telegram-бот (пока не подключён).' },
+  WALLET: { title: 'Кошелёк и эскроу', description: 'Вся денежная механика: баланс, вывод, эскроу-платежи. Выключать только в экстренной ситуации.' },
+};
+
 const COMMISSION_TYPE_LABEL: Record<string, string> = {
   MARKETPLACE_FEE: 'Комиссия площадки (со сделок)',
   WITHDRAWAL_FEE: 'Комиссия за вывод средств',
@@ -87,7 +95,7 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-type Tab = 'users' | 'disputes' | 'moderation' | 'flags' | 'commissions' | 'catalog' | 'metrics' | 'finance' | 'subscriptions' | 'audit' | 'support';
+type Tab = 'users' | 'disputes' | 'moderation' | 'flags' | 'commissions' | 'catalog' | 'metrics' | 'finance' | 'subscriptions' | 'audit' | 'support' | 'chats';
 
 interface AdminMetrics {
   revenue: { total: number; thisMonth: number };
@@ -189,6 +197,34 @@ interface SupportTicketDetail {
   user?: { id: string; profile?: { displayName?: string } | null; email?: string };
 }
 
+interface AdminChatThreadSummary {
+  threadId: string;
+  orderId: string;
+  orderTitle: string;
+  client: { id: string; displayName: string };
+  freelancer: { id: string; displayName: string };
+  lastMessageAt: string;
+}
+
+interface AdminChatMessage {
+  id: string;
+  type: 'TEXT' | 'INVOICE' | 'FILE' | 'SYSTEM';
+  body: string | null;
+  createdAt: string;
+  sender?: { profile?: { displayName?: string } | null; email?: string };
+  invoice?: { amount: string; status: string } | null;
+  file?: { url: string } | null;
+}
+
+interface AdminChatThreadDetail {
+  threadId: string;
+  orderId: string;
+  orderTitle: string;
+  client: { id: string; displayName: string };
+  freelancer: { id: string; displayName: string };
+  messages: AdminChatMessage[];
+}
+
 type ModerationAction = 'APPROVE' | 'REJECT' | 'REQUEST_EDITS';
 
 interface ModerationQueue {
@@ -209,15 +245,6 @@ interface ModerationQueue {
     reasons: string[];
     riskScore: number;
     user?: { id: string; displayName: string } | null;
-    createdAt: string;
-  }>;
-  files: Array<{
-    type: 'FILE';
-    id: string;
-    url: string;
-    mimeType: string;
-    kind: string;
-    owner: { id: string; displayName: string };
     createdAt: string;
   }>;
   reviews: Array<{
@@ -255,11 +282,18 @@ export default function AdminPage() {
   const [funnel, setFunnel] = useState<AdminFunnel | null>(null);
   const [topCategories, setTopCategories] = useState<TopCategory[]>([]);
   const [topFreelancers, setTopFreelancers] = useState<TopFreelancer[]>([]);
+  const [metricsChartView, setMetricsChartView] = useState<'money' | 'activity'>('money');
   const [tickets, setTickets] = useState<SupportTicketDetail[]>([]);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const [activeTicket, setActiveTicket] = useState<SupportTicketDetail | null>(null);
   const [ticketReply, setTicketReply] = useState('');
   const [ticketStatusFilter, setTicketStatusFilter] = useState<string>('');
+  const [chatSearchOrderId, setChatSearchOrderId] = useState('');
+  const [chatSearchUserId, setChatSearchUserId] = useState('');
+  const [chatThreads, setChatThreads] = useState<AdminChatThreadSummary[]>([]);
+  const [chatSearched, setChatSearched] = useState(false);
+  const [activeChatThreadId, setActiveChatThreadId] = useState<string | null>(null);
+  const [activeChatThread, setActiveChatThread] = useState<AdminChatThreadDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -364,6 +398,33 @@ export default function AdminPage() {
     }
   }
 
+  async function searchChats(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const orderId = chatSearchOrderId.trim();
+    const userId = chatSearchUserId.trim();
+    if (!orderId && !userId) return;
+    setError(null);
+    setChatSearched(true);
+    setActiveChatThreadId(null);
+    setActiveChatThread(null);
+    try {
+      const query = orderId ? `orderId=${encodeURIComponent(orderId)}` : `userId=${encodeURIComponent(userId)}`;
+      setChatThreads(await api<AdminChatThreadSummary[]>(`/admin/chats?${query}`));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось найти переписки');
+    }
+  }
+
+  async function openChatThread(threadId: string) {
+    setActiveChatThreadId(threadId);
+    setError(null);
+    try {
+      setActiveChatThread(await api<AdminChatThreadDetail>(`/admin/chats/${threadId}/messages`));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось открыть переписку');
+    }
+  }
+
   async function mutate(action: () => Promise<unknown>) {
     setError(null);
     try {
@@ -374,13 +435,12 @@ export default function AdminPage() {
     }
   }
 
-  async function resolveModeration(kind: 'orders' | 'profiles' | 'files' | 'reviews', id: string, action: ModerationAction = 'APPROVE') {
+  async function resolveModeration(kind: 'orders' | 'profiles' | 'reviews', id: string, action: ModerationAction = 'APPROVE') {
     const note = notesByModeration[id];
-    const body = kind === 'files' ? undefined : JSON.stringify({ action, note });
     await mutate(() =>
       api(`/admin/moderation-queue/${kind}/${id}`, {
         method: 'PATCH',
-        body,
+        body: JSON.stringify({ action, note }),
       }),
     );
   }
@@ -426,7 +486,7 @@ export default function AdminPage() {
               </div>
               <div className="hero-stat p-3">
                 <p className="font-serif text-2xl text-stone-950">
-                  {moderation ? moderation.orders.length + moderation.profiles.length + moderation.files.length + moderation.reviews.length : flags.length}
+                  {moderation ? moderation.orders.length + moderation.profiles.length + moderation.reviews.length : flags.length}
                 </p>
                 <p className="text-[11px] uppercase text-stone-400">в очереди</p>
               </div>
@@ -443,6 +503,7 @@ export default function AdminPage() {
           ['users', 'Пользователи'],
           ['disputes', 'Споры'],
           ['support', 'Поддержка'],
+          ['chats', 'Чаты заказов'],
           ['moderation', 'Модерация'],
           ['flags', 'Флаги функций'],
           ['commissions', 'Комиссии'],
@@ -485,15 +546,23 @@ export default function AdminPage() {
                     <p className="font-semibold">{user.profile?.displayName ?? user.email}</p>
                     {user.status && <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusTone}`}>{USER_STATUS_LABEL[user.status] ?? user.status}</span>}
                     {user.isStaff && <span className="rounded-full bg-card-lavender px-2.5 py-0.5 text-[11px] font-semibold text-stone-700">Staff</span>}
+                    <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${user.totpEnabled ? 'bg-emerald-50 text-emerald-600' : 'bg-stone-100 text-stone-400'}`}>
+                      {user.totpEnabled ? '2FA включена' : '2FA выключена'}
+                    </span>
                   </div>
                   <p className="text-sm text-stone-500">{user.email}</p>
                   <p className="text-xs text-stone-400">{user.primaryRole === 'CLIENT' ? 'Заказчик' : 'Фрилансер'}</p>
                 </div>
                 <div className="flex gap-2">
+                  <Link href={`/freelancers/${user.id}`} className="secondary-action px-3 py-2 text-sm font-medium">
+                    Профиль
+                  </Link>
                   <button
                     type="button"
+                    disabled={!user.totpEnabled}
+                    title={user.totpEnabled ? undefined : 'У этого пользователя 2FA не привязана — сбрасывать нечего'}
                     onClick={() => mutate(() => api(`/admin/users/${user.id}/reset-2fa`, { method: 'POST' }))}
-                    className="secondary-action px-3 py-2 text-sm font-medium"
+                    className="secondary-action px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Сбросить 2FA
                   </button>
@@ -564,6 +633,18 @@ export default function AdminPage() {
                   >
                     Найти тикет поддержки
                   </button>
+                  {dispute.chatThreadId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTab('chats');
+                        openChatThread(dispute.chatThreadId!);
+                      }}
+                      className="secondary-action px-3 py-2 text-xs font-semibold"
+                    >
+                      Открыть чат заказа
+                    </button>
+                  )}
                 </div>
                 {!resolved && (
                   <>
@@ -734,13 +815,113 @@ export default function AdminPage() {
         </section>
       )}
 
+      {tab === 'chats' && (
+        <section className="grid gap-5 lg:grid-cols-[380px_1fr]">
+          <div className="premium-panel overflow-hidden rounded-[2rem] p-0">
+            <form onSubmit={searchChats} className="space-y-2 border-b border-stone-100 p-4">
+              <h3 className="font-semibold">Переписки заказчик ↔ исполнитель</h3>
+              <p className="text-xs leading-5 text-stone-500">
+                Просмотр доступен только по конкретному заказу или пользователю — для разбора спора или жалобы. Введите ID заказа или ID
+                пользователя.
+              </p>
+              <input
+                value={chatSearchOrderId}
+                onChange={(e) => {
+                  setChatSearchOrderId(e.target.value);
+                  if (e.target.value) setChatSearchUserId('');
+                }}
+                placeholder="ID заказа"
+                className="field-surface w-full px-3 py-2 text-sm"
+              />
+              <input
+                value={chatSearchUserId}
+                onChange={(e) => {
+                  setChatSearchUserId(e.target.value);
+                  if (e.target.value) setChatSearchOrderId('');
+                }}
+                placeholder="ID пользователя"
+                className="field-surface w-full px-3 py-2 text-sm"
+              />
+              <button
+                type="submit"
+                disabled={!chatSearchOrderId.trim() && !chatSearchUserId.trim()}
+                className="primary-action w-full px-4 py-2 text-sm disabled:opacity-50"
+              >
+                Найти переписки
+              </button>
+            </form>
+            <div className="max-h-[560px] divide-y divide-stone-100 overflow-y-auto">
+              {chatThreads.map((t) => (
+                <button
+                  key={t.threadId}
+                  type="button"
+                  onClick={() => openChatThread(t.threadId)}
+                  className={`w-full p-4 text-left transition ${activeChatThreadId === t.threadId ? 'bg-brand/10' : 'hover:bg-stone-50'}`}
+                >
+                  <p className="min-w-0 truncate text-sm font-semibold text-stone-900">{t.orderTitle}</p>
+                  <p className="mt-0.5 truncate text-xs text-stone-500">
+                    {t.client.displayName} ↔ {t.freelancer.displayName}
+                  </p>
+                  <p className="mt-1 text-[10px] text-stone-400">{new Date(t.lastMessageAt).toLocaleString('ru-RU')}</p>
+                </button>
+              ))}
+              {chatSearched && chatThreads.length === 0 && <p className="p-4 text-sm text-stone-500">Переписок не найдено.</p>}
+            </div>
+          </div>
+
+          <div className="premium-panel flex min-h-[500px] flex-col overflow-hidden rounded-[2rem] p-0">
+            {!activeChatThread ? (
+              <div className="flex flex-1 items-center justify-center p-8">
+                <EmptyState
+                  icon={<ChatIcon />}
+                  title="Выберите переписку"
+                  description="Найдите заказ или пользователя слева, затем откройте нужный тред. Просмотр только для чтения."
+                />
+              </div>
+            ) : (
+              <>
+                <div className="border-b border-stone-100 p-4">
+                  <h3 className="font-serif text-xl text-stone-950">{activeChatThread.orderTitle}</h3>
+                  <p className="text-xs text-stone-500">
+                    Заказчик: {activeChatThread.client.displayName} · Исполнитель: {activeChatThread.freelancer.displayName}
+                  </p>
+                </div>
+                <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                  {activeChatThread.messages.map((m) => (
+                    <div key={m.id} className="rounded-2xl bg-stone-50 p-3">
+                      <p className="text-xs font-semibold text-stone-700">{m.sender?.profile?.displayName ?? m.sender?.email ?? 'Участник'}</p>
+                      {m.type === 'INVOICE' && m.invoice ? (
+                        <p className="mt-1 text-sm text-stone-800">Инвойс на {m.invoice.amount} — {m.invoice.status}</p>
+                      ) : m.type === 'FILE' && m.file ? (
+                        <a href={m.file.url} target="_blank" rel="noreferrer" className="mt-1 block text-sm text-brand underline">
+                          Открыть файл
+                        </a>
+                      ) : (
+                        <p className="mt-1 whitespace-pre-wrap break-words text-sm text-stone-800">{m.body}</p>
+                      )}
+                      <p className="mt-1 text-[10px] text-stone-400">{new Date(m.createdAt).toLocaleString('ru-RU')}</p>
+                    </div>
+                  ))}
+                  {activeChatThread.messages.length === 0 && <p className="text-sm text-stone-500">Сообщений пока нет.</p>}
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+      )}
+
       {tab === 'moderation' && moderation && (
         <section className="space-y-5">
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="premium-panel p-4 text-xs leading-5 text-stone-500">
+            Сюда попадает только то, что система сама пометила как подозрительное: заказы и профили с высоким риск-скорингом
+            (антифрод), и отзывы с низкой оценкой (2★ и ниже) с текстом. По каждой карточке — «Одобрить» снимает флаг без
+            последствий, «Отклонить» подтверждает нарушение, «Запросить правки» просит автора исправить и не закрывает флаг.
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
             {[
               ['Заказы', moderation.orders.length, 'bg-card-sand'],
               ['Профили', moderation.profiles.length, 'bg-card-lavender'],
-              ['Файлы', moderation.files.length, 'bg-card-rose'],
               ['Отзывы', moderation.reviews.length, 'bg-card-sage'],
             ].map(([label, value, colorClass]) => (
               <div key={label} className={`interactive-card rounded-[1.6rem] ${colorClass} p-4`}>
@@ -786,22 +967,6 @@ export default function AdminPage() {
             ))}
           </ModerationGroup>
 
-          <ModerationGroup title="Файлы после сканирования" empty="Заражённых файлов нет">
-            {moderation.files.map((item) => (
-              <ModerationCard
-                key={item.id}
-                title={item.kind}
-                eyebrow={`Файл · ${item.mimeType}`}
-                description={item.url}
-                meta={`Владелец: ${item.owner.displayName}`}
-                note=""
-                onNote={() => undefined}
-                onApprove={() => resolveModeration('files', item.id)}
-                approveLabel="Снять с очереди"
-              />
-            ))}
-          </ModerationGroup>
-
           <ModerationGroup title="Отзывы на проверке" empty="Отзывов на проверке нет">
             {moderation.reviews.map((item) => (
               <ModerationCard
@@ -823,29 +988,36 @@ export default function AdminPage() {
 
       {tab === 'flags' && (
         <section className="space-y-3">
-          {flags.map((flag) => (
-            <article key={flag.key} className="interactive-card flex items-center justify-between gap-3 rounded-2xl p-4">
-              <div>
-                <p className="font-semibold">{flag.key}</p>
-                <p className="text-sm text-stone-500">Раскатка: {flag.rolloutPercent}% пользователей</p>
-              </div>
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <span>Включён</span>
-                <Toggle
-                  checked={flag.enabled}
-                  onChange={(enabled) =>
-                    mutate(() =>
-                      api(`/admin/feature-flags/${flag.key}`, {
-                        method: 'PATCH',
-                        body: JSON.stringify({ enabled }),
-                      }),
-                    )
-                  }
-                />
-              </div>
-            </article>
-          ))}
-          {!loading && flags.length === 0 && <EmptyState icon={<BuildIcon />} title="Feature flags ещё не заведены" />}
+          <p className="text-xs text-stone-500">Выключатели крупных частей платформы — на случай сбоя провайдера, инцидента или поэтапного запуска новой функции.</p>
+          {flags.map((flag) => {
+            const meta = FEATURE_FLAG_LABEL[flag.key];
+            return (
+              <article key={flag.key} className="interactive-card flex items-center justify-between gap-3 rounded-2xl p-4">
+                <div className="min-w-0">
+                  <p className="font-semibold">{meta?.title ?? flag.key}</p>
+                  {meta && <p className="mt-0.5 text-xs text-stone-500">{meta.description}</p>}
+                  <p className="mt-1 text-[11px] text-stone-400">
+                    Ключ: <code className="rounded bg-stone-100 px-1 py-0.5">{flag.key}</code> · раскатка на {flag.rolloutPercent}% пользователей
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2 text-sm font-medium">
+                  <span>{flag.enabled ? 'Включён' : 'Выключен'}</span>
+                  <Toggle
+                    checked={flag.enabled}
+                    onChange={(enabled) =>
+                      mutate(() =>
+                        api(`/admin/feature-flags/${flag.key}`, {
+                          method: 'PATCH',
+                          body: JSON.stringify({ enabled }),
+                        }),
+                      )
+                    }
+                  />
+                </div>
+              </article>
+            );
+          })}
+          {!loading && flags.length === 0 && <EmptyState icon={<BuildIcon />} title="Флаги функций ещё не заведены" />}
         </section>
       )}
 
@@ -880,25 +1052,45 @@ export default function AdminPage() {
           </div>
 
           <div className="premium-panel p-5">
-            <h3 className="mb-1 font-semibold">Выручка и GMV — последние 30 дней</h3>
-            <p className="mb-4 text-xs text-stone-500">Выручка — комиссия площадки, GMV — общий объём оплаченных счетов.</p>
-            <LineChart
-              valueFormatter={(v) => `$${v}`}
-              series={[
-                { name: 'Выручка ($)', color: '#CC785C', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.revenue })) },
-                { name: 'GMV ($)', color: '#8B9A72', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.gmv })) },
-              ]}
-            />
-          </div>
-
-          <div className="premium-panel p-5">
-            <h3 className="mb-1 font-semibold">Новые пользователи и заказы — последние 30 дней</h3>
-            <LineChart
-              series={[
-                { name: 'Новых юзеров', color: '#9C98C4', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.newUsers })) },
-                { name: 'Новых заказов', color: '#C98A8A', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.newOrders })) },
-              ]}
-            />
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+              <h3 className="font-semibold">Динамика площадки — последние 30 дней</h3>
+              <div className="flex rounded-full bg-stone-100 p-1">
+                {(['money', 'activity'] as const).map((view) => (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => setMetricsChartView(view)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                      metricsChartView === view ? 'bg-white text-brand shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                    }`}
+                  >
+                    {view === 'money' ? 'Деньги' : 'Активность'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {metricsChartView === 'money' ? (
+              <>
+                <p className="mb-4 text-xs text-stone-500">Выручка — комиссия площадки, GMV — общий объём оплаченных счетов.</p>
+                <LineChart
+                  valueFormatter={(v) => `$${v}`}
+                  series={[
+                    { name: 'Выручка ($)', color: '#CC785C', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.revenue })) },
+                    { name: 'GMV ($)', color: '#8B9A72', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.gmv })) },
+                  ]}
+                />
+              </>
+            ) : (
+              <>
+                <p className="mb-4 text-xs text-stone-500">Новые регистрации и новые заказы по дням.</p>
+                <LineChart
+                  series={[
+                    { name: 'Новых юзеров', color: '#9C98C4', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.newUsers })) },
+                    { name: 'Новых заказов', color: '#C98A8A', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.newOrders })) },
+                  ]}
+                />
+              </>
+            )}
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
@@ -943,28 +1135,22 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="premium-panel p-4">
+          <div className="premium-panel grid gap-6 p-5 md:grid-cols-2">
+            <div>
               <h3 className="mb-3 font-semibold">Заказы по статусам</h3>
-              <div className="space-y-1 text-sm">
-                {Object.entries(metrics.ordersByStatus).map(([status, count]) => (
-                  <div key={status} className="flex justify-between">
-                    <span className="text-stone-600">{ORDER_STATUS_LABEL[status] ?? status}</span>
-                    <span className="font-medium">{count}</span>
-                  </div>
-                ))}
-              </div>
+              <BarChart
+                height={160}
+                color="#9C98C4"
+                data={Object.entries(metrics.ordersByStatus).map(([status, count]) => ({ label: ORDER_STATUS_LABEL[status] ?? status, value: count }))}
+              />
             </div>
-            <div className="premium-panel p-4">
+            <div className="border-t border-stone-100 pt-6 md:border-l md:border-t-0 md:pl-6 md:pt-0">
               <h3 className="mb-3 font-semibold">Активные подписки по тарифам</h3>
-              <div className="space-y-1 text-sm">
-                {Object.entries(metrics.activeSubscriptionsByTier).map(([tier, count]) => (
-                  <div key={tier} className="flex justify-between">
-                    <span className="text-stone-600">{tier}</span>
-                    <span className="font-medium">{count}</span>
-                  </div>
-                ))}
-              </div>
+              <BarChart
+                height={160}
+                color="#C98A8A"
+                data={Object.entries(metrics.activeSubscriptionsByTier).map(([tier, count]) => ({ label: tier, value: count }))}
+              />
             </div>
           </div>
         </section>

@@ -31,7 +31,30 @@ export class AdminService {
   async banUser(userId: string) {
     await this.assertTargetIsNotStaff(userId);
     const user = await this.prisma.user.update({ where: { id: userId }, data: { status: 'BANNED' } });
-    return sanitizeUser(user);
+
+    // Блокируем IP этого аккаунта на будущее — самый частый обход бана:
+    // зарегистрировать новый аккаунт с того же устройства/сети. Берём
+    // из RefreshSession (её пишет каждый логин/регистрация), а не только
+    // "последний" — человек мог заходить с нескольких сетей.
+    const sessions = await this.prisma.refreshSession.findMany({
+      where: { userId, ip: { not: null } },
+      select: { ip: true },
+      distinct: ['ip'],
+    });
+    const bannedIpCount = sessions.length;
+    if (bannedIpCount > 0) {
+      await this.prisma.$transaction(
+        sessions.map((s) =>
+          this.prisma.bannedIp.upsert({
+            where: { ip: s.ip! },
+            create: { ip: s.ip!, bannedUserId: userId, reason: 'Аккаунт забанен' },
+            update: {},
+          }),
+        ),
+      );
+    }
+
+    return { ...sanitizeUser(user), bannedIpCount };
   }
 
   async suspendUser(userId: string) {
@@ -73,19 +96,32 @@ export class AdminService {
       include: { order: { include: { client: { include: { wallet: true } } } } },
     });
     if (!dispute) throw new NotFoundException('Dispute not found');
+    if (dispute.status !== 'OPEN' && dispute.status !== 'UNDER_REVIEW') {
+      throw new BadRequestException('Спор уже разрешён');
+    }
 
     const acceptedBid = await this.prisma.bid.findFirst({
       where: { orderId: dispute.orderId, status: 'ACCEPTED' },
       include: { freelancer: { include: { wallet: true } } },
     });
     const paidInvoice = await this.prisma.invoice.findFirst({
-      where: { orderId: dispute.orderId, status: 'PAID' },
+      where: { orderId: dispute.orderId, status: 'PAID', escrowSettledAt: null },
       orderBy: { paidAt: 'desc' },
     });
 
     if (!paidInvoice || !dispute.order.client.wallet) {
       throw new BadRequestException('No escrowed funds found for this order');
     }
+
+    // Та же защита от повторной обработки, что и в MilestonesService.approve():
+    // застолбить инвойс до того, как деньги реально сдвинутся, иначе клиент
+    // мог успеть нажать "принять сдачу" уже после разрешения спора и релизнуть
+    // тот же эскроу второй раз (см. комментарий у escrowSettledAt в schema.prisma).
+    const claimed = await this.prisma.invoice.updateMany({
+      where: { id: paidInvoice.id, escrowSettledAt: null },
+      data: { escrowSettledAt: new Date() },
+    });
+    if (claimed.count === 0) throw new BadRequestException('Эскроу по этому счёту уже обработано');
 
     if (dto.resolution === 'RESOLVED_FREELANCER') {
       if (!acceptedBid?.freelancer.wallet) throw new BadRequestException('Freelancer wallet missing');
@@ -104,6 +140,11 @@ export class AdminService {
         invoiceId: paidInvoice.id,
       });
     }
+
+    await this.prisma.order.update({
+      where: { id: dispute.orderId },
+      data: { status: dto.resolution === 'RESOLVED_FREELANCER' ? 'COMPLETED' : 'CANCELLED' },
+    });
 
     const resolved = await this.prisma.dispute.update({
       where: { id: disputeId },
@@ -636,13 +677,14 @@ export class AdminService {
   /**
    * Единая очередь на review — источники: открытые FraudFlag (риск-скоринг
    * fraud-service, см. FraudService) с orderId → тип ORDER, без orderId
-   * (только userId) → тип PROFILE; заражённые файлы (антивирус, ClamAV) →
-   * тип FILE; отзывы с низким рейтингом и текстом, ещё не разобранные —
-   * тип REVIEW (эвристика, а не report-система: жалоб на отзывы в продукте
-   * пока нет, но абьюзивный низкий отзыв — разумный сигнал для ручной проверки).
+   * (только userId) → тип PROFILE; отзывы с низким рейтингом и текстом, ещё
+   * не разобранные — тип REVIEW (эвристика, а не report-система: жалоб на
+   * отзывы в продукте пока нет, но абьюзивный низкий отзыв — разумный
+   * сигнал для ручной проверки). Очередь заражённых файлов убрана вместе с
+   * антивирус-сканированием (ClamAV) — см. docker-compose.yml.
    */
   async getModerationQueue() {
-    const [orderFlags, profileFlags, infectedFiles, flaggedReviews] = await Promise.all([
+    const [orderFlags, profileFlags, flaggedReviews] = await Promise.all([
       this.prisma.fraudFlag.findMany({
         where: { status: 'OPEN', orderId: { not: null } },
         include: { order: { select: { id: true, title: true } }, user: { include: { profile: true } } },
@@ -652,12 +694,6 @@ export class AdminService {
       this.prisma.fraudFlag.findMany({
         where: { status: 'OPEN', orderId: null },
         include: { user: { include: { profile: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      }),
-      this.prisma.fileAsset.findMany({
-        where: { scanStatus: 'INFECTED', moderatedAt: null },
-        include: { owner: { include: { profile: true } } },
         orderBy: { createdAt: 'desc' },
         take: 50,
       }),
@@ -690,16 +726,6 @@ export class AdminService {
       createdAt: f.createdAt,
     }));
 
-    const files = infectedFiles.map((file) => ({
-      type: 'FILE' as const,
-      id: file.id,
-      url: file.url,
-      mimeType: file.mimeType,
-      kind: file.kind,
-      owner: { id: file.owner.id, displayName: file.owner.profile?.displayName ?? file.owner.email },
-      createdAt: file.createdAt,
-    }));
-
     const reviews = flaggedReviews.map((r) => ({
       type: 'REVIEW' as const,
       id: r.id,
@@ -710,7 +736,7 @@ export class AdminService {
       createdAt: r.createdAt,
     }));
 
-    return { orders, profiles, files, reviews };
+    return { orders, profiles, reviews };
   }
 
   private fraudActionToStatus(action: 'APPROVE' | 'REJECT' | 'REQUEST_EDITS'): 'DISMISSED' | 'CONFIRMED' | 'REVIEWED' {
@@ -742,13 +768,6 @@ export class AdminService {
       where: { id: flagId },
       data: { status: this.fraudActionToStatus(action), reviewNote: note, reviewedById: staffId, reviewedAt: new Date() },
     });
-  }
-
-  async resolveFileModeration(fileId: string) {
-    const file = await this.prisma.fileAsset.findUnique({ where: { id: fileId } });
-    if (!file) throw new NotFoundException('File not found');
-
-    return this.prisma.fileAsset.update({ where: { id: fileId }, data: { moderatedAt: new Date() } });
   }
 
   async resolveReviewModeration(reviewId: string, action: 'APPROVE' | 'REJECT' | 'REQUEST_EDITS') {
@@ -920,6 +939,66 @@ export class AdminService {
         createdAt: log.createdAt,
       })),
       nextCursor,
+    };
+  }
+
+  // --- Просмотр чатов (только чтение, для арбитража споров/жалоб) ---
+
+  /**
+   * Поиск тредов по заказу или по пользователю (клиент ИЛИ фрилансер в
+   * треде) — саппорту/арбитру обычно известен либо заказ (из спора), либо
+   * сам пользователь (из тикета/жалобы), а не threadId напрямую.
+   */
+  async searchChatThreads(params: { orderId?: string; userId?: string }) {
+    if (!params.orderId && !params.userId) return [];
+
+    const threads = await this.prisma.chatThread.findMany({
+      where: params.orderId
+        ? { orderId: params.orderId }
+        : { OR: [{ freelancerId: params.userId }, { order: { clientId: params.userId } }] },
+      include: {
+        freelancer: { include: { profile: true } },
+        order: { include: { client: { include: { profile: true } }, category: true } },
+        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    return threads.map((t) => ({
+      threadId: t.id,
+      orderId: t.orderId,
+      orderTitle: t.order.title,
+      client: { id: t.order.clientId, displayName: t.order.client.profile?.displayName ?? t.order.client.email },
+      freelancer: { id: t.freelancerId, displayName: t.freelancer.profile?.displayName ?? t.freelancer.email },
+      lastMessageAt: t.messages[0]?.createdAt ?? t.createdAt,
+    }));
+  }
+
+  /** Полная переписка треда, без проверки "участник ли" — доступ ограничен только правом FinanceViewReports/DisputeView на роуте. */
+  async getChatThreadMessages(threadId: string) {
+    const thread = await this.prisma.chatThread.findUnique({
+      where: { id: threadId },
+      include: {
+        freelancer: { include: { profile: true } },
+        order: { include: { client: { include: { profile: true } } } },
+      },
+    });
+    if (!thread) throw new NotFoundException('Chat thread not found');
+
+    const messages = await this.prisma.chatMessage.findMany({
+      where: { threadId },
+      orderBy: { createdAt: 'asc' },
+      include: { sender: { include: { profile: true } }, invoice: true, file: true },
+    });
+
+    return {
+      threadId: thread.id,
+      orderId: thread.orderId,
+      orderTitle: thread.order.title,
+      client: { id: thread.order.clientId, displayName: thread.order.client.profile?.displayName ?? thread.order.client.email },
+      freelancer: { id: thread.freelancerId, displayName: thread.freelancer.profile?.displayName ?? thread.freelancer.email },
+      messages,
     };
   }
 }

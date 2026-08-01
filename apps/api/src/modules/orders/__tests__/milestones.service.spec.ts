@@ -41,6 +41,7 @@ describe('MilestonesService', () => {
       },
       invoice: {
         findFirst: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       $transaction: jest.fn((callback: (tx: unknown) => unknown) => callback(prisma)),
     };
@@ -186,8 +187,28 @@ describe('MilestonesService', () => {
       await service.approve(clientId, orderId, 'm2');
 
       expect(prisma.invoice.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { orderId, status: 'PAID', milestoneId: 'm2' } }),
+        expect.objectContaining({ where: { orderId, status: 'PAID', milestoneId: 'm2', escrowSettledAt: null } }),
       );
+    });
+
+    it('запрещает повторную приёмку одного и того же инвойса (эскроу уже застолблено)', async () => {
+      setupHappyPath();
+      prisma.invoice.updateMany.mockResolvedValue({ count: 0 }); // кто-то уже застолбил инвойс раньше нас
+
+      await expect(service.approve(clientId, orderId, null)).rejects.toBeInstanceOf(BadRequestException);
+      expect(wallet.releaseEscrow).not.toHaveBeenCalled();
+    });
+
+    it('запрещает приёмку заказа, который уже в споре/завершён/отменён', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: orderId,
+        clientId,
+        status: 'DISPUTED',
+        client: { wallet: { id: 'client-wallet' } },
+      });
+
+      await expect(service.approve(clientId, orderId, null)).rejects.toBeInstanceOf(BadRequestException);
+      expect(wallet.releaseEscrow).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,4 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -43,6 +49,13 @@ export class AuthService {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) {
       throw new ConflictException('Email already registered');
+    }
+
+    if (ip) {
+      const bannedIp = await this.prisma.bannedIp.findUnique({ where: { ip } });
+      if (bannedIp) {
+        throw new ForbiddenException('Регистрация с этого адреса заблокирована');
+      }
     }
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);

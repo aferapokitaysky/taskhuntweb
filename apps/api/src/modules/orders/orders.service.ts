@@ -607,8 +607,17 @@ export class OrdersService {
     const isParticipant = order.clientId === userId || order.bids.some((b) => b.freelancerId === userId);
     if (!isParticipant) throw new ForbiddenException('Not a participant of this order');
 
+    const acceptedBidForThread = order.bids[0];
+    const chatThread = acceptedBidForThread
+      ? await this.prisma.chatThread.findUnique({
+          where: { orderId_freelancerId: { orderId, freelancerId: acceptedBidForThread.freelancerId } },
+        })
+      : null;
+
     const { dispute, ticket } = await this.prisma.$transaction(async (tx) => {
-      const createdDispute = await tx.dispute.create({ data: { orderId, openedById: userId, reason } });
+      const createdDispute = await tx.dispute.create({
+        data: { orderId, openedById: userId, reason, chatThreadId: chatThread?.id ?? null },
+      });
       await tx.order.update({ where: { id: orderId }, data: { status: 'DISPUTED' } });
       // Открывая спор, пользователь автоматически получает тикет поддержки
       // по нему — раньше спор был "немым" (только reason/resolutionNotes,
@@ -640,7 +649,12 @@ export class OrdersService {
           title: 'Новый спор — открыт тикет поддержки',
           message: `Спор по заказу "${order.title}" автоматически завёл тикет поддержки.`,
           eventName: 'SupportTicketCreated',
-          metadata: { ticketId: ticket.id, disputeId: dispute.id, href: `/admin?tab=support&ticketId=${ticket.id}` },
+          metadata: {
+            ticketId: ticket.id,
+            disputeId: dispute.id,
+            chatThreadId: chatThread?.id ?? null,
+            href: `/admin?tab=support&ticketId=${ticket.id}`,
+          },
         })),
       });
     }

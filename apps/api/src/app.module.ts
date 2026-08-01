@@ -33,7 +33,6 @@ import { FraudModule } from './modules/fraud/fraud.module';
 import { SearchModule } from './modules/search/search.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { PAYOUT_QUEUE } from './modules/wallet/payout.processor';
-import { FILE_SCAN_QUEUE } from './modules/files/files.service';
 import { SUBSCRIPTION_EXPIRATION_QUEUE } from './modules/subscriptions/subscription-expiration.processor';
 import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
 
@@ -68,10 +67,6 @@ import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
     }),
     BullBoardModule.forFeature({
       name: PAYOUT_QUEUE,
-      adapter: BullMQAdapter as any,
-    }),
-    BullBoardModule.forFeature({
-      name: FILE_SCAN_QUEUE,
       adapter: BullMQAdapter as any,
     }),
     BullBoardModule.forFeature({

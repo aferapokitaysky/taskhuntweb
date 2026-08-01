@@ -149,6 +149,21 @@ model TotpBackupCode {
   @@map("totp_backup_codes")
 }
 
+// IP-адреса, замеченные у забаненных аккаунтов (см. AdminService.banUser) —
+// закрывает самый частый способ обхода бана: зарегистрировать новый аккаунт
+// с того же устройства/сети. Настоящий device-fingerprint (canvas/WebGL)
+// не реализован — потребовал бы отдельной клиентской библиотеки; список по
+// IP уже перекрывает основной сценарий обхода без риска ложных блокировок
+// существующих аккаунтов на том же IP (см. комментарий в auth.service.ts).
+model BannedIp {
+  ip           String   @id
+  reason       String?
+  bannedUserId String?
+  createdAt    DateTime @default(now())
+
+  @@map("banned_ips")
+}
+
 model RefreshSession {
   id         String    @id @default(uuid())
   userId     String
@@ -639,6 +654,15 @@ model Invoice {
   payCurrency          String?
   paidAt               DateTime?
 
+  // Момент, когда эскроу по этому инвойсу было релизнуто фрилансеру ИЛИ
+  // возвращено заказчику. status остаётся 'PAID' и после этого (это поле
+  // читается в других местах как "клиент реально заплатил", не как "деньги
+  // ещё лежат в эскроу") — поэтому именно escrowSettledAt защищает от
+  // повторного releaseEscrow/refundEscrow по одному и тому же инвойсу
+  // (нашли баг: approve() после уже разрешённого спора второй раз релизил
+  // тот же инвойс, увели эскроу в минус).
+  escrowSettledAt DateTime?
+
   chatMessage ChatMessage?
 
   createdAt DateTime @default(now())
@@ -883,6 +907,12 @@ model Dispute {
   reason          String
   status          DisputeStatus @default(OPEN)
   resolutionNotes String?
+
+  // Резолвится автоматически при открытии спора (чат между заказчиком и
+  // принятым фрилансером по этому заказу) — админ открывает переписку сразу
+  // одним кликом из карточки спора, без ручного ввода orderId/userId в
+  // поиске на вкладке "Чаты заказов".
+  chatThreadId String?
 
   files         DisputeFile[]
   supportTicket SupportTicket?

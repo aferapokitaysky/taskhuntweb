@@ -27,6 +27,11 @@ function clearTokensAndRedirect() {
   }
 }
 
+export function clearTokens() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+}
+
 // accessToken живёт 15 минут (см. auth.service.ts) — на странице заказа/чата
 // пользователь легко сидит дольше, и без обновления токена каждый запрос
 // после экспирации тихо падал с 401, а большинство вызовов в компонентах

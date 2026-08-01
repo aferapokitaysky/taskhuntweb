@@ -286,6 +286,7 @@ export interface Dispute {
   reason: string;
   status: string;
   resolutionNotes?: string | null;
+  chatThreadId?: string | null;
   openedBy?: User & { profile?: Profile | null };
   order?: Order;
 }

@@ -38,6 +38,7 @@ describe('OrdersService', () => {
       },
       chatThread: {
         upsert: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue(null),
       },
       dispute: {
         create: jest.fn(),
@@ -428,6 +429,26 @@ describe('OrdersService', () => {
         }),
       );
       expect(result.id).toBe('dispute-123');
+    });
+
+    it('резолвит и сохраняет chatThreadId переписки с принятым фрилансером, чтобы админ открывал чат без ручного ввода ID', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 'order-1',
+        clientId: 'client-1',
+        title: 'Landing page',
+        bids: [{ freelancerId: 'freelancer-1', status: 'ACCEPTED' }],
+      });
+      prisma.chatThread.findUnique.mockResolvedValue({ id: 'thread-1' });
+      prisma.dispute.create.mockResolvedValue({ id: 'dispute-123', orderId: 'order-1' });
+
+      await service.openDispute('client-1', 'order-1', 'Poor quality');
+
+      expect(prisma.chatThread.findUnique).toHaveBeenCalledWith({
+        where: { orderId_freelancerId: { orderId: 'order-1', freelancerId: 'freelancer-1' } },
+      });
+      expect(prisma.dispute.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ chatThreadId: 'thread-1' }),
+      });
     });
   });
 

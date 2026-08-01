@@ -237,13 +237,6 @@ export class AdminController {
   }
 
   @RequirePermissions(PermissionCode.ContentModerate)
-  @AuditLog('FILE_MODERATED', 'FileAsset')
-  @Patch('moderation-queue/files/:id')
-  resolveFileModeration(@Param('id') id: string) {
-    return this.adminService.resolveFileModeration(id);
-  }
-
-  @RequirePermissions(PermissionCode.ContentModerate)
   @AuditLog('REVIEW_MODERATED', 'Review')
   @Patch('moderation-queue/reviews/:id')
   resolveReviewModeration(@Param('id') id: string, @Body() dto: ResolveModerationDto) {
@@ -313,5 +306,20 @@ export class AdminController {
     @Query('targetType') targetType?: string,
   ) {
     return this.adminService.listAuditLogs({ cursor, actorId, targetType });
+  }
+
+  // --- Просмотр чатов (арбитраж) ---
+
+  @RequirePermissions(PermissionCode.DisputeView)
+  @Get('chats')
+  searchChatThreads(@Query('orderId') orderId?: string, @Query('userId') userId?: string) {
+    return this.adminService.searchChatThreads({ orderId, userId });
+  }
+
+  @RequirePermissions(PermissionCode.DisputeView)
+  @AuditLog('CHAT_THREAD_VIEWED', 'ChatThread')
+  @Get('chats/:threadId/messages')
+  getChatThreadMessages(@Param('threadId') threadId: string) {
+    return this.adminService.getChatThreadMessages(threadId);
   }
 }
