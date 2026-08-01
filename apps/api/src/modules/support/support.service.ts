@@ -1,13 +1,16 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PermissionCode } from '@taskhunt/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 
 @Injectable()
 export class SupportService {
+  private readonly logger = new Logger(SupportService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async createTicket(userId: string, dto: CreateTicketDto) {
-    return this.prisma.supportTicket.create({
+    const ticket = await this.prisma.supportTicket.create({
       data: {
         userId,
         subject: dto.subject,
@@ -16,6 +19,8 @@ export class SupportService {
       },
       include: { messages: true },
     });
+    await this.notifySupportStaff(ticket.id, userId, 'SupportTicketCreated');
+    return ticket;
   }
 
   async listMyTickets(userId: string) {
@@ -75,6 +80,8 @@ export class SupportService {
           },
         },
       });
+    } else if (!isStaff) {
+      await this.notifySupportStaff(ticketId, senderId, 'SupportUserMessageCreated');
     }
     return message;
   }
@@ -102,5 +109,53 @@ export class SupportService {
       },
     });
     return updated;
+  }
+
+  private async notifySupportStaff(ticketId: string, actorId: string, eventName: 'SupportTicketCreated' | 'SupportUserMessageCreated') {
+    try {
+      const ticket = await this.prisma.supportTicket.findUnique({
+        where: { id: ticketId },
+        include: { user: { include: { profile: true } }, assignedTo: { include: { profile: true } } },
+      });
+      if (!ticket) return;
+
+      const recipients = ticket.assignedToId
+        ? [{ id: ticket.assignedToId }]
+        : await this.prisma.user.findMany({
+            where: {
+              isStaff: true,
+              staffRoles: { some: { role: { permissions: { some: { permission: { code: PermissionCode.DisputeView } } } } } },
+            },
+            select: { id: true },
+          });
+      const recipientIds = [...new Set(recipients.map((recipient) => recipient.id).filter((id) => id !== actorId))];
+      if (recipientIds.length === 0) {
+        this.logger.warn(`Support ticket ${ticketId} has no available staff recipient for ${eventName}`);
+        return;
+      }
+
+      const userName = ticket.user.profile?.displayName ?? ticket.user.email;
+      const title = eventName === 'SupportTicketCreated' ? 'Новое обращение в поддержку' : 'Клиент ответил в поддержку';
+      const message =
+        eventName === 'SupportTicketCreated'
+          ? `${userName} создал обращение "${ticket.subject}".`
+          : `${userName} написал новое сообщение в обращении "${ticket.subject}".`;
+
+      await this.prisma.notification.createMany({
+        data: recipientIds.map((userId) => ({
+          userId,
+          title,
+          message,
+          eventName,
+          metadata: {
+            ticketId,
+            userId: ticket.userId,
+            href: `/support?ticketId=${ticketId}`,
+          },
+        })),
+      });
+    } catch (err) {
+      this.logger.error(`Failed to notify support staff about ticket ${ticketId}: ${err}`);
+    }
   }
 }
