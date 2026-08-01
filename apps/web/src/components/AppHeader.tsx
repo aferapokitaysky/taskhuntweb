@@ -39,6 +39,8 @@ const NAV_LINKS: NavLink[] = [
   { href: '/support', label: 'Поддержка', Icon: SupportNavIcon },
 ];
 
+const CHAT_UNREAD_POLL_INTERVAL_MS = 30000;
+
 /** Общая шапка для всех страниц личного кабинета — лого, навигация, колокольчик, профиль. */
 export function AppHeader() {
   const pathname = usePathname();
@@ -57,9 +59,18 @@ export function AppHeader() {
         .then((threads) => setChatUnreadCount(threads.reduce((sum, thread) => sum + (thread.unreadCount ?? 0), 0)))
         .catch(() => undefined);
     }
+    function refreshWhenVisible() {
+      if (document.visibilityState === 'visible') loadChatUnread();
+    }
     loadChatUnread();
-    const interval = setInterval(loadChatUnread, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(loadChatUnread, CHAT_UNREAD_POLL_INTERVAL_MS);
+    window.addEventListener('focus', loadChatUnread);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', loadChatUnread);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, []);
 
   const links: NavLink[] = [...NAV_LINKS, { href: '/admin', label: 'Admin', Icon: AdminNavIcon, staffOnly: true }].filter(
