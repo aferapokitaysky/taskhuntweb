@@ -17,6 +17,7 @@ import { ErrorNotice } from '@/components/ErrorNotice';
 import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InvoiceChatCard } from '@/components/InvoiceChatCard';
+import { PaymentConfirmDetails } from '@/components/PaymentConfirmDetails';
 import { MatchIcon } from '@/components/icons/illustrated/MatchIcon';
 import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 import { BidAvatarIcon } from '@/components/icons/illustrated/BidAvatarIcon';
@@ -567,18 +568,6 @@ export default function OrderDetailClient() {
     } finally {
       setPaymentDetailsLoading(false);
     }
-  }
-
-  function paymentDescription() {
-    if (!paymentConfirmInvoice) return '';
-    if (!paymentConfirmInvoice.payAddress) {
-      return paymentDetailsLoading
-        ? 'Получаем реквизиты оплаты для этого счёта...'
-        : 'Реквизиты оплаты пока недоступны. Обновите счёт или попросите исполнителя выставить новый.';
-    }
-    const payAmount = paymentConfirmInvoice.payAmount ?? paymentConfirmInvoice.amount;
-    const payCurrency = paymentConfirmInvoice.payCurrency ?? paymentConfirmInvoice.currency;
-    return `К оплате: ${payAmount} ${payCurrency}. Адрес: ${paymentConfirmInvoice.payAddress}. После подтверждения провайдера сумма уйдёт в эскроу TaskHunt.`;
   }
 
   if (!order) {
@@ -1560,7 +1549,7 @@ export default function OrderDetailClient() {
       <ConfirmDialog
         open={Boolean(paymentConfirmInvoice)}
         title="Перейти к оплате счёта?"
-        description={paymentDescription()}
+        description={<PaymentConfirmDetails invoice={paymentConfirmInvoice} loading={paymentDetailsLoading} />}
         confirmLabel={paymentDetailsLoading ? 'Загружаем' : 'Готово'}
         busy={paymentDetailsLoading}
         onCancel={() => setPaymentConfirmInvoice(null)}

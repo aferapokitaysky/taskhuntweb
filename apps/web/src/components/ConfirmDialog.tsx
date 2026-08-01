@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 export function ConfirmDialog({
   open,
   title,
@@ -12,7 +14,7 @@ export function ConfirmDialog({
 }: {
   open: boolean;
   title: string;
-  description: string;
+  description: ReactNode;
   confirmLabel: string;
   cancelLabel?: string;
   busy?: boolean;
@@ -26,7 +28,7 @@ export function ConfirmDialog({
       <div className="premium-panel w-full max-w-md rounded-[2rem] p-5 shadow-2xl">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Подтверждение</p>
         <h2 className="mt-2 font-serif text-2xl text-stone-950">{title}</h2>
-        <p className="mt-3 text-sm leading-6 text-stone-600">{description}</p>
+        <div className="mt-3 text-sm leading-6 text-stone-600">{description}</div>
         <div className="mt-5 grid gap-2 sm:grid-cols-2">
           <button type="button" onClick={onCancel} disabled={busy} className="secondary-action px-4 py-3 text-sm font-semibold disabled:opacity-50">
             {cancelLabel}
