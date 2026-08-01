@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { Invoice } from '@/lib/types';
 import { money } from '@/lib/types';
 import { BalanceEscrowIcon } from './icons/illustrated/BalanceEscrowIcon';
@@ -14,30 +14,6 @@ const INVOICE_STATUS_LABEL: Record<Invoice['status'], string> = {
   CANCELLED: 'Отменён',
   EXPIRED: 'Истёк',
 };
-
-const ACCEPTED_RECEIPTS_KEY = 'taskhunt:acceptedReceipts:v1';
-
-function loadAcceptedReceipts() {
-  if (typeof window === 'undefined') return new Set<string>();
-  try {
-    const raw = window.localStorage.getItem(ACCEPTED_RECEIPTS_KEY);
-    const ids = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function rememberAcceptedReceipt(invoiceId: string) {
-  if (typeof window === 'undefined') return;
-  try {
-    const ids = loadAcceptedReceipts();
-    ids.add(invoiceId);
-    window.localStorage.setItem(ACCEPTED_RECEIPTS_KEY, JSON.stringify([...ids]));
-  } catch {
-    // localStorage can be unavailable in private mode; visual acceptance still works for this render.
-  }
-}
 
 export function InvoiceChatCard({
   invoice,
@@ -54,7 +30,6 @@ export function InvoiceChatCard({
 }) {
   const [copied, setCopied] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [receiptAccepted, setReceiptAccepted] = useState(false);
   const paid = invoice.status === 'PAID';
   const pending = invoice.status === 'PENDING';
   const cancelled = invoice.status === 'CANCELLED' || invoice.status === 'EXPIRED';
@@ -67,13 +42,6 @@ export function InvoiceChatCard({
     : cancelled
       ? 'bg-red-100 text-red-700'
       : 'bg-brand/10 text-brand';
-  const receiptCardTone = receiptAccepted
-    ? 'border-emerald-200 bg-emerald-50/90 text-emerald-900 shadow-emerald-900/5'
-    : 'border-emerald-100 bg-white text-stone-900 shadow-stone-200/60';
-
-  useEffect(() => {
-    setReceiptAccepted(loadAcceptedReceipts().has(invoice.id));
-  }, [invoice.id]);
 
   async function copyValue(value: string, field: string) {
     await navigator.clipboard?.writeText(value).catch(() => undefined);
@@ -183,68 +151,39 @@ export function InvoiceChatCard({
       )}
       {paid && (
         <div className="border-t border-stone-100 bg-white/82 p-3 dark:border-stone-700 dark:bg-stone-900">
-          <div
-            className={`relative overflow-hidden rounded-[1.45rem] border p-3 shadow-lg transition duration-500 ${
-              receiptAccepted ? 'translate-y-2 rotate-[-0.4deg]' : 'translate-y-0'
-            } ${receiptCardTone} dark:border-emerald-900/50 dark:bg-stone-800 dark:text-stone-100`}
-          >
+          <div className="relative overflow-hidden rounded-[1.45rem] border border-emerald-100 bg-white p-3 shadow-sm dark:border-emerald-900/50 dark:bg-stone-800 dark:text-stone-100">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-600">
-                  {receiptAccepted ? 'Чек принят' : 'Чек готов к приёмке'}
-                </p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-600">Оплачено</p>
                 <p className="mt-1.5 font-serif text-2xl leading-none text-stone-950 dark:text-stone-50">{money(invoice.amount, invoice.currency)}</p>
               </div>
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.1rem] bg-emerald-100 text-emerald-700 shadow-sm dark:bg-emerald-950/60">
                 <MailCheckIcon className="h-7 w-7" />
               </span>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-              <div className="rounded-[1rem] bg-white/70 px-3 py-2 dark:bg-stone-900">
-                <span className="block font-semibold uppercase tracking-[0.12em] text-stone-400">Документ</span>
-                <span className="mt-1 block break-all font-mono text-stone-700 dark:text-stone-200">RC-{shortId}</span>
-              </div>
-              <div className="rounded-[1rem] bg-white/70 px-3 py-2 dark:bg-stone-900">
-                <span className="block font-semibold uppercase tracking-[0.12em] text-stone-400">Статус</span>
-                <span className="mt-1 block font-semibold text-emerald-700 dark:text-emerald-300">
-                  {receiptAccepted ? 'использован' : 'ожидает принятия'}
-                </span>
-              </div>
+            <div className="mt-3 rounded-[1rem] bg-white/70 px-3 py-2 dark:bg-stone-900">
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-400">Документ</span>
+              <span className="mt-1 block break-all font-mono text-[11px] text-stone-700 dark:text-stone-200">RC-{shortId}</span>
             </div>
-            <p className="mt-3 text-xs leading-5 text-stone-600 dark:text-stone-300">
-              {receiptAccepted
-                ? 'Чек принят и остаётся в истории сделки, чате и кошельке.'
-                : 'Оплата подтверждена. Примите чек, чтобы визуально закрыть платёж в переписке.'}
+            {/* Деньги лежат в эскроу заказчика, а не на балансе исполнителя —
+                до сих пор "Принять чек" был чисто визуальной кнопкой без
+                какого-либо финансового эффекта (только localStorage), что
+                выглядело как "я подтвердил оплату" и путало обе стороны:
+                заказчик не понимал, почему баланс исполнителя не растёт, а
+                исполнитель не видел, что деньги вообще где-то есть. Заменили
+                кнопку на честное объяснение реального следующего шага. */}
+            <p className="mt-3 rounded-[1rem] bg-card-sage/60 px-3 py-2 text-xs leading-5 text-stone-700 dark:bg-stone-900 dark:text-stone-300">
+              {own
+                ? 'Заказчик оплатил — сумма в эскроу. Сдайте работу по заказу, и после приёмки она поступит на ваш баланс.'
+                : 'Сумма в эскроу, ждёт результата работы. Она уйдёт исполнителю, как только вы примете сдачу по заказу.'}
             </p>
-            <div
-              className={`mt-3 rounded-b-[1.15rem] border-t px-3 py-2 text-center text-[11px] font-bold uppercase tracking-[0.16em] transition duration-500 ${
-                receiptAccepted
-                  ? 'translate-y-1 border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/50 dark:text-emerald-200'
-                  : 'border-stone-200 bg-stone-50 text-stone-400 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-500'
-              }`}
-            >
-              {receiptAccepted ? 'чек принят / использован' : 'чек ожидает приёмки'}
-            </div>
           </div>
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => {
-                setReceiptAccepted(true);
-                rememberAcceptedReceipt(invoice.id);
-              }}
-              disabled={receiptAccepted}
-              className="primary-action justify-center px-4 py-2 text-sm disabled:opacity-65"
-            >
-              {receiptAccepted ? 'Чек принят' : 'Принять чек'}
+          {onDownloadPdf && (
+            <button type="button" onClick={() => onDownloadPdf(invoice)} className="secondary-action mt-3 w-full justify-center px-4 py-2 text-sm">
+              Скачать PDF-чек
             </button>
-            {onDownloadPdf && (
-              <button type="button" onClick={() => onDownloadPdf(invoice)} className="secondary-action w-full justify-center px-4 py-2 text-sm">
-                Скачать PDF-чек
-              </button>
-            )}
-          </div>
+          )}
         </div>
       )}
       {cancelled && (

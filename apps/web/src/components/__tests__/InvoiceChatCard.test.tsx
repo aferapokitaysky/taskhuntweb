@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Invoice } from '@/lib/types';
 import { InvoiceChatCard } from '../InvoiceChatCard';
@@ -62,21 +62,21 @@ describe('InvoiceChatCard', () => {
     expect(await screen.findByText('Скопировано')).toBeInTheDocument();
   });
 
-  it('сохраняет принятие оплаченного чека по invoice id', async () => {
-    const user = userEvent.setup();
-    const { unmount } = render(<InvoiceChatCard invoice={paidInvoice} />);
+  it('объясняет исполнителю, что деньги в эскроу и появятся после приёмки работы', () => {
+    render(<InvoiceChatCard invoice={paidInvoice} own />);
 
-    expect(screen.getByText('Чек готов к приёмке')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Принять чек' }));
+    expect(screen.getByText('Оплачено')).toBeInTheDocument();
+    expect(
+      screen.getByText('Заказчик оплатил — сумма в эскроу. Сдайте работу по заказу, и после приёмки она поступит на ваш баланс.'),
+    ).toBeInTheDocument();
+  });
 
-    expect(screen.getByRole('button', { name: 'Чек принят' })).toBeDisabled();
-    expect(screen.getByText('использован')).toBeInTheDocument();
-    expect(window.localStorage.getItem('taskhunt:acceptedReceipts:v1')).toContain(paidInvoice.id);
-
-    unmount();
+  it('объясняет заказчику, что оплата уйдёт исполнителю после приёмки работы', () => {
     render(<InvoiceChatCard invoice={paidInvoice} />);
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Чек принят' })).toBeDisabled());
-    expect(screen.getByText('использован')).toBeInTheDocument();
+    expect(screen.getByText('Оплачено')).toBeInTheDocument();
+    expect(
+      screen.getByText('Сумма в эскроу, ждёт результата работы. Она уйдёт исполнителю, как только вы примете сдачу по заказу.'),
+    ).toBeInTheDocument();
   });
 });
