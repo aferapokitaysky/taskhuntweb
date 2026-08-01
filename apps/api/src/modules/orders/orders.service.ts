@@ -489,6 +489,19 @@ export class OrdersService {
     }
   }
 
+  /**
+   * Отклики фрилансера по всем заказам сразу (CodexTZ dashboard unification —
+   * раньше единственный способ узнать статус своего отклика был открыть
+   * каждый заказ отдельно).
+   */
+  async listMyBids(freelancerId: string) {
+    return this.prisma.bid.findMany({
+      where: { freelancerId },
+      include: { order: { include: { category: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async listMyInvites(freelancerId: string) {
     return this.prisma.orderInvite.findMany({
       where: { freelancerId, status: 'PENDING' },

@@ -77,6 +77,14 @@ export class OrdersController {
 
   // Тоже до ':id' — тот же приём, что 'saved/mine' строкой выше.
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('FREELANCER')
+  @Get('bids/mine')
+  listMyBids(@CurrentUser() user: AuthenticatedUser) {
+    return this.ordersService.listMyBids(user.id);
+  }
+
+  // Тоже до ':id' — тот же приём, что 'saved/mine' строкой выше.
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CLIENT')
   @Get('drafts/mine')
   listMyDrafts(@CurrentUser() user: AuthenticatedUser) {

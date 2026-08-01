@@ -25,8 +25,9 @@ import { NextLevelWidget } from '@/components/NextLevelWidget';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api, API_URL, downloadFile } from '@/lib/api';
-import type { BidTemplate, Category, LedgerEntryItem, Order, PaginatedOrders, PreviousFreelancer, SavedPayoutAddress, SavedSearch, User, WalletBalance } from '@/lib/types';
+import type { BidTemplate, Category, LedgerEntryItem, MyBid, Order, PaginatedOrders, PreviousFreelancer, SavedPayoutAddress, SavedSearch, User, WalletBalance } from '@/lib/types';
 import { money } from '@/lib/types';
+import { BID_STATUS_LABELS } from '@/lib/bidStatus';
 
 // Тянет @web3icons/react (лого сетей) — тяжёлый пакет, нужен только когда
 // реально открыта форма вывода, поэтому грузим его отдельным чанком,
@@ -127,6 +128,15 @@ function DashboardContent() {
   const [previousFreelancers, setPreviousFreelancers] = useState<PreviousFreelancer[]>([]);
   const [savingSearch, setSavingSearch] = useState(false);
   const [savedSearchError, setSavedSearchError] = useState<string | null>(null);
+  // Мои отклики (фрилансер) — статус каждого, без захода в каждый заказ отдельно.
+  const [myBids, setMyBids] = useState<MyBid[]>([]);
+  // Отклики на мой заказ (заказчик) — разворачиваются inline под карточкой,
+  // без перехода на отдельную страницу заказа.
+  const [expandedBidsOrderId, setExpandedBidsOrderId] = useState<string | null>(null);
+  const [expandedOrderDetail, setExpandedOrderDetail] = useState<Order | null>(null);
+  const [expandedBidsLoading, setExpandedBidsLoading] = useState(false);
+  const [bidActionLoadingId, setBidActionLoadingId] = useState<string | null>(null);
+  const [bidActionError, setBidActionError] = useState<string | null>(null);
 
   useEffect(() => {
     // Если пришли по ссылке с /categories с уже готовым ?categoryId= —
@@ -188,6 +198,57 @@ function DashboardContent() {
       .then(setRecommendedOrders)
       .catch(() => setRecommendedOrders([]));
   }, [me]);
+
+  function refreshMyBids() {
+    return api<MyBid[]>('/orders/bids/mine')
+      .then(setMyBids)
+      .catch(() => undefined);
+  }
+
+  useEffect(() => {
+    if (!me?.roles.includes('FREELANCER')) return;
+    refreshMyBids();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
+
+  // Клик по "Разобрать отклики" — вместо перехода на /orders/:id тянем
+  // полную карточку заказа (с freelancer/profile на каждом bid) и
+  // разворачиваем список прямо тут. Повторный клик по той же карточке
+  // сворачивает панель без лишнего запроса.
+  async function toggleBidsPanel(orderId: string) {
+    setBidActionError(null);
+    if (expandedBidsOrderId === orderId) {
+      setExpandedBidsOrderId(null);
+      setExpandedOrderDetail(null);
+      return;
+    }
+    setExpandedBidsOrderId(orderId);
+    setExpandedOrderDetail(null);
+    setExpandedBidsLoading(true);
+    try {
+      const full = await api<Order>(`/orders/${orderId}`);
+      setExpandedOrderDetail(full);
+    } catch (err) {
+      setBidActionError(err instanceof Error ? err.message : 'Не удалось загрузить отклики');
+    } finally {
+      setExpandedBidsLoading(false);
+    }
+  }
+
+  async function respondToBid(orderId: string, bidId: string, action: 'accept' | 'reject') {
+    setBidActionLoadingId(bidId);
+    setBidActionError(null);
+    try {
+      await api(`/orders/${orderId}/bids/${bidId}/${action}`, { method: 'POST' });
+      const full = await api<Order>(`/orders/${orderId}`);
+      setExpandedOrderDetail(full);
+      await refreshOrders();
+    } catch (err) {
+      setBidActionError(err instanceof Error ? err.message : 'Не удалось обработать отклик');
+    } finally {
+      setBidActionLoadingId(null);
+    }
+  }
 
   async function toggleSaved(order: Order) {
     const isSaved = savedOrderIds.has(order.id);
@@ -907,6 +968,60 @@ function DashboardContent() {
         </section>
       )}
 
+      {isFreelancer && myBids.length > 0 && (
+        <section className="premium-panel mb-8 rounded-3xl p-5">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-brand">Мои отклики</p>
+              <h2 className="font-serif text-2xl text-stone-900">Статус ваших откликов</h2>
+            </div>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {myBids.map((bid) => {
+              const canChatOnBid = bid.status === 'PENDING' || bid.status === 'ACCEPTED';
+              return (
+                <div key={bid.id} className="interactive-card rounded-3xl border border-stone-100 bg-white p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link href={`/orders/${bid.orderId}`} className="line-clamp-1 break-words font-semibold text-stone-950 hover:text-brand">
+                        {bid.order.title}
+                      </Link>
+                      <p className="mt-1 text-xs text-stone-500">{bid.order.category?.name ?? 'Категория'}</p>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        bid.status === 'ACCEPTED'
+                          ? 'bg-card-sage/80 text-stone-800'
+                          : bid.status === 'REJECTED'
+                            ? 'bg-stone-200 text-stone-600'
+                            : 'bg-card-sand/80 text-stone-800'
+                      }`}
+                    >
+                      {BID_STATUS_LABELS[bid.status] ?? bid.status}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-serif text-xl text-stone-950">
+                      {money(bid.amount, bid.order.currency)} <span className="text-xs font-sans font-normal text-stone-500">за {bid.deliveryDays} дн.</span>
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {canChatOnBid && (
+                        <Link href={`/chats?orderId=${bid.orderId}`} className="rounded-full bg-card-lavender px-3 py-1.5 text-xs font-semibold text-stone-800 transition hover:bg-card-lavender/70">
+                          Открыть чат
+                        </Link>
+                      )}
+                      <Link href={`/orders/${bid.orderId}`} className="rounded-full bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-stone-200">
+                        Открыть заказ
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <div className={`grid gap-6 ${hasAside ? 'lg:grid-cols-[1fr_380px]' : ''}`}>
         <section className="premium-panel overflow-hidden rounded-[2.25rem] p-0">
           <div className="border-b border-stone-100 bg-gradient-to-br from-white via-card-sand/35 to-card-sage/35 p-5 md:p-6">
@@ -1158,9 +1273,9 @@ function DashboardContent() {
                           <p className="mt-1 break-words text-xs font-medium leading-5 text-stone-600">{roleHint}</p>
                         </div>
                         {isOwnOrder && bidsCount > 0 && order.status === 'OPEN' ? (
-                          <Link href={`/orders/${order.id}`} className="primary-action mt-1 px-3 py-2 text-center text-sm">
-                            Разобрать отклики
-                          </Link>
+                          <button type="button" onClick={() => toggleBidsPanel(order.id)} className="primary-action mt-1 px-3 py-2 text-sm">
+                            {expandedBidsOrderId === order.id ? 'Свернуть отклики' : 'Разобрать отклики'}
+                          </button>
                         ) : canBid ? (
                           <button type="button" onClick={() => setSelectedOrder(order)} className="primary-action mt-1 px-3 py-2 text-sm">
                             Откликнуться
@@ -1181,6 +1296,98 @@ function DashboardContent() {
                         </div>
                       </div>
                     </div>
+
+                    {isOwnOrder && expandedBidsOrderId === order.id && (
+                      <div className="mt-4 rounded-[1.5rem] border border-stone-100 bg-stone-50/70 p-3 md:p-4">
+                        {expandedBidsLoading ? (
+                          <div className="space-y-2">
+                            <Skeleton className="h-16 rounded-2xl" />
+                            <Skeleton className="h-16 rounded-2xl" />
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {bidActionError && <ErrorNotice message={bidActionError} />}
+                            {(expandedOrderDetail?.bids ?? []).map((bid) => {
+                              const freelancerName = bid.freelancer?.profile?.displayName ?? bid.freelancer?.email ?? 'Фрилансер';
+                              const canDecide = bid.status === 'PENDING' && order.status === 'OPEN';
+                              const isActing = bidActionLoadingId === bid.id;
+                              return (
+                                <div key={bid.id} className="rounded-[1.25rem] border border-stone-100 bg-white p-3">
+                                  <div className="flex flex-wrap items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        {bid.freelancerId ? (
+                                          <Link href={`/freelancers/${bid.freelancerId}`} className="font-semibold text-stone-950 hover:text-brand">
+                                            {freelancerName}
+                                          </Link>
+                                        ) : (
+                                          <span className="font-semibold text-stone-950">{freelancerName}</span>
+                                        )}
+                                        <span
+                                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                            bid.status === 'ACCEPTED'
+                                              ? 'bg-card-sage/80 text-stone-800'
+                                              : bid.status === 'REJECTED'
+                                                ? 'bg-stone-200 text-stone-600'
+                                                : 'bg-card-sand/80 text-stone-800'
+                                          }`}
+                                        >
+                                          {BID_STATUS_LABELS[bid.status] ?? bid.status}
+                                        </span>
+                                        {typeof bid.compatibilityPercent === 'number' && (
+                                          <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">
+                                            {bid.compatibilityPercent}% совпадение
+                                          </span>
+                                        )}
+                                      </div>
+                                      {bid.message && <p className="mt-1.5 break-words text-sm leading-5 text-stone-600">{bid.message}</p>}
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="font-serif text-xl text-stone-950">{money(bid.amount, order.currency)}</p>
+                                      <p className="text-xs text-stone-500">{bid.deliveryDays} дн.</p>
+                                    </div>
+                                  </div>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {canDecide && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={isActing}
+                                          onClick={() => respondToBid(order.id, bid.id, 'accept')}
+                                          className="primary-action px-3 py-1.5 text-xs disabled:opacity-50"
+                                        >
+                                          {isActing ? 'Секунду…' : 'Принять'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={isActing}
+                                          onClick={() => respondToBid(order.id, bid.id, 'reject')}
+                                          className="rounded-full bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-stone-200 disabled:opacity-50"
+                                        >
+                                          Отклонить
+                                        </button>
+                                      </>
+                                    )}
+                                    <Link
+                                      href={`/chats?orderId=${order.id}&freelancerId=${bid.freelancerId}`}
+                                      className="rounded-full bg-card-lavender px-3 py-1.5 text-xs font-semibold text-stone-800 transition hover:bg-card-lavender/70"
+                                    >
+                                      Открыть чат
+                                    </Link>
+                                    <Link href={`/freelancers/${bid.freelancerId}`} className="rounded-full bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-stone-200">
+                                      Профиль
+                                    </Link>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {(expandedOrderDetail?.bids ?? []).length === 0 && (
+                              <p className="px-2 py-3 text-center text-sm text-stone-400">Отклики пока не загрузились или их нет.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </article>
                 );
               })}

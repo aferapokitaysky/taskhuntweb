@@ -117,6 +117,13 @@ export interface Bid {
   freelancer?: User & { profile?: Profile | null };
 }
 
+/** Ответ GET /orders/bids/mine — отклик фрилансера + заказ, на который он подан. */
+export interface MyBid extends Bid {
+  orderId: string;
+  createdAt: string;
+  order: Order;
+}
+
 export interface Invoice {
   id: string;
   orderId?: string;
