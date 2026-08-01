@@ -1139,6 +1139,22 @@ export default function OrderDetailClient() {
                     <EmptyState icon={<ChatIcon />} title="Сообщений пока нет" description="Напишите первым — это ни к чему не обязывает." />
                   )}
                 </div>
+                <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[1.35rem] border border-stone-100 bg-white/72 p-2 shadow-sm">
+                  <span className="px-2 text-xs font-bold uppercase tracking-wide text-stone-400">Действия</span>
+                  {isFreelancer && (
+                    <a href="#invoice-form" className="secondary-action px-3 py-2 text-sm font-semibold">
+                      Выставить счёт
+                    </a>
+                  )}
+                  {isClient && messages.some((message) => message.type === 'INVOICE') && (
+                    <span className="rounded-full bg-card-sand px-3 py-2 text-sm font-semibold text-stone-700">
+                      Счета приходят карточками в этом чате
+                    </span>
+                  )}
+                  <span className="rounded-full bg-stone-100 px-3 py-2 text-xs font-medium text-stone-500">
+                    Инвойсы и чеки сохраняются в истории сделки
+                  </span>
+                </div>
                 <form onSubmit={sendMessage} className="flex gap-2">
                   <input
                     value={body}
@@ -1155,8 +1171,15 @@ export default function OrderDetailClient() {
           </div>
 
           {isFreelancer && (
-            <aside className="premium-panel p-5">
-              <h2 className="mb-4 font-serif text-lg text-stone-900">Выставить счёт</h2>
+            <aside id="invoice-form" className="premium-panel scroll-mt-24 p-5">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand">Счёт в чат</p>
+                  <h2 className="mt-1 font-serif text-lg text-stone-900">Выставить счёт</h2>
+                  <p className="mt-1 text-xs leading-5 text-stone-500">После подтверждения карточка счёта появится в переписке.</p>
+                </div>
+                <Mascot name="invoiceCoin" size="h-12 w-12" />
+              </div>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -1171,16 +1194,16 @@ export default function OrderDetailClient() {
                   placeholder="Сумма"
                   value={invoiceAmount}
                   onChange={(e) => setInvoiceAmount(e.target.value)}
-                  className="field-surface w-full px-3 py-2"
+                  className="field-surface w-full px-3 py-2 text-lg font-semibold"
                 />
                 <textarea
-                  placeholder="Описание"
+                  placeholder="За что счёт: этап, результат, доработка"
                   value={invoiceDescription}
                   onChange={(e) => setInvoiceDescription(e.target.value)}
                   className="field-surface min-h-24 w-full px-3 py-2"
                 />
                 <button type="submit" className="primary-action w-full px-4 py-3 font-medium">
-                  Подготовить счёт
+                  Отправить счёт в чат
                 </button>
               </form>
               {paymentAddress && (
