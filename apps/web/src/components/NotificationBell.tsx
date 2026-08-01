@@ -72,10 +72,10 @@ function notificationMeta(eventName: string) {
   if (eventName.includes('ChatMessageCreated')) {
     return { href: '/chats', label: 'Чат', tone: 'bg-card-lavender text-stone-800', Icon: ChatIcon };
   }
-  if (eventName.includes('InvoicePaid') || eventName.includes('EscrowReleased')) {
+  if (eventName.includes('InvoicePaid') || eventName.includes('EscrowLocked') || eventName.includes('EscrowReleased')) {
     return { href: '/dashboard', label: 'Финансы', tone: 'bg-card-sage text-stone-800', Icon: BalanceEscrowIcon };
   }
-  if (eventName.includes('BidSubmitted') || eventName.includes('BidAccepted')) {
+  if (eventName.includes('BidSubmitted') || eventName.includes('BidAccepted') || eventName.includes('BidRejected')) {
     return { href: '/dashboard', label: 'Отклик', tone: 'bg-card-lavender text-stone-800', Icon: OrdersNavIcon };
   }
   if (eventName.includes('WorkSubmitted')) {
@@ -87,11 +87,20 @@ function notificationMeta(eventName: string) {
   if (eventName.includes('Support')) {
     return { href: '/support', label: 'Поддержка', tone: 'bg-card-sage text-stone-800', Icon: MailCheckIcon };
   }
-  if (eventName.includes('DeadlineExtension')) {
+  if (eventName.includes('DeadlineExtension') || eventName.includes('DeadlineApproaching')) {
     return { href: '/dashboard', label: 'Сроки', tone: 'bg-card-sand text-stone-800', Icon: RocketIcon };
   }
   if (eventName.includes('OrderInvite')) {
     return { href: '/dashboard', label: 'Инвайт', tone: 'bg-card-sand text-stone-800', Icon: RocketIcon };
+  }
+  if (eventName.includes('SavedSearchMatch')) {
+    return { href: '/dashboard', label: 'Подбор', tone: 'bg-card-sage text-stone-800', Icon: MatchIcon };
+  }
+  if (eventName.includes('OrderExpired')) {
+    return { href: '/dashboard', label: 'Архив', tone: 'bg-card-rose text-stone-800', Icon: AlertIcon };
+  }
+  if (eventName.includes('FraudFlagCreated')) {
+    return { href: '/admin', label: 'Риск', tone: 'bg-card-rose text-stone-800', Icon: AlertIcon };
   }
   return { href: '/dashboard', label: 'Событие', tone: 'bg-stone-100 text-stone-700', Icon: ChatIcon };
 }

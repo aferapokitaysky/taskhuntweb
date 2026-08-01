@@ -48,6 +48,10 @@ export class DeadlineWarningProcessor extends WorkerHost {
               title: 'Дедлайн близко',
               message: `Дедлайн по заказу «${order.title}» наступает через ${hoursLeft} ч.`,
               eventName: 'DeadlineApproaching',
+              metadata: {
+                orderId: order.id,
+                href: `/orders/${order.id}`,
+              },
             },
           }),
           this.prisma.order.update({
