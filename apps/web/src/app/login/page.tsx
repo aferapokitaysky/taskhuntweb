@@ -101,12 +101,6 @@ export default function LoginPage() {
         </form>
       ) : (
         <>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[1.2rem] bg-white/72 px-3 py-2 text-sm shadow-sm">
-            <span className="font-medium text-stone-600">Первый раз на TaskHunt?</span>
-            <Link href="/register" className="font-bold text-brand hover:text-brand-dark">
-              Создать аккаунт
-            </Link>
-          </div>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <label className="grid gap-2">
               <span className="text-xs font-bold uppercase tracking-[0.14em] text-stone-500">Email</span>
@@ -150,12 +144,12 @@ export default function LoginPage() {
             <OAuthButtons />
           </div>
 
-          <p className="mt-4 text-sm text-stone-500">
-            Нет аккаунта?{' '}
-            <Link href="/register" className="font-medium text-brand hover:text-brand-dark">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-[1.2rem] bg-white/72 px-3 py-2 text-sm shadow-sm">
+            <span className="font-medium text-stone-600">Нет аккаунта на TaskHunt?</span>
+            <Link href="/register" className="font-bold text-brand hover:text-brand-dark">
               Зарегистрироваться
             </Link>
-          </p>
+          </div>
         </>
       )}
     </AuthShell>

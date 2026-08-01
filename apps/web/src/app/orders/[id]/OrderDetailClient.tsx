@@ -40,6 +40,11 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const RECENTLY_VIEWED_KEY = 'taskhunt:recentlyViewed';
 const MAX_RECENTLY_VIEWED = 10;
+const QUICK_CHAT_TEMPLATES = [
+  'Привет! Уточните, пожалуйста, детали по задаче.',
+  'Готов начать, подтверждаю срок и бюджет.',
+  'Отправил счёт в чат, проверьте сумму и описание.',
+];
 
 function getWorkflowGuidance(params: {
   status: Order['status'];
@@ -136,6 +141,8 @@ export default function OrderDetailClient() {
   const [order, setOrder] = useState<Order | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [body, setBody] = useState('');
+  const [chatFilter, setChatFilter] = useState<'ALL' | 'INVOICES'>('ALL');
+  const [sendingFileId, setSendingFileId] = useState<string | null>(null);
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [invoiceDescription, setInvoiceDescription] = useState('');
   const [paymentAddress, setPaymentAddress] = useState<string | null>(null);
@@ -262,6 +269,8 @@ export default function OrderDetailClient() {
   const bids = order?.bids ?? [];
   const selectedBidCount = bids.filter((bid) => bid.status === 'ACCEPTED').length;
   const closedBidCount = bids.filter((bid) => bid.status === 'REJECTED' || bid.status === 'WITHDRAWN').length;
+  const visibleMessages = chatFilter === 'INVOICES' ? messages.filter((message) => message.type === 'INVOICE') : messages;
+  const invoiceMessageCount = messages.filter((message) => message.type === 'INVOICE').length;
   const hireConfirmBid = order?.bids?.find((bid) => bid.id === hireConfirmBidId) ?? null;
   const declineConfirmBid = order?.bids?.find((bid) => bid.id === declineConfirmBidId) ?? null;
   const approveConfirmMilestone =
@@ -454,6 +463,23 @@ export default function OrderDetailClient() {
       body: JSON.stringify({ body: text }),
     });
     setMessages((current) => [...current, created]);
+  }
+
+  async function sendChatFile(file: UploadedFile) {
+    if (!chatFreelancerId) return;
+    setSendingFileId(file.id);
+    setError(null);
+    try {
+      const created = await api<ChatMessage>(`/orders/${orderId}/chat/messages/file?freelancerId=${chatFreelancerId}`, {
+        method: 'POST',
+        body: JSON.stringify({ fileId: file.id, body: file.originalName }),
+      });
+      setMessages((current) => [...current, created]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось отправить файл в чат');
+    } finally {
+      setSendingFileId(null);
+    }
   }
 
   async function issueInvoice() {
@@ -1111,8 +1137,29 @@ export default function OrderDetailClient() {
               <p className="text-sm text-stone-500">Выберите отклик выше, чтобы начать переписку.</p>
             ) : (
               <>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex rounded-full bg-stone-100 p-1">
+                    {[
+                      ['ALL', `Все ${messages.length}`],
+                      ['INVOICES', `Счета ${invoiceMessageCount}`],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setChatFilter(value as 'ALL' | 'INVOICES')}
+                        className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                          chatFilter === value ? 'bg-white text-brand shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {sendingFileId && <span className="text-xs font-medium text-stone-500">Файл отправляется...</span>}
+                </div>
+
                 <div className="mb-4 max-h-[480px] space-y-3 overflow-y-auto rounded-3xl bg-stone-50 p-4">
-                  {messages.map((message) => {
+                  {visibleMessages.map((message) => {
                     const isOwn = message.senderId === me?.id;
                     const name = message.sender?.profile?.displayName ?? message.sender?.email ?? 'Участник';
                     return (
@@ -1128,6 +1175,14 @@ export default function OrderDetailClient() {
                           <p className={`text-xs ${isOwn ? 'text-white/70' : 'text-stone-500'}`}>{name}</p>
                           {message.type === 'INVOICE' && message.invoice ? (
                             <InvoiceChatCard invoice={message.invoice} own={isOwn} canPay={isClient && !isOwn} onPayIntent={openPaymentConfirm} />
+                          ) : message.type === 'FILE' ? (
+                            <div className="mt-2 rounded-[1.15rem] bg-white/12 p-3">
+                              <div className="flex items-center gap-2">
+                                <PaperclipIcon className="h-4 w-4" />
+                                <p className="break-words text-sm font-semibold">{message.body || 'Файл прикреплён'}</p>
+                              </div>
+                              <p className={`mt-1 text-xs ${isOwn ? 'text-white/70' : 'text-stone-500'}`}>Файл сохранён в истории сделки</p>
+                            </div>
                           ) : (
                             <p className="mt-1 text-sm">{message.body}</p>
                           )}
@@ -1135,8 +1190,12 @@ export default function OrderDetailClient() {
                       </div>
                     );
                   })}
-                  {messages.length === 0 && (
-                    <EmptyState icon={<ChatIcon />} title="Сообщений пока нет" description="Напишите первым — это ни к чему не обязывает." />
+                  {visibleMessages.length === 0 && (
+                    <EmptyState
+                      icon={<ChatIcon />}
+                      title={chatFilter === 'INVOICES' ? 'Счетов пока нет' : 'Сообщений пока нет'}
+                      description={chatFilter === 'INVOICES' ? 'Когда счёт появится в чате, он будет виден в этом фильтре.' : 'Напишите первым — это ни к чему не обязывает.'}
+                    />
                   )}
                 </div>
                 <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[1.35rem] border border-stone-100 bg-white/72 p-2 shadow-sm">
@@ -1155,6 +1214,18 @@ export default function OrderDetailClient() {
                     Инвойсы и чеки сохраняются в истории сделки
                   </span>
                 </div>
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {QUICK_CHAT_TEMPLATES.map((template) => (
+                    <button
+                      key={template}
+                      type="button"
+                      onClick={() => setBody(template)}
+                      className="rounded-full bg-card-sand/80 px-3 py-1.5 text-xs font-semibold text-stone-700 transition hover:bg-card-sage"
+                    >
+                      {template}
+                    </button>
+                  ))}
+                </div>
                 <form onSubmit={sendMessage} className="flex gap-2">
                   <input
                     value={body}
@@ -1162,6 +1233,7 @@ export default function OrderDetailClient() {
                     placeholder="Сообщение"
                     className="field-surface min-w-0 flex-1 px-3 py-2"
                   />
+                  <FileUpload onUploaded={(file) => void sendChatFile(file)} label="Файл" />
                   <button type="submit" className="primary-action px-4 py-2 font-medium">
                     Отправить
                   </button>
