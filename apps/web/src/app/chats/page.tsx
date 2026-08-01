@@ -316,17 +316,15 @@ function ChatsContent() {
   return (
     <main className="mx-auto max-w-7xl px-4 py-8">
       <AppHeader />
-      <section className="workspace-hero mb-8 p-6 md:p-8">
-        <div className="relative flex flex-wrap items-end justify-between gap-5">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Сообщения</p>
-            <h1 className="mt-3 font-serif text-4xl leading-tight text-stone-950 md:text-6xl">Чаты по заказам</h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-stone-600">
-              Все рабочие переписки в одном месте: кто пишет, по какому заказу, когда был последний ответ и куда перейти дальше.
-            </p>
-          </div>
-          <Mascot name="supportHeadset" size="h-20 w-20" />
+      {/* Компактный заголовок вместо полноразмерного hero — на странице
+          мессенджера основная площадь должна уходить под сам чат, а не под
+          маркетинговый баннер сверху. */}
+      <section className="workspace-hero mb-4 flex flex-wrap items-center justify-between gap-4 p-4 md:p-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Сообщения</p>
+          <h1 className="mt-1 font-serif text-2xl leading-tight text-stone-950 md:text-3xl">Чаты по заказам</h1>
         </div>
+        <Mascot name="supportHeadset" size="h-12 w-12" />
       </section>
 
       {error && <ErrorNotice message={error} />}
@@ -335,7 +333,7 @@ function ChatsContent() {
           списка сообщений ниже не от чего было считать границу, и при
           накоплении сообщений/счетов росла не внутренняя прокрутка, а вся
           секция (и вместе с ней вся страница). */}
-      <section className="grid gap-5 lg:h-[calc(100vh-140px)] lg:min-h-[840px] lg:grid-rows-[1fr] lg:grid-cols-[380px_1fr]">
+      <section className="grid gap-5 lg:h-[calc(100vh-100px)] lg:min-h-[960px] lg:grid-rows-[1fr] lg:grid-cols-[380px_1fr]">
         <aside className="premium-panel flex min-h-0 flex-col overflow-hidden rounded-[2.25rem] p-0">
           <div className="shrink-0 border-b border-stone-100 p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Inbox</p>

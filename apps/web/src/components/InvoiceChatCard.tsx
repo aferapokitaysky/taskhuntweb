@@ -91,10 +91,6 @@ export function InvoiceChatCard({
         own ? 'border-white/25 bg-white/10 text-white shadow-stone-950/10' : 'border-brand/20 bg-white text-stone-900 shadow-stone-200/60 dark:border-stone-700 dark:bg-stone-900'
       }`}
     >
-      <div className="pointer-events-none absolute left-0 right-0 top-[108px] h-px border-t border-dashed border-stone-300/70 dark:border-stone-700" />
-      <div className="pointer-events-none absolute -left-3 top-[96px] h-6 w-6 rounded-full bg-stone-50 dark:bg-stone-950" />
-      <div className="pointer-events-none absolute -right-3 top-[96px] h-6 w-6 rounded-full bg-stone-50 dark:bg-stone-950" />
-
       <div className={`p-4 ${paid ? 'bg-card-sage/75' : cancelled ? 'bg-card-rose/70' : 'bg-card-sand/75'} dark:bg-stone-800`}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -186,13 +182,12 @@ export function InvoiceChatCard({
         </div>
       )}
       {paid && (
-        <div className="border-t border-dashed border-emerald-200 bg-white/82 p-3 dark:border-stone-700 dark:bg-stone-900">
+        <div className="border-t border-stone-100 bg-white/82 p-3 dark:border-stone-700 dark:bg-stone-900">
           <div
             className={`relative overflow-hidden rounded-[1.45rem] border p-3 shadow-lg transition duration-500 ${
               receiptAccepted ? 'translate-y-2 rotate-[-0.4deg]' : 'translate-y-0'
             } ${receiptCardTone} dark:border-emerald-900/50 dark:bg-stone-800 dark:text-stone-100`}
           >
-            <div className="pointer-events-none absolute left-0 right-0 top-11 border-t border-dashed border-emerald-200 dark:border-emerald-900/60" />
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-600">
@@ -222,7 +217,7 @@ export function InvoiceChatCard({
                 : 'Оплата подтверждена. Примите чек, чтобы визуально закрыть платёж в переписке.'}
             </p>
             <div
-              className={`mt-3 rounded-b-[1.15rem] border-t border-dashed px-3 py-2 text-center text-[11px] font-bold uppercase tracking-[0.16em] transition duration-500 ${
+              className={`mt-3 rounded-b-[1.15rem] border-t px-3 py-2 text-center text-[11px] font-bold uppercase tracking-[0.16em] transition duration-500 ${
                 receiptAccepted
                   ? 'translate-y-1 border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/50 dark:text-emerald-200'
                   : 'border-stone-200 bg-stone-50 text-stone-400 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-500'
