@@ -19,9 +19,9 @@ import { money } from '@/lib/types';
 type ActiveChat = { orderId: string; freelancerId: string; threadId?: string | null };
 
 const QUICK_CHAT_TEMPLATES = [
-  'Привет! Уточните, пожалуйста, один момент по задаче.',
-  'Готов двигаться дальше, подтверждаю сроки и следующий шаг.',
-  'Посмотрите, пожалуйста, счёт и реквизиты в чате.',
+  { label: 'Уточнить', text: 'Привет! Уточните, пожалуйста, один момент по задаче.' },
+  { label: 'Следующий шаг', text: 'Готов двигаться дальше, подтверждаю сроки и следующий шаг.' },
+  { label: 'Счёт', text: 'Посмотрите, пожалуйста, счёт и реквизиты в чате.' },
 ];
 
 export default function ChatsPage() {
@@ -318,16 +318,6 @@ function ChatsContent() {
                       {label}
                     </button>
                   ))}
-                  {QUICK_CHAT_TEMPLATES.map((template) => (
-                    <button
-                      key={template}
-                      type="button"
-                      onClick={() => setBody(template)}
-                      className="rounded-full bg-white/80 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:-translate-y-0.5 hover:bg-card-sand/70"
-                    >
-                      {template}
-                    </button>
-                  ))}
                 </div>
               </div>
 
@@ -344,15 +334,22 @@ function ChatsContent() {
                   {visibleMessages.map((message) => {
                     const own = message.senderId === me?.id;
                     const name = message.sender?.profile?.displayName ?? message.sender?.email ?? 'Участник';
+                    const isInvoice = message.type === 'INVOICE' && Boolean(message.invoice);
                     return (
                       <div key={message.id} className={`flex items-end gap-2 ${own ? 'flex-row-reverse' : ''}`}>
                         <Avatar user={message.sender} size="small" />
-                        <div className={`max-w-[78%] rounded-[1.6rem] p-3 shadow-sm ${own ? 'bg-brand text-white' : 'bg-white text-stone-900'}`}>
+                        <div
+                          className={
+                            isInvoice
+                              ? 'max-w-[min(34rem,86%)]'
+                              : `max-w-[78%] rounded-[1.6rem] p-3 shadow-sm ${own ? 'bg-brand text-white' : 'bg-white text-stone-900'}`
+                          }
+                        >
                           <div className={`mb-1 flex items-center gap-2 text-[11px] ${own ? 'text-white/70' : 'text-stone-400'}`}>
                             <span>{name}</span>
                             <span>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
-                          {message.type === 'INVOICE' && message.invoice ? (
+                          {isInvoice && message.invoice ? (
                             <InvoiceChatCard
                               invoice={message.invoice}
                               own={own}
@@ -378,6 +375,22 @@ function ChatsContent() {
               </div>
 
               <form onSubmit={sendMessage} className="border-t border-stone-100 bg-white/80 p-3 md:p-4">
+                <div className="mb-2 flex flex-wrap items-center gap-1.5 px-1">
+                  <span className="rounded-full bg-stone-100 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-stone-400">
+                    Быстрые ответы
+                  </span>
+                  {QUICK_CHAT_TEMPLATES.map((template) => (
+                    <button
+                      key={template.label}
+                      type="button"
+                      title={template.text}
+                      onClick={() => setBody(template.text)}
+                      className="rounded-full bg-card-sand/80 px-3 py-1.5 text-xs font-semibold text-stone-700 transition hover:-translate-y-0.5 hover:bg-card-sage"
+                    >
+                      {template.label}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex flex-wrap items-center gap-2 rounded-[1.75rem] bg-stone-50 p-2">
                   <FileUpload onUploaded={(file) => void sendChatFile(file)} label={sendingFileId ? '...' : 'Файл'} />
                   <input

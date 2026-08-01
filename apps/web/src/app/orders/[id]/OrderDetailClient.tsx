@@ -42,9 +42,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const RECENTLY_VIEWED_KEY = 'taskhunt:recentlyViewed';
 const MAX_RECENTLY_VIEWED = 10;
 const QUICK_CHAT_TEMPLATES = [
-  'Привет! Уточните, пожалуйста, детали по задаче.',
-  'Готов начать, подтверждаю срок и бюджет.',
-  'Отправил счёт в чат, проверьте сумму и описание.',
+  { label: 'Уточнить', text: 'Привет! Уточните, пожалуйста, детали по задаче.' },
+  { label: 'Старт', text: 'Готов начать, подтверждаю срок и бюджет.' },
+  { label: 'Счёт', text: 'Отправил счёт в чат, проверьте сумму и описание.' },
 ];
 
 function getWorkflowGuidance(params: {
@@ -1318,6 +1318,7 @@ export default function OrderDetailClient() {
                   {visibleMessages.map((message) => {
                     const isOwn = message.senderId === me?.id;
                     const name = message.sender?.profile?.displayName ?? message.sender?.email ?? 'Участник';
+                    const isInvoice = message.type === 'INVOICE' && Boolean(message.invoice);
                     return (
                       <div key={message.id} className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
                         <div
@@ -1327,9 +1328,15 @@ export default function OrderDetailClient() {
                         >
                           {name.charAt(0).toUpperCase()}
                         </div>
-                        <div className={`max-w-[75%] rounded-[1.5rem] p-3 shadow-sm ${isOwn ? 'bg-brand text-white' : 'bg-white text-stone-900'}`}>
+                        <div
+                          className={
+                            isInvoice
+                              ? 'max-w-[min(34rem,86%)]'
+                              : `max-w-[75%] rounded-[1.5rem] p-3 shadow-sm ${isOwn ? 'bg-brand text-white' : 'bg-white text-stone-900'}`
+                          }
+                        >
                           <p className={`text-xs ${isOwn ? 'text-white/70' : 'text-stone-500'}`}>{name}</p>
-                          {message.type === 'INVOICE' && message.invoice ? (
+                          {isInvoice && message.invoice ? (
                             <InvoiceChatCard
                               invoice={message.invoice}
                               own={isOwn}
@@ -1376,15 +1383,19 @@ export default function OrderDetailClient() {
                     Инвойсы и чеки сохраняются в истории сделки
                   </span>
                 </div>
-                <div className="mb-3 flex flex-wrap gap-1.5">
+                <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                  <span className="rounded-full bg-stone-100 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-stone-400">
+                    Быстрые ответы
+                  </span>
                   {QUICK_CHAT_TEMPLATES.map((template) => (
                     <button
-                      key={template}
+                      key={template.label}
                       type="button"
-                      onClick={() => setBody(template)}
+                      title={template.text}
+                      onClick={() => setBody(template.text)}
                       className="rounded-full bg-card-sand/80 px-3 py-1.5 text-xs font-semibold text-stone-700 transition hover:bg-card-sage"
                     >
-                      {template}
+                      {template.label}
                     </button>
                   ))}
                 </div>
