@@ -120,7 +120,7 @@ function RegisterForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex w-full flex-col gap-2.5 sm:gap-3">
-        <div className="grid w-full gap-2.5 sm:grid-cols-2 sm:gap-3">
+        <div className="grid w-full gap-2.5 sm:gap-3">
           <label className="grid w-full min-w-0 gap-1">
             <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500 sm:text-xs">Имя</span>
             <input
@@ -143,7 +143,7 @@ function RegisterForm() {
               className="field-surface w-full px-3 py-2 sm:px-4 sm:py-2.5"
             />
           </label>
-          <label className="grid w-full min-w-0 gap-1 sm:col-span-2">
+          <label className="grid w-full min-w-0 gap-1">
             <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500 sm:text-xs">Пароль</span>
             <input
               type="password"

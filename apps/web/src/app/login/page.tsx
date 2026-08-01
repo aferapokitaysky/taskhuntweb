@@ -140,14 +140,14 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-3">
+          <div className="mt-4">
             <OAuthButtons />
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-2 rounded-[1.2rem] bg-white/72 px-3 py-2 text-sm shadow-sm">
-            <span className="font-medium text-stone-600">Нет аккаунта на TaskHunt?</span>
+          <div className="mt-4 flex flex-col items-center justify-center gap-1.5 rounded-[1.25rem] border border-stone-200 bg-white/78 px-3 py-3 text-center text-sm shadow-sm sm:flex-row sm:gap-2">
+            <span className="font-medium text-stone-600">Нет аккаунта?</span>
             <Link href="/register" className="font-bold text-brand hover:text-brand-dark">
-              Зарегистрироваться
+              Создать профиль TaskHunt
             </Link>
           </div>
         </>
