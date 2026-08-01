@@ -30,6 +30,7 @@ interface Notification {
     invoiceId?: string;
     bidId?: string;
     disputeId?: string;
+    ticketId?: string;
   } | null;
   read: boolean;
   createdAt: string;
@@ -111,6 +112,9 @@ function notificationHref(notification: Notification) {
     const params = new URLSearchParams({ orderId: notification.metadata.orderId });
     if (notification.metadata.freelancerId) params.set('freelancerId', notification.metadata.freelancerId);
     return `/chats?${params.toString()}`;
+  }
+  if (notification.metadata?.ticketId) {
+    return `/support?ticketId=${encodeURIComponent(notification.metadata.ticketId)}`;
   }
   if (notification.metadata?.orderId) return `/orders/${notification.metadata.orderId}`;
   return notificationMeta(notification.eventName).href;
