@@ -259,6 +259,9 @@ export default function OrderDetailClient() {
   const milestones = useMemo(() => [...(order?.milestones ?? [])].sort((a, b) => a.position - b.position), [order]);
   const hasMilestones = milestones.length > 0;
   const pendingBidCount = order?.bids?.filter((bid) => bid.status === 'PENDING').length ?? 0;
+  const bids = order?.bids ?? [];
+  const selectedBidCount = bids.filter((bid) => bid.status === 'ACCEPTED').length;
+  const closedBidCount = bids.filter((bid) => bid.status === 'REJECTED' || bid.status === 'WITHDRAWN').length;
   const hireConfirmBid = order?.bids?.find((bid) => bid.id === hireConfirmBidId) ?? null;
   const declineConfirmBid = order?.bids?.find((bid) => bid.id === declineConfirmBidId) ?? null;
   const approveConfirmMilestone =
@@ -665,21 +668,40 @@ export default function OrderDetailClient() {
         )}
       </section>
 
-      <section className="premium-panel mb-6 rounded-[2rem] p-5 md:p-6">
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand">Выбор исполнителя</p>
-            <h2 className="mt-1 font-serif text-2xl text-stone-900">Отклики</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600">
-              Сравните сообщение, срок и бюджет. Заказ перейдёт в работу только после действия заказчика.
-            </p>
+      <section className="premium-panel mb-6 overflow-hidden rounded-[2rem] p-0">
+        <div className="border-b border-stone-100 bg-white/74 p-5 md:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand">Панель отбора</p>
+              <h2 className="mt-1 font-serif text-2xl text-stone-900">Отклики и кандидаты</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600">
+                Сравните профиль, срок, бюджет и сообщение. Заказ перейдёт в работу только после действия заказчика.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 rounded-[1.4rem] bg-card-sand/75 px-4 py-3 text-sm font-semibold text-stone-700">
+              <Mascot name="search" size="h-12 w-12" />
+              <div>
+                <p className="text-xs uppercase tracking-wide text-stone-500">Всего кандидатов</p>
+                <p className="font-serif text-2xl text-stone-950">{bids.length}</p>
+              </div>
+            </div>
           </div>
-          <div className="rounded-full bg-card-sand px-4 py-2 text-sm font-semibold text-stone-700">
-            {(order.bids ?? []).length} кандидатов
+          <div className="mt-5 grid gap-2 sm:grid-cols-4">
+            {[
+              ['На решении', pendingBidCount, 'bg-card-sand/80'],
+              ['Выбран', selectedBidCount, 'bg-card-sage/80'],
+              ['Закрыто', closedBidCount, 'bg-stone-100'],
+              ['Чатов', threads.length, 'bg-card-lavender/75'],
+            ].map(([label, value, tone]) => (
+              <div key={label} className={`rounded-[1.25rem] px-4 py-3 ${tone}`}>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-stone-500">{label}</p>
+                <p className="mt-1 font-serif text-2xl text-stone-950">{value}</p>
+              </div>
+            ))}
           </div>
         </div>
         {order.tags && order.tags.length > 0 && (
-          <div className="mb-4 flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 border-b border-stone-100 bg-card-sand/25 px-5 py-3 md:px-6">
             {order.tags.map((tag) => (
               <span key={tag} className="rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700">
                 {tag}
@@ -687,18 +709,21 @@ export default function OrderDetailClient() {
             ))}
           </div>
         )}
-        <div className="space-y-3">
-          {(order.bids ?? []).map((bid) => {
+        <div className="space-y-4 p-5 md:p-6">
+          {bids.map((bid, index) => {
             const compatibility = compatibilityByBidId[bid.id];
             const freelancerName = bid.freelancer?.profile?.displayName ?? bid.freelancer?.email ?? 'Фрилансер';
             const avatarUrl = bid.freelancer?.profile?.avatarUrl;
             const isSelectedBid = bid.status === 'ACCEPTED' || order.acceptedBidId === bid.id;
             const canDecideBid = isClient && order.status === 'OPEN' && bid.status === 'PENDING';
             const isMutedBid = bid.status === 'REJECTED' || bid.status === 'WITHDRAWN';
+            const profile = bid.freelancer?.profile;
+            const skills = profile?.skills?.map(({ skill }) => skill.name).filter(Boolean).slice(0, 4) ?? [];
+            const location = [profile?.city, profile?.country].filter(Boolean).join(', ');
             return (
-              <div
+              <article
                 key={bid.id}
-                className={`interactive-card rounded-[2rem] border p-5 transition ${
+                className={`interactive-card overflow-hidden rounded-[2rem] border transition ${
                   isSelectedBid
                     ? 'border-emerald-300 bg-emerald-50/60'
                     : isMutedBid
@@ -706,10 +731,10 @@ export default function OrderDetailClient() {
                       : 'border-stone-100 bg-white/80'
                 }`}
               >
-                <div className="grid gap-5 lg:grid-cols-[1fr_250px] lg:items-start">
-                  <div className="min-w-0">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[1.35rem] border border-stone-100 bg-card-sage shadow-sm">
+                <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_290px]">
+                  <div className="min-w-0 p-5">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                      <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[1.5rem] border border-stone-100 bg-card-sage shadow-sm">
                         {avatarUrl ? (
                           <img
                             src={avatarUrl.startsWith('http') ? avatarUrl : `${API_URL}${avatarUrl}`}
@@ -717,12 +742,26 @@ export default function OrderDetailClient() {
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <BidAvatarIcon className="h-12 w-12" />
+                          <BidAvatarIcon className="h-14 w-14" />
+                        )}
+                        {isSelectedBid && (
+                          <span className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
+                            <CheckIcon className="h-3.5 w-3.5" />
+                          </span>
                         )}
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="break-words text-lg font-semibold text-stone-950">{freelancerName}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="min-w-0 break-words text-xl font-semibold leading-tight text-stone-950">{freelancerName}</p>
+                              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-stone-500 shadow-sm">
+                                #{index + 1}
+                              </span>
+                            </div>
+                            <p className="mt-1 break-all text-xs text-stone-500">{bid.freelancer?.email}</p>
+                            {location && <p className="mt-1 text-xs font-medium text-stone-500">{location}</p>}
+                          </div>
                           <span
                             className={`rounded-full px-3 py-1 text-xs font-semibold ${
                               isSelectedBid
@@ -735,54 +774,65 @@ export default function OrderDetailClient() {
                             {BID_STATUS_LABELS[bid.status] ?? bid.status}
                           </span>
                         </div>
-                        <p className="mt-1 break-all text-xs text-stone-500">{bid.freelancer?.email}</p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-stone-600 shadow-sm">
-                            {bid.deliveryDays} дн. на выполнение
-                          </span>
-                          {compatibility != null && (
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                                compatibility >= 70
-                                  ? 'bg-card-sage text-stone-800'
+                        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                          <div className="rounded-[1.15rem] bg-white/75 px-3 py-2 shadow-sm">
+                            <p className="text-[11px] font-bold uppercase tracking-wide text-stone-400">Срок</p>
+                            <p className="mt-1 text-sm font-semibold text-stone-900">{bid.deliveryDays} дн.</p>
+                          </div>
+                          <div className="rounded-[1.15rem] bg-white/75 px-3 py-2 shadow-sm">
+                            <p className="text-[11px] font-bold uppercase tracking-wide text-stone-400">Сумма</p>
+                            <p className="mt-1 text-sm font-semibold text-stone-900">{money(bid.amount, order.currency)}</p>
+                          </div>
+                          <div
+                            className={`rounded-[1.15rem] px-3 py-2 shadow-sm ${
+                              compatibility == null
+                                ? 'bg-white/75'
+                                : compatibility >= 70
+                                  ? 'bg-card-sage/85'
                                   : compatibility >= 40
-                                    ? 'bg-card-sand text-stone-800'
-                                    : 'bg-stone-100 text-stone-600'
-                              }`}
-                            >
-                              {compatibility}% совпадение
-                            </span>
-                          )}
+                                    ? 'bg-card-sand/85'
+                                    : 'bg-stone-100'
+                            }`}
+                          >
+                            <p className="text-[11px] font-bold uppercase tracking-wide text-stone-400">Совпадение</p>
+                            <p className="mt-1 text-sm font-semibold text-stone-900">{compatibility != null ? `${compatibility}%` : 'Ждём'}</p>
+                          </div>
+                        </div>
+                        {skills.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {skills.map((skill) => (
+                              <span key={skill} className="rounded-full bg-card-sand/75 px-2.5 py-1 text-xs font-medium text-stone-700">
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-4 rounded-[1.4rem] border border-stone-100 bg-white/72 p-4">
+                          <p className="text-xs font-semibold uppercase text-stone-400">Сообщение к заказу</p>
+                          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-stone-700">
+                            {bid.message || 'Фрилансер пока не добавил сопроводительное сообщение.'}
+                          </p>
                         </div>
                       </div>
                     </div>
-
-                    <div className="mt-4 rounded-[1.5rem] border border-stone-100 bg-white/75 p-4">
-                      <p className="text-xs font-semibold uppercase text-stone-400">Сообщение к заказу</p>
-                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-stone-700">
-                        {bid.message || 'Фрилансер пока не добавил сопроводительное сообщение.'}
-                      </p>
-                    </div>
                   </div>
 
-                  <div className="rounded-[1.6rem] border border-stone-100 bg-white/85 p-4 shadow-sm">
-                    <p className="text-xs font-semibold uppercase text-stone-400">Предложение</p>
-                    <p className="mt-1 font-serif text-3xl text-stone-950">{money(bid.amount, order.currency)}</p>
+                  <aside className="flex min-h-full flex-col justify-between gap-4 border-t border-stone-100 bg-stone-50/65 p-5 xl:border-l xl:border-t-0">
                     {isSelectedBid ? (
-                      <p className="mt-3 rounded-[1.25rem] bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700">
+                      <p className="rounded-[1.25rem] bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700">
                         Исполнитель выбран. Рабочий чат уже доступен.
                       </p>
                     ) : canDecideBid ? (
-                      <p className="mt-3 rounded-[1.25rem] bg-card-sand/80 px-3 py-2 text-sm text-stone-700">
-                        Нажмите «Дать таск», чтобы принять этого исполнителя. Остальные ожидающие отклики будут закрыты.
+                      <p className="rounded-[1.25rem] bg-card-sand/80 px-3 py-2 text-sm text-stone-700">
+                        Можно открыть профиль, уточнить детали в чате или сразу дать задачу.
                       </p>
                     ) : (
-                      <p className="mt-3 rounded-[1.25rem] bg-stone-100 px-3 py-2 text-sm text-stone-500">
+                      <p className="rounded-[1.25rem] bg-stone-100 px-3 py-2 text-sm text-stone-500">
                         Действия по этому отклику сейчас недоступны.
                       </p>
                     )}
 
-                    <div className="mt-4 grid gap-2">
+                    <div className="grid gap-2">
                       <Link href={`/freelancers/${bid.freelancerId}`} className="secondary-action justify-center px-4 py-2 text-sm font-semibold">
                         Посмотреть профиль
                       </Link>
@@ -792,7 +842,7 @@ export default function OrderDetailClient() {
                           onClick={() => setActiveFreelancerId(bid.freelancerId)}
                           className="secondary-action justify-center px-4 py-2 text-sm font-semibold"
                         >
-                          Написать
+                          Открыть чат
                         </button>
                       )}
                       {isClient && isSelectedBid && (
@@ -824,12 +874,16 @@ export default function OrderDetailClient() {
                         </div>
                       )}
                     </div>
-                  </div>
+                  </aside>
                 </div>
-              </div>
+              </article>
             );
           })}
-          {(order.bids ?? []).length === 0 && <EmptyState icon={<MatchIcon />} title="Откликов пока нет" />}
+          {bids.length === 0 && (
+            <div className="rounded-[1.8rem] border border-dashed border-stone-200 bg-white/70 p-6">
+              <EmptyState icon={<MatchIcon />} title="Откликов пока нет" description="Когда фрилансеры отправят предложения, здесь появится панель сравнения и быстрые действия." />
+            </div>
+          )}
         </div>
       </section>
 

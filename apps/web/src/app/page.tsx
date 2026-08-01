@@ -200,9 +200,9 @@ export default async function HomePage() {
             <div className="rounded-[1.8rem] border border-stone-100 bg-card-sand/70 p-4 shadow-xl shadow-stone-200/60">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand">Пример сделки</p>
-                  <h2 className="mt-2 font-serif text-2xl text-stone-950">UI/UX витрина продукта</h2>
-                  <p className="mt-2 text-sm leading-6 text-stone-600">Заказ, отклики, чат и счёт видны в одном контуре.</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand">Живая сделка</p>
+                  <h2 className="mt-2 font-serif text-2xl text-stone-950">От брифа до оплаты без хаоса</h2>
+                  <p className="mt-2 text-sm leading-6 text-stone-600">Заказчик сравнивает кандидатов, выбирает исполнителя и ведёт оплату в одном рабочем сценарии.</p>
                 </div>
                 <Mascot name="shieldCheck" size="h-20 w-20" />
               </div>
