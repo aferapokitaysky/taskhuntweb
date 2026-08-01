@@ -557,6 +557,30 @@ export default function OrderDetailClient() {
     return () => clearInterval(interval);
   }, [isClient, isFreelancer, orderInvoices]);
 
+  useEffect(() => {
+    if (orderInvoices.length === 0) return;
+    const invoiceById = new Map(orderInvoices.map((invoice) => [invoice.id, invoice]));
+    setMessages((current) => {
+      let changed = false;
+      const next = current.map((message) => {
+        if (!message.invoice) return message;
+        const freshInvoice = invoiceById.get(message.invoice.id);
+        if (!freshInvoice) return message;
+        if (
+          message.invoice.status === freshInvoice.status &&
+          message.invoice.payAddress === freshInvoice.payAddress &&
+          message.invoice.payAmount === freshInvoice.payAmount &&
+          message.invoice.payCurrency === freshInvoice.payCurrency
+        ) {
+          return message;
+        }
+        changed = true;
+        return { ...message, invoice: { ...message.invoice, ...freshInvoice } };
+      });
+      return changed ? next : current;
+    });
+  }, [orderInvoices]);
+
   async function openPaymentConfirm(invoice: Invoice) {
     setPaymentConfirmInvoice(invoice);
     setPaymentDetailsLoading(true);
