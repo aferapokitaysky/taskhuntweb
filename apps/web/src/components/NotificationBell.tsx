@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { User } from '@/lib/types';
 import { pluralize } from '@/lib/pluralize';
+import { notificationHref, type NotificationRouteInput } from '@/lib/notificationHref';
 import { BellIcon } from './icons/BellIcon';
 import { AlertIcon } from './icons/illustrated/AlertIcon';
 import { BalanceEscrowIcon } from './icons/illustrated/BalanceEscrowIcon';
@@ -17,21 +18,11 @@ import { OrdersNavIcon } from './icons/illustrated/OrdersNavIcon';
 import { RocketIcon } from './icons/illustrated/RocketIcon';
 import { Mascot } from './Mascot';
 
-interface Notification {
+interface Notification extends NotificationRouteInput {
   id: string;
   title: string;
   message: string;
   eventName: string;
-  metadata?: {
-    href?: string;
-    orderId?: string;
-    freelancerId?: string;
-    threadId?: string;
-    invoiceId?: string;
-    bidId?: string;
-    disputeId?: string;
-    ticketId?: string;
-  } | null;
   read: boolean;
   createdAt: string;
 }
@@ -104,20 +95,6 @@ function notificationMeta(eventName: string) {
     return { href: '/admin', label: 'Риск', tone: 'bg-card-rose text-stone-800', Icon: AlertIcon };
   }
   return { href: '/dashboard', label: 'Событие', tone: 'bg-stone-100 text-stone-700', Icon: ChatIcon };
-}
-
-function notificationHref(notification: Notification) {
-  if (notification.metadata?.href) return notification.metadata.href;
-  if (notification.metadata?.invoiceId && notification.metadata.orderId) {
-    const params = new URLSearchParams({ orderId: notification.metadata.orderId });
-    if (notification.metadata.freelancerId) params.set('freelancerId', notification.metadata.freelancerId);
-    return `/chats?${params.toString()}`;
-  }
-  if (notification.metadata?.ticketId) {
-    return `/support?ticketId=${encodeURIComponent(notification.metadata.ticketId)}`;
-  }
-  if (notification.metadata?.orderId) return `/orders/${notification.metadata.orderId}`;
-  return notificationMeta(notification.eventName).href;
 }
 
 export function NotificationBell() {
