@@ -1195,7 +1195,7 @@ export default function OrderDetailClient() {
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand">История платежей</p>
                 <h2 className="mt-1 font-serif text-2xl text-stone-900">Счета и чеки заказа</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600">
-                  Все инвойсы заказа собраны здесь: можно проверить статус, скопировать реквизиты и открыть оплату.
+                  Все счета и чеки заказа собраны здесь: можно проверить статус, скопировать реквизиты и открыть оплату.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1215,7 +1215,7 @@ export default function OrderDetailClient() {
               {[
                 ['Всего', orderInvoices.length, 'bg-card-sand/80'],
                 ['Ожидают', pendingInvoiceCount, 'bg-card-lavender/75'],
-                ['Оплачены', paidInvoiceCount, 'bg-card-sage/80'],
+                ['Чеки', paidInvoiceCount, 'bg-card-sage/80'],
               ].map(([label, value, tone]) => (
                 <div key={label} className={`rounded-[1.25rem] px-4 py-3 ${tone}`}>
                   <p className="text-[11px] font-bold uppercase tracking-wide text-stone-500">{label}</p>
@@ -1314,7 +1314,7 @@ export default function OrderDetailClient() {
             {orderInvoices.length === 0 && (
               <EmptyState
                 icon={<BalanceMainIcon />}
-                title="Счетов по заказу пока нет"
+                title="Счетов и чеков по заказу пока нет"
                 description={isFreelancer ? 'Выставьте первый счёт из чата, и он появится в истории платежей.' : 'Когда исполнитель выставит счёт, здесь появится инвойс и дальнейший чек оплаты.'}
               />
             )}
@@ -1439,11 +1439,11 @@ export default function OrderDetailClient() {
                   )}
                   {isClient && messages.some((message) => message.type === 'INVOICE') && (
                     <span className="rounded-full bg-card-sand px-3 py-2 text-sm font-semibold text-stone-700">
-                      Счета приходят карточками в этом чате
+                      Счета и чеки приходят карточками в этом чате
                     </span>
                   )}
                   <span className="rounded-full bg-stone-100 px-3 py-2 text-xs font-medium text-stone-500">
-                    Инвойсы и чеки сохраняются в истории сделки
+                    Счета и чеки сохраняются в истории сделки
                   </span>
                 </div>
                 <div className="mb-3 flex flex-wrap items-center gap-1.5">
