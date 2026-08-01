@@ -120,7 +120,20 @@ export class NotificationsEventsListener {
   @OnEvent(DomainEventName.InvoicePaid)
   async handleInvoicePaid(event: InvoicePaidEvent) {
     const invoice = await this.prisma.invoice.findUnique({ where: { id: event.payload.invoiceId } });
+    await this.createNotification({
+      userId: event.payload.payerId,
+      title: 'Оплата подтверждена',
+      message: `Платёж на сумму ${event.payload.amount} ${event.payload.currency} подтверждён. Средства переведены в эскроу заказа.`,
+      eventName: DomainEventName.InvoicePaid,
+      metadata: {
+        orderId: event.payload.orderId,
+        invoiceId: event.payload.invoiceId,
+        freelancerId: event.payload.freelancerId,
+        href: `/orders/${event.payload.orderId}#payment-history`,
+      },
+    });
     if (invoice?.issuedById) {
+      if (invoice.issuedById === event.payload.payerId) return;
       await this.createNotification({
         userId: invoice.issuedById,
         title: 'Счёт оплачен',

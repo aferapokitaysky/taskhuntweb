@@ -84,7 +84,7 @@ describe('NotificationsEventsListener', () => {
     });
   });
 
-  it('уведомление об оплате счёта ведёт фрилансера в тот же рабочий чат', async () => {
+  it('уведомление об оплате счёта подтверждает платёж заказчику и ведёт фрилансера в рабочий чат', async () => {
     prisma.invoice.findUnique.mockResolvedValue({ id: 'invoice-1', issuedById: 'freelancer-1' });
 
     await listener.handleInvoicePaid(
@@ -98,7 +98,20 @@ describe('NotificationsEventsListener', () => {
       }),
     );
 
-    expect(prisma.notification.create).toHaveBeenCalledWith({
+    expect(prisma.notification.create).toHaveBeenNthCalledWith(1, {
+      data: expect.objectContaining({
+        userId: 'client-1',
+        title: 'Оплата подтверждена',
+        eventName: DomainEventName.InvoicePaid,
+        metadata: {
+          orderId: 'order-1',
+          invoiceId: 'invoice-1',
+          freelancerId: 'freelancer-1',
+          href: '/orders/order-1#payment-history',
+        },
+      }),
+    });
+    expect(prisma.notification.create).toHaveBeenNthCalledWith(2, {
       data: expect.objectContaining({
         userId: 'freelancer-1',
         title: 'Счёт оплачен',
