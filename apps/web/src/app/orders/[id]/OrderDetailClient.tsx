@@ -430,7 +430,14 @@ export default function OrderDetailClient() {
   useEffect(() => {
     if (!canChat || !chatFreelancerId) return;
     api<ChatMessage[]>(`/orders/${orderId}/chat/messages?freelancerId=${chatFreelancerId}`)
-      .then(setMessages)
+      .then((list) => {
+        setMessages(list);
+        setThreads((current) =>
+          current.map((thread) =>
+            thread.freelancerId === chatFreelancerId ? { ...thread, unreadCount: 0 } : thread,
+          ),
+        );
+      })
       .catch(() => setMessages([]));
 
     let cancelled = false;
@@ -441,6 +448,11 @@ export default function OrderDetailClient() {
       nextSocket.on('connect', () => nextSocket?.emit('joinOrder', { orderId, freelancerId: chatFreelancerId }));
       nextSocket.on('newMessage', (message: ChatMessage) => {
         setMessages((current) => (current.some((item) => item.id === message.id) ? current : [...current, message]));
+        setThreads((current) =>
+          current.map((thread) =>
+            thread.freelancerId === chatFreelancerId ? { ...thread, unreadCount: 0 } : thread,
+          ),
+        );
         if (message.invoice) {
           setOrderInvoices((current) => (current.some((item) => item.id === message.invoice?.id) ? current : [message.invoice!, ...current]));
         }
@@ -1325,11 +1337,16 @@ export default function OrderDetailClient() {
                     key={t.freelancerId}
                     type="button"
                     onClick={() => setActiveFreelancerId(t.freelancerId)}
-                    className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition ${
                       activeFreelancerId === t.freelancerId ? 'bg-brand/10 text-brand' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                     }`}
                   >
-                    {t.freelancer?.profile?.displayName ?? 'Фрилансер'}
+                    <span>{t.freelancer?.profile?.displayName ?? 'Фрилансер'}</span>
+                    {(t.unreadCount ?? 0) > 0 && (
+                      <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-bold text-white">
+                        {(t.unreadCount ?? 0) > 9 ? '9+' : t.unreadCount}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
