@@ -44,7 +44,7 @@ export function AuthShell({
             <h1 className="mt-1 font-serif text-xl leading-tight text-stone-950 sm:mt-2 sm:text-4xl">{title}</h1>
             <p className="mt-1.5 max-w-xl text-xs leading-5 text-stone-600 max-[380px]:hidden sm:mt-2 sm:text-sm sm:leading-6">{description}</p>
           </div>
-          <div className="rounded-[1.45rem] border border-stone-200 bg-card-sand/35 p-2.5 shadow-xl shadow-stone-200/45 sm:rounded-[1.7rem] sm:p-4">
+          <div className="w-full rounded-[1.45rem] border border-stone-200 bg-card-sand/35 p-2.5 shadow-xl shadow-stone-200/45 sm:rounded-[1.7rem] sm:p-4">
             {children}
           </div>
         </section>

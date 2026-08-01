@@ -67,7 +67,7 @@ export default function LoginPage() {
       description="Заказы, отклики, инвойсы, уведомления и выплаты ждут в личном кабинете. Если включена 2FA, попросим код на следующем шаге."
     >
       {totpToken ? (
-        <form onSubmit={handleVerifyTotp} className="flex flex-col gap-3">
+        <form onSubmit={handleVerifyTotp} className="flex w-full flex-col gap-3">
           <p className="text-sm text-stone-600">Введите код из приложения-аутентификатора или один из резервных кодов.</p>
           <input
             required
@@ -76,7 +76,7 @@ export default function LoginPage() {
             placeholder="Код"
             value={totpCode}
             onChange={(e) => setTotpCode(e.target.value)}
-            className="field-surface px-4 py-2.5"
+            className="field-surface w-full px-4 py-2.5"
           />
 
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -101,8 +101,8 @@ export default function LoginPage() {
         </form>
       ) : (
         <>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <label className="grid gap-1.5">
+          <form onSubmit={handleSubmit} className="flex w-full flex-col gap-3">
+            <label className="grid w-full gap-1.5">
               <span className="text-xs font-bold uppercase tracking-[0.14em] text-stone-500">Email</span>
               <input
                 type="email"
@@ -110,10 +110,10 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="field-surface px-4 py-2.5"
+                className="field-surface w-full px-4 py-2.5"
               />
             </label>
-            <label className="grid gap-1.5">
+            <label className="grid w-full gap-1.5">
               <span className="text-xs font-bold uppercase tracking-[0.14em] text-stone-500">Пароль</span>
               <input
                 type="password"
@@ -121,11 +121,11 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="field-surface px-4 py-2.5"
+                className="field-surface w-full px-4 py-2.5"
               />
             </label>
 
-            <Link href="/forgot-password" className="text-right text-sm text-stone-500 hover:text-brand">
+            <Link href="/forgot-password" className="self-end text-sm text-stone-500 hover:text-brand">
               Забыли пароль?
             </Link>
 

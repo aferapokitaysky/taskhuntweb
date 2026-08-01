@@ -80,7 +80,7 @@ function RegisterForm() {
       description="Выберите роль, заполните три поля и переходите к короткой настройке профиля. Роль можно сменить до отправки формы."
       sideTitle="Два сценария в одной системе: нанимайте и выполняйте безопасно"
     >
-      <div className="mb-2 grid grid-cols-2 gap-2 sm:mb-3">
+      <div className="mb-2 grid gap-2 sm:mb-3 sm:grid-cols-2">
         <button
           type="button"
           onClick={() => setRole('CLIENT')}
@@ -119,9 +119,9 @@ function RegisterForm() {
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2.5 sm:gap-3">
-        <div className="grid gap-2.5">
-          <label className="grid gap-1">
+      <form onSubmit={handleSubmit} className="flex w-full flex-col gap-2.5 sm:gap-3">
+        <div className="grid w-full gap-2.5 sm:gap-3">
+          <label className="grid w-full gap-1">
             <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500 sm:text-xs">Имя</span>
             <input
               type="text"
@@ -129,10 +129,10 @@ function RegisterForm() {
               required
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="field-surface px-3 py-2 sm:px-4 sm:py-2.5"
+              className="field-surface w-full px-3 py-2 sm:px-4 sm:py-2.5"
             />
           </label>
-          <label className="grid gap-1">
+          <label className="grid w-full gap-1">
             <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500 sm:text-xs">Email</span>
             <input
               type="email"
@@ -140,10 +140,10 @@ function RegisterForm() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="field-surface px-3 py-2 sm:px-4 sm:py-2.5"
+              className="field-surface w-full px-3 py-2 sm:px-4 sm:py-2.5"
             />
           </label>
-          <label className="grid gap-1">
+          <label className="grid w-full gap-1">
             <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500 sm:text-xs">Пароль</span>
             <input
               type="password"
@@ -152,7 +152,7 @@ function RegisterForm() {
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="field-surface px-3 py-2 sm:px-4 sm:py-2.5"
+              className="field-surface w-full px-3 py-2 sm:px-4 sm:py-2.5"
             />
           </label>
         </div>
