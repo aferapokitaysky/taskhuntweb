@@ -42,6 +42,12 @@ describe('OrdersService', () => {
       dispute: {
         create: jest.fn(),
       },
+      supportTicket: {
+        create: jest.fn().mockResolvedValue({ id: 'ticket-1' }),
+      },
+      user: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       review: {
         groupBy: jest.fn().mockResolvedValue([]),
       },

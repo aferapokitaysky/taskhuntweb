@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
-import { DomainEventName } from '@taskhunt/shared-types';
+import { DomainEventName, PermissionCode } from '@taskhunt/shared-types';
 import { MatchingService, compatibilityPercent } from '../matching/matching.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateOrderDraftDto } from './dto/create-order-draft.dto';
@@ -607,11 +607,43 @@ export class OrdersService {
     const isParticipant = order.clientId === userId || order.bids.some((b) => b.freelancerId === userId);
     if (!isParticipant) throw new ForbiddenException('Not a participant of this order');
 
-    const dispute = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.dispute.create({ data: { orderId, openedById: userId, reason } });
+    const { dispute, ticket } = await this.prisma.$transaction(async (tx) => {
+      const createdDispute = await tx.dispute.create({ data: { orderId, openedById: userId, reason } });
       await tx.order.update({ where: { id: orderId }, data: { status: 'DISPUTED' } });
-      return created;
+      // Открывая спор, пользователь автоматически получает тикет поддержки
+      // по нему — раньше спор был "немым" (только reason/resolutionNotes,
+      // без переписки), пользователю было некуда написать арбитру, кроме
+      // как ждать решения вслепую.
+      const createdTicket = await tx.supportTicket.create({
+        data: {
+          userId,
+          disputeId: createdDispute.id,
+          subject: `Спор по заказу «${order.title}»`,
+          priority: 'HIGH',
+          messages: { create: { senderId: userId, body: reason } },
+        },
+      });
+      return { dispute: createdDispute, ticket: createdTicket };
     });
+
+    const supportStaff = await this.prisma.user.findMany({
+      where: {
+        isStaff: true,
+        staffRoles: { some: { role: { permissions: { some: { permission: { code: PermissionCode.DisputeView } } } } } },
+      },
+      select: { id: true },
+    });
+    if (supportStaff.length > 0) {
+      await this.prisma.notification.createMany({
+        data: supportStaff.map((staff) => ({
+          userId: staff.id,
+          title: 'Новый спор — открыт тикет поддержки',
+          message: `Спор по заказу "${order.title}" автоматически завёл тикет поддержки.`,
+          eventName: 'SupportTicketCreated',
+          metadata: { ticketId: ticket.id, disputeId: dispute.id, href: `/admin?tab=support&ticketId=${ticket.id}` },
+        })),
+      });
+    }
 
     const acceptedBid = order.bids[0];
     if (acceptedBid) {

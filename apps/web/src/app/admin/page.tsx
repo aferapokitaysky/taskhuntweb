@@ -13,7 +13,69 @@ import { ChatIcon } from '@/components/icons/illustrated/ChatIcon';
 import { EscrowIcon } from '@/components/icons/illustrated/EscrowIcon';
 import { BuildIcon } from '@/components/icons/illustrated/BuildIcon';
 import { Mascot } from '@/components/Mascot';
+import { BarChart, LineChart, FunnelChart } from '@/components/admin/AdminCharts';
 import type { Category, CommissionRule, Dispute, FeatureFlag, Skill, User } from '@/lib/types';
+
+const ORDER_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Черновик',
+  OPEN: 'Открыт',
+  IN_PROGRESS: 'В работе',
+  IN_REVIEW: 'На проверке',
+  COMPLETED: 'Завершён',
+  CANCELLED: 'Отменён',
+  DISPUTED: 'В споре',
+  EXPIRED: 'Истёк',
+};
+
+const DISPUTE_STATUS_LABEL: Record<string, string> = {
+  OPEN: 'Открыт',
+  UNDER_REVIEW: 'На рассмотрении',
+  RESOLVED_CLIENT: 'Решён в пользу заказчика',
+  RESOLVED_FREELANCER: 'Решён в пользу исполнителя',
+  RESOLVED_SPLIT: 'Решён частично',
+  CLOSED: 'Закрыт',
+};
+
+const USER_STATUS_LABEL: Record<string, string> = {
+  PENDING_VERIFICATION: 'Ждёт подтверждения email',
+  ACTIVE: 'Активен',
+  SUSPENDED: 'Приостановлен',
+  BANNED: 'Забанен',
+  DELETED: 'Удалён',
+};
+
+const TICKET_STATUS_LABEL: Record<string, string> = {
+  OPEN: 'Открыт',
+  PENDING: 'Ожидает ответа поддержки',
+  RESOLVED: 'Решён',
+  CLOSED: 'Закрыт',
+};
+
+const TICKET_PRIORITY_LABEL: Record<string, string> = {
+  LOW: 'Низкий',
+  NORMAL: 'Обычный',
+  HIGH: 'Высокий',
+  URGENT: 'Срочный',
+};
+
+const COMMISSION_TYPE_LABEL: Record<string, string> = {
+  MARKETPLACE_FEE: 'Комиссия площадки (со сделок)',
+  WITHDRAWAL_FEE: 'Комиссия за вывод средств',
+  REFERRAL_FEE: 'Реферальное вознаграждение',
+};
+
+const SUBSCRIPTION_STATUS_LABEL: Record<string, string> = {
+  ACTIVE: 'Активна',
+  CANCELLED: 'Отменена',
+  EXPIRED: 'Истекла',
+};
+
+const SEVERITY_LABEL: Record<string, string> = {
+  LOW: 'низкий',
+  MEDIUM: 'средний',
+  HIGH: 'высокий',
+  CRITICAL: 'критичный',
+};
 
 // Category.slug/Skill.slug обязательны и уникальны на бэке — генерируем
 // сами, чтобы не заставлять staff придумывать slug руками в форме.
@@ -25,7 +87,7 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-type Tab = 'users' | 'disputes' | 'moderation' | 'flags' | 'commissions' | 'catalog' | 'metrics' | 'finance' | 'subscriptions' | 'audit';
+type Tab = 'users' | 'disputes' | 'moderation' | 'flags' | 'commissions' | 'catalog' | 'metrics' | 'finance' | 'subscriptions' | 'audit' | 'support';
 
 interface AdminMetrics {
   revenue: { total: number; thisMonth: number };
@@ -73,6 +135,58 @@ interface AuditLogEntry {
 interface AuditLogsResponse {
   items: AuditLogEntry[];
   nextCursor: string | null;
+}
+
+interface RevenuePoint {
+  date: string;
+  revenue: number;
+  gmv: number;
+  newUsers: number;
+  newOrders: number;
+}
+
+interface AdminFunnel {
+  registered: number;
+  onboarded: number;
+  postedOrRespondedFirst: number;
+  paidOrEarnedFirst: number;
+}
+
+interface TopCategory {
+  categoryId: string;
+  categoryName: string;
+  orderCount: number;
+  gmv: number;
+}
+
+interface TopFreelancer {
+  userId: string;
+  displayName: string;
+  earnings: number;
+  ordersCompleted: number;
+  avgRating: number | null;
+}
+
+interface SupportTicketMessage {
+  id: string;
+  senderId: string;
+  body: string;
+  createdAt: string;
+  sender?: { profile?: { displayName?: string } | null; email?: string };
+}
+
+interface SupportTicketDetail {
+  id: string;
+  userId: string;
+  disputeId: string | null;
+  subject: string;
+  status: 'OPEN' | 'PENDING' | 'RESOLVED' | 'CLOSED';
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  createdAt: string;
+  updatedAt: string;
+  messages: SupportTicketMessage[];
+  assignedTo?: { id: string; profile?: { displayName?: string } | null } | null;
+  user?: { id: string; profile?: { displayName?: string } | null; email?: string };
 }
 
 type ModerationAction = 'APPROVE' | 'REJECT' | 'REQUEST_EDITS';
@@ -137,6 +251,15 @@ export default function AdminPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [grantForm, setGrantForm] = useState({ userId: '', tierName: 'PRO' as 'PRO' | 'PREMIUM', days: '30' });
   const [grantError, setGrantError] = useState<string | null>(null);
+  const [revenueTimeseries, setRevenueTimeseries] = useState<RevenuePoint[]>([]);
+  const [funnel, setFunnel] = useState<AdminFunnel | null>(null);
+  const [topCategories, setTopCategories] = useState<TopCategory[]>([]);
+  const [topFreelancers, setTopFreelancers] = useState<TopFreelancer[]>([]);
+  const [tickets, setTickets] = useState<SupportTicketDetail[]>([]);
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  const [activeTicket, setActiveTicket] = useState<SupportTicketDetail | null>(null);
+  const [ticketReply, setTicketReply] = useState('');
+  const [ticketStatusFilter, setTicketStatusFilter] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -149,7 +272,8 @@ export default function AdminPage() {
   useEffect(() => {
     if (!me?.isStaff) return;
     refresh().finally(() => setLoading(false));
-  }, [me, tab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me, tab, ticketStatusFilter]);
 
   async function refresh() {
     setError(null);
@@ -163,12 +287,80 @@ export default function AdminPage() {
         setCategories(await api<Category[]>('/categories'));
         setSkills(await api<Skill[]>('/skills'));
       }
-      if (tab === 'metrics') setMetrics(await api<AdminMetrics>('/admin/metrics'));
+      if (tab === 'metrics') {
+        const [m, ts, f, cats, freelancers] = await Promise.all([
+          api<AdminMetrics>('/admin/metrics'),
+          api<RevenuePoint[]>('/admin/metrics/revenue-timeseries?days=30'),
+          api<AdminFunnel>('/admin/metrics/funnel?days=30'),
+          api<TopCategory[]>('/admin/metrics/top-categories?limit=8'),
+          api<TopFreelancer[]>('/admin/metrics/top-freelancers?limit=8'),
+        ]);
+        setMetrics(m);
+        setRevenueTimeseries(ts);
+        setFunnel(f);
+        setTopCategories(cats);
+        setTopFreelancers(freelancers);
+      }
       if (tab === 'finance') setFinance(await api<FinanceOverview>('/admin/finance/overview'));
       if (tab === 'subscriptions') setSubscriptionsData(await api<SubscriptionsResponse>('/admin/subscriptions'));
       if (tab === 'audit') setAuditLogs((await api<AuditLogsResponse>('/admin/audit-logs')).items);
+      if (tab === 'support') {
+        const list = await api<SupportTicketDetail[]>(`/support/tickets${ticketStatusFilter ? `?status=${ticketStatusFilter}` : ''}`);
+        setTickets(list);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить данные');
+    }
+  }
+
+  async function openTicket(ticketId: string) {
+    setActiveTicketId(ticketId);
+    setError(null);
+    try {
+      setActiveTicket(await api<SupportTicketDetail>(`/support/tickets/${ticketId}`));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось открыть тикет');
+    }
+  }
+
+  async function refreshActiveTicket() {
+    if (!activeTicketId) return;
+    setActiveTicket(await api<SupportTicketDetail>(`/support/tickets/${activeTicketId}`));
+    await refresh();
+  }
+
+  async function sendTicketReply(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!activeTicketId || !ticketReply.trim()) return;
+    setError(null);
+    try {
+      await api(`/support/tickets/${activeTicketId}/messages`, { method: 'POST', body: JSON.stringify({ body: ticketReply.trim() }) });
+      setTicketReply('');
+      await refreshActiveTicket();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось отправить ответ');
+    }
+  }
+
+  async function assignTicketToMe() {
+    if (!activeTicketId) return;
+    setError(null);
+    try {
+      await api(`/support/tickets/${activeTicketId}/assign`, { method: 'PATCH' });
+      await refreshActiveTicket();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось назначить тикет');
+    }
+  }
+
+  async function setTicketStatus(status: 'OPEN' | 'PENDING' | 'RESOLVED' | 'CLOSED') {
+    if (!activeTicketId) return;
+    setError(null);
+    try {
+      await api(`/support/tickets/${activeTicketId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      await refreshActiveTicket();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось изменить статус');
     }
   }
 
@@ -212,31 +404,31 @@ export default function AdminPage() {
       <section className="workspace-hero mb-6 p-6 md:p-8">
         <div className="relative grid gap-6 lg:grid-cols-[1fr_360px] lg:items-end">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Staff console</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Панель управления</p>
             <h1 className="mt-3 font-serif text-3xl leading-tight text-stone-950 md:text-5xl">Пульт качества маркетплейса</h1>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-stone-600">
-              Метрики, споры, пользователи, комиссии и каталог собраны в одном рабочем контуре для быстрых решений команды.
+              Метрики, финансы, споры, поддержка, пользователи, комиссии и каталог собраны в одном рабочем контуре для быстрых решений команды.
             </p>
           </div>
           <div className="rounded-3xl border border-stone-100 bg-white/65 p-4 shadow-sm backdrop-blur">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Staff pulse</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Сводка</p>
               <Mascot name="workLaptop" size="h-14 w-14" />
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="hero-stat p-3">
                 <p className="font-serif text-2xl text-stone-950">{users.length}</p>
-                <p className="text-[11px] uppercase text-stone-400">users</p>
+                <p className="text-[11px] uppercase text-stone-400">юзеров</p>
               </div>
               <div className="hero-stat p-3">
                 <p className="font-serif text-2xl text-stone-950">{disputes.length}</p>
-                <p className="text-[11px] uppercase text-stone-400">disputes</p>
+                <p className="text-[11px] uppercase text-stone-400">споров</p>
               </div>
               <div className="hero-stat p-3">
                 <p className="font-serif text-2xl text-stone-950">
                   {moderation ? moderation.orders.length + moderation.profiles.length + moderation.files.length + moderation.reviews.length : flags.length}
                 </p>
-                <p className="text-[11px] uppercase text-stone-400">queue</p>
+                <p className="text-[11px] uppercase text-stone-400">в очереди</p>
               </div>
             </div>
           </div>
@@ -248,11 +440,12 @@ export default function AdminPage() {
           ['metrics', 'Метрики'],
           ['finance', 'Финансы'],
           ['subscriptions', 'Подписки'],
-          ['users', 'Users'],
-          ['disputes', 'Disputes'],
-          ['moderation', 'Moderation'],
-          ['flags', 'Feature Flags'],
-          ['commissions', 'Commissions'],
+          ['users', 'Пользователи'],
+          ['disputes', 'Споры'],
+          ['support', 'Поддержка'],
+          ['moderation', 'Модерация'],
+          ['flags', 'Флаги функций'],
+          ['commissions', 'Комиссии'],
           ['catalog', 'Категории и навыки'],
           ['audit', 'Логи действий'],
         ].map(([key, label]) => (
@@ -275,91 +468,269 @@ export default function AdminPage() {
 
       {tab === 'users' && (
         <section className="space-y-3">
-          {users.map((user) => (
-            <article key={user.id} className="interactive-card flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4">
-              <div>
-                <p className="font-semibold">{user.profile?.displayName ?? user.email}</p>
-                <p className="text-sm text-stone-500">{user.email}</p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => mutate(() => api(`/admin/users/${user.id}/suspend`, { method: 'POST' }))}
-                  className="secondary-action px-3 py-2 text-sm font-medium"
-                >
-                  Suspend
-                </button>
-                <button
-                  type="button"
-                  onClick={() => mutate(() => api(`/admin/users/${user.id}/ban`, { method: 'POST' }))}
-                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white"
-                >
-                  Ban
-                </button>
-              </div>
-            </article>
-          ))}
+          <p className="text-xs text-stone-500">Показаны последние 100 пользователей.</p>
+          {users.map((user) => {
+            const statusTone =
+              user.status === 'ACTIVE'
+                ? 'bg-emerald-100 text-emerald-700'
+                : user.status === 'SUSPENDED'
+                  ? 'bg-amber-100 text-amber-700'
+                  : user.status === 'BANNED'
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-stone-100 text-stone-600';
+            return (
+              <article key={user.id} className="interactive-card flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold">{user.profile?.displayName ?? user.email}</p>
+                    {user.status && <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusTone}`}>{USER_STATUS_LABEL[user.status] ?? user.status}</span>}
+                    {user.isStaff && <span className="rounded-full bg-card-lavender px-2.5 py-0.5 text-[11px] font-semibold text-stone-700">Staff</span>}
+                  </div>
+                  <p className="text-sm text-stone-500">{user.email}</p>
+                  <p className="text-xs text-stone-400">{user.primaryRole === 'CLIENT' ? 'Заказчик' : 'Фрилансер'}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => mutate(() => api(`/admin/users/${user.id}/reset-2fa`, { method: 'POST' }))}
+                    className="secondary-action px-3 py-2 text-sm font-medium"
+                  >
+                    Сбросить 2FA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => mutate(() => api(`/admin/users/${user.id}/suspend`, { method: 'POST' }))}
+                    className="secondary-action px-3 py-2 text-sm font-medium"
+                  >
+                    Приостановить
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!confirm(`Забанить ${user.profile?.displayName ?? user.email}? Это заблокирует вход в аккаунт.`)) return;
+                      mutate(() => api(`/admin/users/${user.id}/ban`, { method: 'POST' }));
+                    }}
+                    className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+                  >
+                    Забанить
+                  </button>
+                </div>
+              </article>
+            );
+          })}
           {!loading && users.length === 0 && <EmptyState icon={<MatchIcon />} title="Пользователей пока нет" />}
         </section>
       )}
 
       {tab === 'disputes' && (
         <section className="space-y-3">
-          {disputes.map((dispute) => (
-            <article key={dispute.id} className="interactive-card rounded-2xl p-4">
-              <div className="flex flex-wrap justify-between gap-3">
-                <div>
-                  <p className="font-semibold">Order {dispute.orderId}</p>
-                  <p className="text-sm text-stone-600">{dispute.reason}</p>
+          <p className="text-xs text-stone-500">
+            При открытии спора участнику автоматически заводится тикет поддержки («Спор по заказу «…»») — переписка и решение видны
+            на вкладке «Поддержка».
+          </p>
+          {disputes.map((dispute) => {
+            const resolved = dispute.status.startsWith('RESOLVED') || dispute.status === 'CLOSED';
+            return (
+              <article key={dispute.id} className="interactive-card rounded-2xl p-4">
+                <div className="flex flex-wrap justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">{dispute.order?.title ?? `Заказ ${dispute.orderId}`}</p>
+                    <p className="text-xs text-stone-400">Открыл: {dispute.openedBy?.profile?.displayName ?? dispute.openedBy?.email ?? '—'}</p>
+                    <p className="mt-2 text-sm text-stone-600">{dispute.reason}</p>
+                    {dispute.resolutionNotes && (
+                      <p className="mt-2 rounded-xl bg-stone-50 p-2 text-xs text-stone-600">
+                        <span className="font-semibold text-stone-700">Решение: </span>
+                        {dispute.resolutionNotes}
+                      </p>
+                    )}
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${resolved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
+                  >
+                    {DISPUTE_STATUS_LABEL[dispute.status] ?? dispute.status}
+                  </span>
                 </div>
-                <span className="text-sm text-stone-500">{dispute.status}</span>
-              </div>
-              <textarea
-                placeholder="Resolution notes"
-                value={notesByDispute[dispute.id] ?? ''}
-                onChange={(e) => setNotesByDispute({ ...notesByDispute, [dispute.id]: e.target.value })}
-                className="field-surface mt-4 min-h-20 w-full px-3 py-2"
-              />
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => mutate(() => api(`/admin/disputes/${dispute.id}/assign`, { method: 'PATCH' }))}
-                  className="secondary-action px-3 py-2 text-sm font-medium"
-                >
-                  Assign to me
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    mutate(() =>
-                      api(`/admin/disputes/${dispute.id}/resolve`, {
-                        method: 'PATCH',
-                        body: JSON.stringify({ resolution: 'RESOLVED_CLIENT', notes: notesByDispute[dispute.id] }),
-                      }),
-                    )
-                  }
-                  className="rounded-lg bg-stone-900 px-3 py-2 text-sm font-medium text-white"
-                >
-                  Client wins
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    mutate(() =>
-                      api(`/admin/disputes/${dispute.id}/resolve`, {
-                        method: 'PATCH',
-                        body: JSON.stringify({ resolution: 'RESOLVED_FREELANCER', notes: notesByDispute[dispute.id] }),
-                      }),
-                    )
-                  }
-                  className="primary-action px-3 py-2 text-sm font-medium"
-                >
-                  Freelancer wins
-                </button>
-              </div>
-            </article>
-          ))}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link href={`/orders/${dispute.orderId}`} className="secondary-action px-3 py-2 text-xs font-semibold">
+                    Открыть заказ
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTab('support');
+                      setTicketStatusFilter('');
+                    }}
+                    className="secondary-action px-3 py-2 text-xs font-semibold"
+                  >
+                    Найти тикет поддержки
+                  </button>
+                </div>
+                {!resolved && (
+                  <>
+                    <textarea
+                      placeholder="Комментарий к решению (виден пользователю в тикете поддержки)"
+                      value={notesByDispute[dispute.id] ?? ''}
+                      onChange={(e) => setNotesByDispute({ ...notesByDispute, [dispute.id]: e.target.value })}
+                      className="field-surface mt-4 min-h-20 w-full px-3 py-2"
+                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => mutate(() => api(`/admin/disputes/${dispute.id}/assign`, { method: 'PATCH' }))}
+                        className="secondary-action px-3 py-2 text-sm font-medium"
+                      >
+                        Взять в работу
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!confirm('Решить спор в пользу заказчика? Деньги вернутся ему из эскроу.')) return;
+                          mutate(() =>
+                            api(`/admin/disputes/${dispute.id}/resolve`, {
+                              method: 'PATCH',
+                              body: JSON.stringify({ resolution: 'RESOLVED_CLIENT', notes: notesByDispute[dispute.id] }),
+                            }),
+                          );
+                        }}
+                        className="rounded-lg bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800"
+                      >
+                        Заказчик прав
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!confirm('Решить спор в пользу исполнителя? Эскроу будет отпущен ему за вычетом комиссии.')) return;
+                          mutate(() =>
+                            api(`/admin/disputes/${dispute.id}/resolve`, {
+                              method: 'PATCH',
+                              body: JSON.stringify({ resolution: 'RESOLVED_FREELANCER', notes: notesByDispute[dispute.id] }),
+                            }),
+                          );
+                        }}
+                        className="primary-action px-3 py-2 text-sm font-medium"
+                      >
+                        Исполнитель прав
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[11px] text-stone-400">Частичное решение (сплит между сторонами) пока не реализовано на бэкенде.</p>
+                  </>
+                )}
+              </article>
+            );
+          })}
           {!loading && disputes.length === 0 && <EmptyState icon={<EscrowIcon />} title="Активных споров нет" />}
+        </section>
+      )}
+
+      {tab === 'support' && (
+        <section className="grid gap-5 lg:grid-cols-[380px_1fr]">
+          <div className="premium-panel overflow-hidden rounded-[2rem] p-0">
+            <div className="border-b border-stone-100 p-4">
+              <h3 className="font-semibold">Тикеты поддержки</h3>
+              <select
+                value={ticketStatusFilter}
+                onChange={(e) => setTicketStatusFilter(e.target.value)}
+                className="field-surface mt-2 w-full px-3 py-2 text-sm"
+              >
+                <option value="">Все статусы</option>
+                <option value="OPEN">Открыт</option>
+                <option value="PENDING">Ожидает ответа поддержки</option>
+                <option value="RESOLVED">Решён</option>
+                <option value="CLOSED">Закрыт</option>
+              </select>
+            </div>
+            <div className="max-h-[640px] divide-y divide-stone-100 overflow-y-auto">
+              {tickets.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => openTicket(t.id)}
+                  className={`w-full p-4 text-left transition ${activeTicketId === t.id ? 'bg-brand/10' : 'hover:bg-stone-50'}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="min-w-0 truncate text-sm font-semibold text-stone-900">{t.subject}</p>
+                    {t.disputeId && <span className="shrink-0 rounded-full bg-card-rose px-2 py-0.5 text-[10px] font-bold text-stone-700">Спор</span>}
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-stone-500">{t.user?.profile?.displayName ?? t.user?.email ?? '—'}</p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        t.status === 'OPEN'
+                          ? 'bg-amber-100 text-amber-700'
+                          : t.status === 'PENDING'
+                            ? 'bg-brand/10 text-brand'
+                            : 'bg-emerald-100 text-emerald-700'
+                      }`}
+                    >
+                      {TICKET_STATUS_LABEL[t.status] ?? t.status}
+                    </span>
+                    <span className="text-[10px] text-stone-400">{TICKET_PRIORITY_LABEL[t.priority] ?? t.priority}</span>
+                  </div>
+                </button>
+              ))}
+              {!loading && tickets.length === 0 && <p className="p-4 text-sm text-stone-500">Тикетов нет.</p>}
+            </div>
+          </div>
+
+          <div className="premium-panel flex min-h-[500px] flex-col overflow-hidden rounded-[2rem] p-0">
+            {!activeTicket ? (
+              <div className="flex flex-1 items-center justify-center p-8">
+                <EmptyState icon={<ChatIcon />} title="Выберите тикет" description="Слева список обращений в поддержку, включая автоматически заведённые из споров." />
+              </div>
+            ) : (
+              <>
+                <div className="border-b border-stone-100 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-serif text-xl text-stone-950">{activeTicket.subject}</h3>
+                      <p className="text-xs text-stone-500">
+                        {activeTicket.user?.profile?.displayName ?? activeTicket.user?.email ?? '—'}
+                        {activeTicket.assignedTo && ` · назначен: ${activeTicket.assignedTo.profile?.displayName ?? 'staff'}`}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {!activeTicket.assignedTo && (
+                        <button type="button" onClick={assignTicketToMe} className="secondary-action px-3 py-2 text-xs font-semibold">
+                          Взять себе
+                        </button>
+                      )}
+                      <select
+                        value={activeTicket.status}
+                        onChange={(e) => setTicketStatus(e.target.value as 'OPEN' | 'PENDING' | 'RESOLVED' | 'CLOSED')}
+                        className="field-surface px-3 py-2 text-xs"
+                      >
+                        <option value="OPEN">Открыт</option>
+                        <option value="PENDING">Ожидает ответа</option>
+                        <option value="RESOLVED">Решён</option>
+                        <option value="CLOSED">Закрыт</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                  {activeTicket.messages.map((m) => (
+                    <div key={m.id} className="rounded-2xl bg-stone-50 p-3">
+                      <p className="text-xs font-semibold text-stone-700">{m.sender?.profile?.displayName ?? m.sender?.email ?? 'Участник'}</p>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm text-stone-800">{m.body}</p>
+                      <p className="mt-1 text-[10px] text-stone-400">{new Date(m.createdAt).toLocaleString('ru-RU')}</p>
+                    </div>
+                  ))}
+                  {activeTicket.messages.length === 0 && <p className="text-sm text-stone-500">Сообщений пока нет.</p>}
+                </div>
+                <form onSubmit={sendTicketReply} className="flex gap-2 border-t border-stone-100 p-4">
+                  <input
+                    value={ticketReply}
+                    onChange={(e) => setTicketReply(e.target.value)}
+                    placeholder="Ответить пользователю..."
+                    className="field-surface min-w-0 flex-1 px-3 py-2 text-sm"
+                  />
+                  <button type="submit" disabled={!ticketReply.trim()} className="primary-action px-4 py-2 text-sm disabled:opacity-50">
+                    Отправить
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
         </section>
       )}
 
@@ -384,7 +755,7 @@ export default function AdminPage() {
               <ModerationCard
                 key={item.id}
                 title={item.order?.title ?? 'Заказ без названия'}
-                eyebrow={`ORDER / ${item.severity} / риск ${item.riskScore}`}
+                eyebrow={`Заказ · риск ${SEVERITY_LABEL[item.severity] ?? item.severity} (${item.riskScore})`}
                 description={item.reasons.join(', ') || 'Причина не указана'}
                 meta={item.user ? `Пользователь: ${item.user.displayName}` : `Flag ${item.id}`}
                 note={notesByModeration[item.id] ?? ''}
@@ -402,7 +773,7 @@ export default function AdminPage() {
               <ModerationCard
                 key={item.id}
                 title={item.user?.displayName ?? 'Профиль без имени'}
-                eyebrow={`PROFILE / ${item.severity} / риск ${item.riskScore}`}
+                eyebrow={`Профиль · риск ${SEVERITY_LABEL[item.severity] ?? item.severity} (${item.riskScore})`}
                 description={item.reasons.join(', ') || 'Причина не указана'}
                 meta={`Flag ${item.id}`}
                 note={notesByModeration[item.id] ?? ''}
@@ -420,7 +791,7 @@ export default function AdminPage() {
               <ModerationCard
                 key={item.id}
                 title={item.kind}
-                eyebrow={`FILE / ${item.mimeType}`}
+                eyebrow={`Файл · ${item.mimeType}`}
                 description={item.url}
                 meta={`Владелец: ${item.owner.displayName}`}
                 note=""
@@ -436,7 +807,7 @@ export default function AdminPage() {
               <ModerationCard
                 key={item.id}
                 title={`${item.rating}/5 от ${item.author.displayName}`}
-                eyebrow="REVIEW"
+                eyebrow="Отзыв"
                 description={item.comment ?? 'Без текста'}
                 meta={`Получатель: ${item.target.displayName}`}
                 note={notesByModeration[item.id] ?? ''}
@@ -456,10 +827,10 @@ export default function AdminPage() {
             <article key={flag.key} className="interactive-card flex items-center justify-between gap-3 rounded-2xl p-4">
               <div>
                 <p className="font-semibold">{flag.key}</p>
-                <p className="text-sm text-stone-500">Rollout {flag.rolloutPercent}%</p>
+                <p className="text-sm text-stone-500">Раскатка: {flag.rolloutPercent}% пользователей</p>
               </div>
               <div className="flex items-center gap-2 text-sm font-medium">
-                <span>Enabled</span>
+                <span>Включён</span>
                 <Toggle
                   checked={flag.enabled}
                   onChange={(enabled) =>
@@ -508,20 +879,84 @@ export default function AdminPage() {
             ))}
           </div>
 
+          <div className="premium-panel p-5">
+            <h3 className="mb-1 font-semibold">Выручка и GMV — последние 30 дней</h3>
+            <p className="mb-4 text-xs text-stone-500">Выручка — комиссия площадки, GMV — общий объём оплаченных счетов.</p>
+            <LineChart
+              valueFormatter={(v) => `$${v}`}
+              series={[
+                { name: 'Выручка ($)', color: '#CC785C', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.revenue })) },
+                { name: 'GMV ($)', color: '#8B9A72', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.gmv })) },
+              ]}
+            />
+          </div>
+
+          <div className="premium-panel p-5">
+            <h3 className="mb-1 font-semibold">Новые пользователи и заказы — последние 30 дней</h3>
+            <LineChart
+              series={[
+                { name: 'Новых юзеров', color: '#9C98C4', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.newUsers })) },
+                { name: 'Новых заказов', color: '#C98A8A', points: revenueTimeseries.map((p) => ({ label: p.date.slice(5), value: p.newOrders })) },
+              ]}
+            />
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="premium-panel p-5">
+              <h3 className="mb-1 font-semibold">Воронка (когорта за 30 дней)</h3>
+              <p className="mb-4 text-xs text-stone-500">Регистрация → заполнил профиль → создал заказ/откликнулся → оплатил/заработал.</p>
+              {funnel && (
+                <FunnelChart
+                  steps={[
+                    { label: 'Зарегистрировались', value: funnel.registered },
+                    { label: 'Заполнили профиль', value: funnel.onboarded },
+                    { label: 'Разместили заказ / откликнулись', value: funnel.postedOrRespondedFirst },
+                    { label: 'Оплатили / заработали', value: funnel.paidOrEarnedFirst },
+                  ]}
+                />
+              )}
+            </div>
+            <div className="premium-panel p-5">
+              <h3 className="mb-3 font-semibold">Топ категорий по GMV</h3>
+              <BarChart
+                valueFormatter={(v) => `$${v}`}
+                color="#8B9A72"
+                data={topCategories.map((c) => ({ label: c.categoryName, value: c.gmv }))}
+              />
+            </div>
+          </div>
+
+          <div className="premium-panel p-5">
+            <h3 className="mb-3 font-semibold">Топ фрилансеров по заработку</h3>
+            <BarChart valueFormatter={(v) => `$${v}`} data={topFreelancers.map((f) => ({ label: f.displayName, value: f.earnings }))} />
+            <div className="mt-4 divide-y divide-stone-100 text-sm">
+              {topFreelancers.map((f) => (
+                <div key={f.userId} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <Link href={`/freelancers/${f.userId}`} className="font-medium text-stone-900 hover:text-brand">
+                    {f.displayName}
+                  </Link>
+                  <span className="text-xs text-stone-500">
+                    {f.ordersCompleted} завершённых заказов{f.avgRating !== null ? ` · рейтинг ${f.avgRating}` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="grid gap-6 md:grid-cols-2">
             <div className="premium-panel p-4">
               <h3 className="mb-3 font-semibold">Заказы по статусам</h3>
               <div className="space-y-1 text-sm">
                 {Object.entries(metrics.ordersByStatus).map(([status, count]) => (
                   <div key={status} className="flex justify-between">
-                    <span className="text-stone-600">{status}</span>
+                    <span className="text-stone-600">{ORDER_STATUS_LABEL[status] ?? status}</span>
                     <span className="font-medium">{count}</span>
                   </div>
                 ))}
               </div>
             </div>
             <div className="premium-panel p-4">
-              <h3 className="mb-3 font-semibold">Активные подписки по тирам</h3>
+              <h3 className="mb-3 font-semibold">Активные подписки по тарифам</h3>
               <div className="space-y-1 text-sm">
                 {Object.entries(metrics.activeSubscriptionsByTier).map(([tier, count]) => (
                   <div key={tier} className="flex justify-between">
@@ -653,7 +1088,7 @@ export default function AdminPage() {
                   <div className="flex items-center gap-3">
                     <span className="rounded-full bg-card-sage px-3 py-1 text-xs font-semibold">{s.tierName}</span>
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${s.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>
-                      {s.status}
+                      {SUBSCRIPTION_STATUS_LABEL[s.status] ?? s.status}
                     </span>
                     <span className="text-xs text-stone-400">
                       {s.expiresAt ? `до ${new Date(s.expiresAt).toLocaleDateString('ru-RU')}` : '—'}
@@ -842,7 +1277,7 @@ function ModerationCard({
   onReject,
   onRequestEdits,
   href,
-  approveLabel = 'Approve',
+  approveLabel = 'Одобрить',
 }: {
   title: string;
   eyebrow: string;
@@ -885,12 +1320,12 @@ function ModerationCard({
         </button>
         {onRequestEdits && (
           <button type="button" onClick={onRequestEdits} className="secondary-action px-3 py-2 text-sm font-semibold">
-            Request edits
+            Запросить правки
           </button>
         )}
         {onReject && (
           <button type="button" onClick={onReject} className="rounded-full bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700">
-            Reject
+            Отклонить
           </button>
         )}
       </div>
@@ -904,8 +1339,8 @@ function CommissionEditor({ rule, onSave }: { rule: CommissionRule; onSave: (per
   return (
     <article className="interactive-card flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4">
       <div>
-        <p className="font-semibold">{rule.type}</p>
-        <p className="text-sm text-stone-500">Current: {rule.percentage ?? '0'}%</p>
+        <p className="font-semibold">{COMMISSION_TYPE_LABEL[rule.type] ?? rule.type}</p>
+        <p className="text-sm text-stone-500">Сейчас: {rule.percentage ?? '0'}%</p>
       </div>
       <div className="flex gap-2">
         <input
@@ -917,7 +1352,7 @@ function CommissionEditor({ rule, onSave }: { rule: CommissionRule; onSave: (per
           className="field-surface w-28 px-3 py-2"
         />
         <button type="button" onClick={() => onSave(Number(percentage))} className="primary-action px-3 py-2 text-sm font-medium">
-          Save
+          Сохранить
         </button>
       </div>
     </article>

@@ -732,6 +732,12 @@ model SupportTicket {
   assignedToId String?
   assignedTo   User?   @relation("TicketAssignee", fields: [assignedToId], references: [id])
 
+  // Тикет мог родиться из спора (openDispute) — тогда сторонам не нужно
+  // заводить отдельное обращение, чтобы обсудить его с поддержкой; резолюшн
+  // спора автоматически отписывается сюда же.
+  disputeId String?  @unique
+  dispute   Dispute? @relation(fields: [disputeId], references: [id])
+
   subject  String
   status   TicketStatus   @default(OPEN)
   priority TicketPriority @default(NORMAL)
@@ -878,7 +884,8 @@ model Dispute {
   status          DisputeStatus @default(OPEN)
   resolutionNotes String?
 
-  files DisputeFile[]
+  files         DisputeFile[]
+  supportTicket SupportTicket?
 
   createdAt  DateTime  @default(now())
   resolvedAt DateTime?

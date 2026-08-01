@@ -22,6 +22,18 @@ describe('AdminService', () => {
         update: jest.fn(),
         count: jest.fn().mockResolvedValue(2),
       },
+      supportTicket: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      supportMessage: {
+        create: jest.fn(),
+      },
+      notification: {
+        create: jest.fn(),
+      },
+      $transaction: jest.fn((arg: unknown[] | ((tx: unknown) => Promise<unknown>)) =>
+        Array.isArray(arg) ? Promise.all(arg) : arg(prisma),
+      ),
       bid: {
         findFirst: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),

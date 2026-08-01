@@ -105,7 +105,7 @@ export class AdminService {
       });
     }
 
-    return this.prisma.dispute.update({
+    const resolved = await this.prisma.dispute.update({
       where: { id: disputeId },
       data: {
         status: dto.resolution,
@@ -113,6 +113,40 @@ export class AdminService {
         resolvedAt: new Date(),
       },
     });
+
+    // Если при открытии спора автоматически завёлся тикет поддержки —
+    // отписываемся туда решением и закрываем его: пользователь узнаёт
+    // результат там же, где обсуждал спор, а не только через уведомление.
+    const ticket = await this.prisma.supportTicket.findUnique({ where: { disputeId } });
+    if (ticket) {
+      const resolutionLabel =
+        dto.resolution === 'RESOLVED_FREELANCER'
+          ? 'в пользу исполнителя'
+          : dto.resolution === 'RESOLVED_CLIENT'
+            ? 'в пользу заказчика'
+            : 'частично';
+      await this.prisma.$transaction([
+        this.prisma.supportMessage.create({
+          data: {
+            ticketId: ticket.id,
+            senderId: staffId,
+            body: `Спор рассмотрен и решён ${resolutionLabel}.${dto.notes ? ` Комментарий: ${dto.notes}` : ''}`,
+          },
+        }),
+        this.prisma.supportTicket.update({ where: { id: ticket.id }, data: { status: 'RESOLVED' } }),
+      ]);
+      await this.prisma.notification.create({
+        data: {
+          userId: ticket.userId,
+          title: 'Спор решён',
+          message: `Спор по вашему обращению "${ticket.subject}" рассмотрен ${resolutionLabel}.`,
+          eventName: 'SupportTicketStatusChanged',
+          metadata: { ticketId: ticket.id, disputeId, href: `/support?ticketId=${ticket.id}` },
+        },
+      });
+    }
+
+    return resolved;
   }
 
   // --- Feature flags ---

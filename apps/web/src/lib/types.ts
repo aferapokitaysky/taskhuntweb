@@ -88,6 +88,7 @@ export interface User {
   primaryRole: MarketplaceRole;
   roles: MarketplaceRole[];
   isStaff: boolean;
+  status?: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
   totpEnabled?: boolean;
   digestFrequency?: 'NONE' | 'DAILY' | 'WEEKLY';
   profile?: Profile | null;
