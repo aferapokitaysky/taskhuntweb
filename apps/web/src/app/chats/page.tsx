@@ -293,7 +293,7 @@ function ChatsContent() {
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   {[
                     ['ALL', `Все ${messages.length}`],
-                    ['INVOICES', `Счета ${invoiceCount}`],
+                    ['INVOICES', `Счета/чеки ${invoiceCount}`],
                   ].map(([value, label]) => (
                     <button
                       key={value}
@@ -314,7 +314,7 @@ function ChatsContent() {
                 {!messagesLoading && visibleMessages.length === 0 && (
                   <EmptyState
                     icon={<ChatIcon />}
-                    title={chatFilter === 'INVOICES' ? 'Счетов пока нет' : 'Сообщений пока нет'}
+                    title={chatFilter === 'INVOICES' ? 'Счетов и чеков пока нет' : 'Сообщений пока нет'}
                     description={chatFilter === 'INVOICES' ? 'Когда в диалоге появится счёт или чек, он будет собран здесь.' : 'Начните диалог с короткого сообщения по задаче.'}
                   />
                 )}

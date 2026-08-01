@@ -1343,7 +1343,7 @@ export default function OrderDetailClient() {
                   <div className="flex rounded-full bg-stone-100 p-1">
                     {[
                       ['ALL', `Все ${messages.length}`],
-                      ['INVOICES', `Счета ${invoiceMessageCount}`],
+                      ['INVOICES', `Счета/чеки ${invoiceMessageCount}`],
                     ].map(([value, label]) => (
                       <button
                         key={value}
@@ -1408,8 +1408,8 @@ export default function OrderDetailClient() {
                   {visibleMessages.length === 0 && (
                     <EmptyState
                       icon={<ChatIcon />}
-                      title={chatFilter === 'INVOICES' ? 'Счетов пока нет' : 'Сообщений пока нет'}
-                      description={chatFilter === 'INVOICES' ? 'Когда счёт появится в чате, он будет виден в этом фильтре.' : 'Напишите первым — это ни к чему не обязывает.'}
+                      title={chatFilter === 'INVOICES' ? 'Счетов и чеков пока нет' : 'Сообщений пока нет'}
+                      description={chatFilter === 'INVOICES' ? 'Когда счёт или чек появится в чате, он будет виден в этом фильтре.' : 'Напишите первым — это ни к чему не обязывает.'}
                     />
                   )}
                 </div>
