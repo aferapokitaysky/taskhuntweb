@@ -170,7 +170,7 @@ function SearchPageContent() {
         <div className="premium-panel rounded-3xl p-3">
           <div className="mb-2 flex items-center justify-between gap-3 px-2">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Умный поиск</p>
-            <Mascot name="magnifierPro" size="h-12 w-12" />
+            <Mascot name="magnifierPro" size="h-8 w-8" />
           </div>
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_170px_auto]">
             <label className="flex min-w-0 items-center gap-3 rounded-2xl border border-stone-200 px-4 py-3">
