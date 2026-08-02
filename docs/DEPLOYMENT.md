@@ -100,9 +100,11 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 Миграции и сид (один раз при первом деплое, дальше — только миграции при каждом релизе со сменой схемы):
 
+Рантайм-образ — не dev-стадия, `pnpm` в нём нет (только `node_modules` и сам Node) — команды идут через бинарники напрямую:
+
 ```bash
-docker compose exec api pnpm prisma migrate deploy
-docker compose exec api pnpm prisma db seed
+docker compose exec api node_modules/.bin/prisma migrate deploy
+docker compose exec api node_modules/.bin/ts-node prisma/seed.ts
 ```
 
 ## 6. Проверка
@@ -118,6 +120,6 @@ docker compose exec api pnpm prisma db seed
 ```bash
 git pull
 docker compose -f docker-compose.yml -f docker-compose.prod.yml build
-docker compose exec api pnpm prisma migrate deploy   # если были новые миграции
+docker compose exec api node_modules/.bin/prisma migrate deploy   # если были новые миграции
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```

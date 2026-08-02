@@ -50,6 +50,10 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/packages/shared-types ./packages/shared-types
 COPY --from=build /app/apps/api ./apps/api
+# prisma/seed.ts читает эти файлы по path.resolve(__dirname, '../../../', ...)
+# т.е. ожидает их в /app — без этого `prisma db seed` падает с ENOENT.
+COPY --from=build /app/it_niches_tags.txt ./it_niches_tags.txt
+COPY --from=build /app/programming_skills_tags.txt ./programming_skills_tags.txt
 WORKDIR /app/apps/api
 EXPOSE 3001
 CMD ["node", "dist/main"]
