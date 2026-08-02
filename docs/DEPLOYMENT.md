@@ -74,6 +74,7 @@ WEB_PUBLIC_URL=https://taskhunt.example
 NODE_ENV=production
 BULL_BOARD_USER=...       # обязателен в prod, иначе /admin/queues откажется стартовать
 BULL_BOARD_PASSWORD=...
+DATABASE_URL="postgresql://taskhunt:<тот же пароль, что и POSTGRES_PASSWORD ниже>@postgres:5432/taskhunt?schema=public"
 ```
 
 ```bash
@@ -82,11 +83,12 @@ NEXT_PUBLIC_API_URL=https://api.taskhunt.example
 NEXT_PUBLIC_WEB_URL=https://taskhunt.example
 ```
 
-`NEXT_PUBLIC_*` дополнительно нужно передать как shell-переменные перед сборкой — `docker-compose.prod.yml` пробрасывает их в build ARG:
+`NEXT_PUBLIC_*` и `POSTGRES_PASSWORD` дополнительно нужно передать как shell-переменные (или положить в `.env` в корне репо — `docker compose` читает его сам) перед сборкой/запуском — `docker-compose.prod.yml` пробрасывает первые в build ARG, второй — в контейнер postgres:
 
 ```bash
 export NEXT_PUBLIC_API_URL=https://api.taskhunt.example
 export NEXT_PUBLIC_WEB_URL=https://taskhunt.example
+export POSTGRES_PASSWORD=<сгенерированный пароль>   # должен совпадать с паролем в DATABASE_URL выше
 ```
 
 ## 5. Сборка и запуск

@@ -20,6 +20,12 @@ services:
     # файла (Compose по умолчанию склеивает списки между файлами, а не
     # заменяет) — проверено на Compose v5.3.1 через `docker compose config`.
     ports: !reset []
+    # Дефолт "taskhunt"/"taskhunt" (docker-compose.yml) — ок для дева, не для
+    # прода. POSTGRES_PASSWORD должен совпадать с паролем в DATABASE_URL
+    # каждого сервисного .env — это не связано автоматически, при смене
+    # обновите оба места.
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD to match DATABASE_URL in every service .env}
 
   redis:
     ports: !reset []
