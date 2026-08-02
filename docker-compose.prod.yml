@@ -35,6 +35,22 @@ services:
       NODE_ENV: production
     volumes: !reset []
 
+  # Базовый docker-compose.yml монтирует исходники fraud-service/
+  # notifications-service поверх образа тем же паттерном, что и api/web
+  # (см. комментарий вверху файла) — без !reset здесь хостовый apps/*
+  # (сырой TS, без dist/) перекрывает собранный билд внутри контейнера,
+  # что и вызывало "Cannot find module dist/main.js" в проде (образ
+  # собран верно, но volume поверх него подменял /app/apps/<service>).
+  notifications-service:
+    environment:
+      NODE_ENV: production
+    volumes: !reset []
+
+  fraud-service:
+    environment:
+      NODE_ENV: production
+    volumes: !reset []
+
   web:
     build:
       args:
