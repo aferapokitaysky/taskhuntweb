@@ -1229,17 +1229,23 @@ function DashboardContent() {
 
             {!showSavedOnly && (
               <div className="mb-5 rounded-[2rem] border border-stone-100 bg-white/70 p-3 shadow-sm backdrop-blur">
-                <div className="grid gap-2 xl:grid-cols-[1fr_210px_160px_135px_auto]">
+                {/* flex-wrap вместо жёсткой grid-cols-[px_px_px] — колонки на
+                    фиксированной ширине через grid-template могли визуально
+                    наезжать друг на друга в Safari при определённых ширинах
+                    окна/масштабе шрифта. flex с min-w на каждом поле и
+                    flex-wrap гарантированно не даёт полям пересекаться —
+                    просто переносит лишнее на новую строку. */}
+                <div className="flex flex-wrap gap-2">
                   <input
                     placeholder="Поиск по названию или описанию"
                     value={orderSearch}
                     onChange={(e) => setOrderSearch(e.target.value)}
-                    className="field-surface w-full rounded-[1.35rem] px-4 py-3 text-sm"
+                    className="field-surface min-w-[200px] flex-1 rounded-[1.35rem] px-4 py-3 text-sm"
                   />
                   <select
                     value={filterCategoryId}
                     onChange={(e) => setFilterCategoryId(e.target.value)}
-                    className="field-surface rounded-[1.35rem] px-3 py-3 text-sm"
+                    className="field-surface min-w-[160px] flex-1 basis-[210px] rounded-[1.35rem] px-3 py-3 text-sm"
                   >
                     <option value="">Все категории</option>
                     {flatCategories.map((category) => (
@@ -1248,23 +1254,30 @@ function DashboardContent() {
                       </option>
                     ))}
                   </select>
-                  <TagAutocomplete
-                    value={filterTags}
-                    onChange={setFilterTags}
-                    suggestions={skills.map((s) => s.name)}
-                    placeholder="Теги — начните вводить..."
-                    showChips={false}
-                    inputClassName="field-surface rounded-[1.35rem] px-3 py-3 text-sm"
-                  />
+                  <div className="min-w-[160px] flex-1 basis-[160px]">
+                    <TagAutocomplete
+                      value={filterTags}
+                      onChange={setFilterTags}
+                      suggestions={skills.map((s) => s.name)}
+                      placeholder="Теги — начните вводить..."
+                      showChips={false}
+                      inputClassName="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
+                    />
+                  </div>
                   <input
                     type="number"
                     min="0"
                     placeholder="Бюджет от"
                     value={filterMinBudget}
                     onChange={(e) => setFilterMinBudget(e.target.value)}
-                    className="field-surface rounded-[1.35rem] px-3 py-3 text-sm"
+                    className="field-surface min-w-[120px] flex-1 basis-[135px] rounded-[1.35rem] px-3 py-3 text-sm"
                   />
-                  <button type="button" onClick={clearOrderFilters} disabled={!hasActiveFilter && orderStatusView === 'all'} className="secondary-action rounded-[1.35rem] px-4 py-3 text-sm disabled:opacity-40">
+                  <button
+                    type="button"
+                    onClick={clearOrderFilters}
+                    disabled={!hasActiveFilter && orderStatusView === 'all'}
+                    className="secondary-action shrink-0 rounded-[1.35rem] px-4 py-3 text-sm disabled:opacity-40"
+                  >
                     Сбросить
                   </button>
                 </div>
