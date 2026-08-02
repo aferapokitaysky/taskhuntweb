@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { api, API_URL } from '@/lib/api';
 import type { ChatInboxThread, User } from '@/lib/types';
 import { Logo } from './Logo';
+import { EmailVerificationBanner } from './EmailVerificationBanner';
 import { NotificationBell } from './NotificationBell';
 import { HeaderSearch } from './HeaderSearch';
 import { ThemeToggle } from './ThemeToggle';
@@ -91,6 +92,7 @@ export function AppHeader() {
   };
   const TierIcon = TIER_ICON[tierName];
   return (
+    <>
     <div className="relative left-1/2 right-1/2 z-30 mb-8 flex w-screen -translate-x-1/2 justify-center px-4">
       <header className="app-shell-header premium-panel relative flex w-full max-w-[1500px] items-center gap-2 rounded-[1.75rem] px-2 py-2 dark:bg-stone-900 md:gap-3 md:px-3">
         <Link href="/dashboard" className="app-logo-link shrink-0 rounded-[1.25rem] px-1.5 py-1 transition-transform hover:scale-105 md:px-2">
@@ -169,5 +171,7 @@ export function AppHeader() {
         </div>
       </header>
     </div>
+    {me?.status === 'PENDING_VERIFICATION' && <EmailVerificationBanner />}
+    </>
   );
 }

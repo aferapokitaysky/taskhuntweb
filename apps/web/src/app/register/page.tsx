@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, saveTokens } from '@/lib/api';
+import { useToast } from '@/components/Toast';
 import { OAuthButtons } from '@/components/OAuthButtons';
 import { AuthShell } from '@/components/AuthShell';
 import { ClientIcon } from '@/components/icons/illustrated/ClientIcon';
@@ -37,6 +38,7 @@ export default function RegisterPage() {
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { showToast } = useToast();
   const initialRole = useMemo<Role | null>(() => {
     const queryRole = searchParams.get('role');
     return queryRole === 'CLIENT' || queryRole === 'FREELANCER' ? queryRole : null;
@@ -65,6 +67,7 @@ function RegisterForm() {
         body: JSON.stringify({ email, password, role, displayName }),
       });
       saveTokens(tokens.accessToken, tokens.refreshToken);
+      showToast(`Письмо для подтверждения отправлено на ${email}`, 'success');
       router.push(`/onboarding?role=${role}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Что-то пошло не так');
