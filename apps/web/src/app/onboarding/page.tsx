@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import type { Category, MarketplaceRole } from '@/lib/types';
+import type { Category, MarketplaceRole, User } from '@/lib/types';
 import { Mascot } from '@/components/Mascot';
 import { Logo } from '@/components/Logo';
 
@@ -38,6 +38,14 @@ function OnboardingForm() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Заполняется, только если после онбординга аккаунт всё ещё
+  // PENDING_VERIFICATION (локальная регистрация email+пароль) — тогда вместо
+  // автоперехода показываем отдельный экран "подтвердите почту". OAuth-вход
+  // и уже подтверждённые аккаунты этот экран не видят.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
+  const [resendError, setResendError] = useState<string | null>(null);
 
   useEffect(() => {
     api<Category[]>('/categories')
@@ -75,12 +83,60 @@ function OnboardingForm() {
 
     try {
       await api('/users/me/onboarding', { method: 'POST', body: JSON.stringify(body) });
+      const me = await api<User>('/users/me').catch(() => null);
       setDone(true);
-      setTimeout(() => router.push('/dashboard'), 1400);
+      if (me?.status === 'PENDING_VERIFICATION') {
+        setPendingEmail(me.email);
+      } else {
+        setTimeout(() => router.push('/dashboard'), 1400);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось сохранить анкету');
       setLoading(false);
     }
+  }
+
+  async function resendVerification() {
+    setResending(true);
+    setResendError(null);
+    try {
+      await api('/auth/resend-verification', { method: 'POST' });
+      setResent(true);
+    } catch (err) {
+      setResendError(err instanceof Error ? err.message : 'Не удалось отправить письмо');
+    } finally {
+      setResending(false);
+    }
+  }
+
+  if (done && pendingEmail) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-4 py-12 text-center">
+        <Mascot name="celebrate" size="h-28 w-28" />
+        <h1 className="mt-4 font-serif text-2xl text-stone-900">Подтвердите почту</h1>
+        <p className="mt-2 text-stone-600">
+          Мы отправили письмо со ссылкой для подтверждения на <span className="font-semibold text-stone-900">{pendingEmail}</span>. Перейдите по
+          ней, чтобы полностью активировать аккаунт — а пока можно уже пользоваться личным кабинетом.
+        </p>
+
+        {resent && <p className="mt-4 text-sm font-semibold text-emerald-600">Письмо отправлено ещё раз.</p>}
+        {resendError && <p className="mt-4 text-sm text-red-600">{resendError}</p>}
+
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={resendVerification}
+            disabled={resending || resent}
+            className="secondary-action px-5 py-2.5 text-sm disabled:opacity-50"
+          >
+            {resending ? 'Отправляем…' : resent ? 'Отправлено' : 'Отправить письмо ещё раз'}
+          </button>
+          <button type="button" onClick={() => router.push('/dashboard')} className="primary-action px-6 py-2.5 text-sm">
+            Перейти в кабинет
+          </button>
+        </div>
+      </main>
+    );
   }
 
   if (done) {
