@@ -1,0 +1,415 @@
+2D и 3D разработка игр
+AI API Integration
+AI Agent & Workflow Automation (LangChain/CrewAI)
+AI Application Development
+AI Chatbot Integration
+AI Чат-боты (ChatGPT / LLM)
+AR/VR App Development (Meta Quest/Apple Vision Pro)
+AWS Infrastructure Setup & Cloud Migration
+Admin Panel & Dashboard
+Adyen Payment Gateway
+Allegro Integration (Poland/EU)
+Amazon Scraping & API
+Android App Development
+Angular Application
+App Store Optimization (ASO)
+App Store Publishing
+Auto-posting & Content Aggregator Bot
+Automated Telegram Channel Management
+Azure Cloud Services Setup
+Back-End Development
+Backend Development
+Backend разработка
+BigCommerce Integration
+Browser Automation (Playwright/Puppeteer/Selenium)
+Browser Automation (Playwright/Selenium)
+Browser Extension (Chrome/Firefox/Safari)
+Browser Extension Development
+Bugfixing & Code Refactoring
+C# Desktop Development
+CI/CD Pipeline Setup
+CLI Tool Development
+CRM & ERP System Development
+Cloud Migration (AWS/GCP)
+Cloudflare Protection Bypass Scraping
+Code Audit & Refactoring
+Code Review Services
+Command Line Interface (CLI) Utility
+Computer Vision & Image Processing
+Computer Vision Development
+Content Auto-poster & Scraper
+Core Web Vitals Improvement
+Crypto Payment Gateway Integration
+Crypto Trading & DEX боты
+Crypto Trading Bot
+Custom CMS Development
+Custom CRM System Development
+Custom ERP System Development
+Custom LLM Deployment & Fine-Tuning
+Custom Trading & Sniper Bot
+Custom Web Development
+Cybersecurity Audit
+Data Engineering & ETL Pipeline
+Data Engineering & ETL пайплайны
+Data Engineering Pipelines
+Data Scraping Python
+Data Visualization & Dashboard (PowerBI/Tableau/Grafana)
+Database Administration & Optimization (Postgres/MySQL/MongoDB)
+Database Performance Tuning
+DeFi Platform Development
+DeFi Protocol & DEX Development
+Desktop Application Development
+DevOps Engineering & CI/CD Setup
+DevOps инжиниринг и настройка CI/CD
+Discord Bot Development
+Discord боты
+Docker Containerization
+Docker Containerization & Optimization
+E-commerce Website Development
+Electron App Development
+Electron Cross-Platform App
+Embedded Software Development
+Embedded Systems Firmware (C/C++)
+Flutter Cross-Platform App
+Flutter Mobile Apps
+Front-End Development
+Frontend Development
+Frontend разработка
+Full-Stack Development
+Fullstack Web Development
+Fullstack разработка
+Godot 4 Game Dev
+Godot 4 Game Development
+Google Cloud (GCP) Setup
+Google Play Publishing
+Grafana & Prometheus Monitoring
+GraphQL API Development
+HTML5 & Canvas Browser Game
+HTML5 & WebGL Game Dev
+Hardware Driver Development
+Infrastructure as Code (Terraform/Ansible)
+Klarna Payment Integration
+Kotlin / Jetpack Compose Apps
+Kubernetes Cluster Management
+Kubernetes Cluster Management & Helm
+LLM Fine-Tuning
+Landing Page Development
+Legacy Code Migration
+Legacy System Migration & Refactoring
+Linux C++ Qt Desktop App
+Linux Server Administration
+Linux Server Administration & Hardening
+LiqPay Integration
+Load & Stress Testing (K6)
+Local LLM Deployment
+ML Model Development
+Machine Learning Model Training
+Magento E-commerce Development
+Manual QA & Functional Testing
+Manual QA Testing
+Marketplace Data Scraper
+Microcontroller Programming (Arduino/ESP32/STM32)
+Microcontroller Programming (ESP32/STM32)
+Microservices Architecture Design
+Mobile App Bug Fixing
+Mobile App In-App Purchase Setup
+Mobile App UI/UX to Code
+Mobile Game Development (Unity)
+Mobile In-App Subscriptions
+Mollie Payment Integration
+Monobank Payment Gateway
+Multiplayer Game Networking
+Multiplayer Game Server Development
+NFT Minting Site & Smart Contract
+Native Android App Development
+Native iOS App Development
+Next.js Web Development
+Nova Poshta API Integration
+OLX Scraping & Automation (UA/EU)
+OpenAI & Claude API Integration
+Payment Gateway Integration
+Paywall боты для закрытых каналов
+Penetration Testing
+Penetration Testing & Security Audit
+Performance & Load Testing (K6/JMeter)
+Price Monitoring & Scraping Bot
+Progressive Web App (PWA)
+Progressive Web Apps (PWA)
+Push Notification Service Integration
+Python Automation Scripting
+QA Automation Engineering
+QA Automation Testing (Cypress/Playwright/PyTest)
+RAG (Retrieval-Augmented Generation) System
+RAG System Development
+REST API Development
+RPA Business Process Automation
+React Native App Development
+React Native Mobile Apps
+React Web Application
+Revolut Business API Integration
+Robotic Process Automation (RPA)
+SEO оптимизация кодом
+SEPA Direct Debit Integration
+Server-Side Rendering (SSR)
+Shopify Store Development
+Single Page Application (SPA)
+Single Page Applications (SPA)
+Smart Contract Security Audit
+Solana Rust Smart Contract Development
+Solana Rust Smart Contracts
+Solidity Smart Contract Dev
+Solidity Smart Contract Development
+Speech Recognition & Synthesis
+Speech-to-Text & Text-to-Speech (Whisper)
+Strapi Headless CMS Integration
+Stripe & PayPal Payment Integration
+Swift / SwiftUI Apps
+System Architecture & Technical Consulting
+System Design & Database Architecture
+System Programming
+Tailwind CSS Layout
+Tauri App Development
+Tauri Light Desktop App
+Telegram Bot Development
+Telegram Crypto Trading Bot (Solana/EVM)
+Telegram Mini Apps (TMA)
+Telegram Mini Apps Development
+Telegram WebApp Frontend
+Telegram WebApps
+Terraform Infrastructure Setup
+Third-Party API Integration
+Third-party API Integration
+Unity 3D Game Dev
+Unity 3D Game Development
+Unreal Engine 5 Game Dev
+Unreal Engine 5 Game Development
+Viber боты
+Vue / Nuxt Development
+Vulnerability Assessment & Bug Hunting
+Wearable App Development (Apple Watch)
+Web API Integration
+Web Accessibility & WCAG Compliance
+Web Application Development
+Web Performance Optimization
+Web Scraping & Data Mining
+Web Scraping & Parsing
+Web Server Setup (Nginx/Apache/Caddy)
+Web3 DApp Development
+Web3 Frontend Development
+Webflow Custom Development
+Website Speed Optimization
+WhatsApp API Integration
+WhatsApp Business API Bot
+WhatsApp боты и интеграции
+Windows C# WPF Desktop App
+WooCommerce Customization
+WordPress Custom Theme & Plugin
+eBay API & Automation
+iOS App Development
+macOS Swift Desktop App
+Автоматизация бизнес-процессов (RPA)
+Автоматизация браузеров (Playwright / Puppeteer / Selenium)
+Автоматизация браузеров и кликеры
+Автоматизация задач скриптами на Python
+Автоматизация процессов и парсинг данных
+Автоматизация тестирования (Autotests: PyTest, Jest, Playwright)
+Автоматизация тестирования (Cypress / Playwright / PyTest)
+Адаптивная мобильная верстка
+Администрирование и защита Linux серверов
+Администрирование и оптимизация СУБД (PostgreSQL / MySQL)
+Анализ уязвимостей (Vulnerability Assessment)
+Аудит безопасности сайтов и приложений
+Аудит безопасности смарт-контрактов
+Аудит качества кода и рефакторинг
+Аудит смарт-контрактов
+Боты для автопостинга и агрегации контента
+Боты для мониторинга цен и товаров
+Боты для рассылок и автопостинга
+Боты с приемами автооплат
+Бэкенд разработка (Backend)
+Веб-скрапинг и сбор данных
+Веб-скрапинг с обходом сложной защиты (Cloudflare bypass)
+Верстка Figma в React / Next.js
+Верстка Figma в Vue / Nuxt
+Верстка сайтов (HTML/CSS/JS)
+Визуализация данных и интерактивные дашборды
+Генерация изображений (ComfyUI / Stable Diffusion)
+Дата-инжиниринг и создание ETL-пайплайнов
+Доступность веб-сайтов (a11y / WCAG)
+Игровые боты в Telegram
+Интеграция Headless CMS (Strapi)
+Интеграция In-App Purchases (Встроенные покупки)
+Интеграция LiqPay
+Интеграция LiqPay API
+Интеграция Monobank API
+Интеграция OpenAI / Claude / Gemini API
+Интеграция Push-уведомлений
+Интеграция push-уведомлений в приложения
+Интеграция ИИ API (OpenAI, Claude, Gemini)
+Интеграция Нова Пошта API
+Интеграция Укрпошта API
+Интеграция внешних веб-API
+Интеграция и боты для WhatsApp Business API
+Интеграция искусственного интеллекта (AI / LLM)
+Интеграция платежей Stripe и PayPal
+Интеграция с BigCommerce
+Интеграция сторонних API и сервисов
+Интеграция сторонних сервисов и API
+Интеграция эквайринга криптовалют (Crypto Gateways)
+Инфраструктура как код (Terraform / Ansible)
+Инфраструктура как код (Terraform, Ansible)
+Исправление багов и рефакторинг кода
+Исправление ошибок и багов в мобильных приложениях
+Кастомная веб-разработка под ключ
+Код-ревью (Code Review)
+Компьютерное зрение (Computer Vision, OpenCV, YOLO)
+Компьютерное зрение и обработка изображений
+Контейнеризация Docker & Docker Compose
+Контейнеризация приложений в Docker
+Кроссплатформенная разработка (Flutter)
+Кроссплатформенная разработка (React Native)
+Кроссплатформенные десктоп приложения на Electron
+Кроссплатформенные приложения на Flutter
+Легковесные десктоп приложения на Tauri
+Миграция legacy систем на новый стек
+Миграция в облака (AWS, GCP, Azure, Hetzner)
+Миграция и переработка устаревших legacy систем
+Микрофронтенды (Microfrontends)
+Мобильный UI/UX дизайн
+Мониторинг цен и парсеры каталогов
+Нагрузочное тестирование (K6, JMeter)
+Нагрузочное тестирование систем (K6 / JMeter)
+Настройка CI/CD пайплайнов (GitHub Actions, GitLab CI)
+Настройка автоматических бэкапов и Disaster Recovery
+Настройка безопасности серверов и фаерволов
+Настройка веб-серверов (Nginx / Apache / Caddy)
+Настройка веб-серверов (Nginx, Traefik, Caddy)
+Настройка встроенных покупок в мобильных приложениях
+Настройка и администрирование Google Cloud (GCP)
+Настройка и администрирование Linux серверов
+Настройка и доработка WooCommerce
+Настройка инфраструктуры AWS и миграция в облако
+Настройка мониторинга (Prometheus, Grafana, Loki)
+Настройка сервисов Microsoft Azure
+Нативная разработка под Android (Kotlin)
+Нативная разработка под iOS (Swift)
+Обучение и дообучение (Fine-Tuning) нейросетей
+Обучение моделей машинного обучения (ML)
+Оптимизация баз данных (PostgreSQL, MySQL, Redis)
+Оптимизация производительности софта
+Оптимизация скорости загрузки (Core Web Vitals)
+Оптимизация скорости загрузки сайтов
+Оптимизация страниц приложений (ASO)
+Оркестрация Kubernetes (K8s)
+Пентестинг (Penetration Testing)
+Пентестинг и аудит безопасности
+Перенос UI/UX дизайна в код мобильного приложения
+Поддержка и саппорт боты
+Подключение криптовалютных платежных шлюзов
+Поиск уязвимостей и аудит кода
+Предиктивная аналитика и ML модели
+Программирование микроконтроллеров (Arduino / ESP32 / STM32)
+Программирование микроконтроллеров (STM32, ESP32, Arduino)
+Проектирование архитектуры баз данных и систем (System Design)
+Проектирование микросервисной архитектуры
+Публикация приложений в App Store
+Публикация приложений в Google Play
+Развертывание и дообучение локальных LLM
+Развертывание локальных LLM (Ollama, vLLM, DeepSpeed)
+Разработка 3D игр на Unity
+Разработка AR/VR приложений (Meta Quest / Vision Pro)
+Разработка CLI утилит и консольного софта
+Разработка CMS и плагинов
+Разработка CRM и ERP систем
+Разработка DEX / DeFi платформ
+Разработка DeFi протоколов и DEX бирж
+Разработка ERP систем для бизнеса
+Разработка GraphQL API
+Разработка Landing Page (Лендинги)
+Разработка MEV и Арбитражных ботов
+Разработка NFT маркетплейсов и минт-сайтов
+Разработка REST API
+Разработка Telegram Mini Apps (TMA)
+Разработка Telegram ботов
+Разработка ИИ-агентов и авто-цепочек (LangChain / CrewAI)
+Разработка админ-панелей и дашбордов
+Разработка ботов для Telegram
+Разработка ботов для авто-скупки и чекеров
+Разработка браузерных игр (HTML5 / WebGL)
+Разработка веб-приложений
+Разработка веб-сайтов под ключ
+Разработка встроенного ПО (Embedded / Firmware)
+Разработка десктопных приложений (Electron)
+Разработка десктопных приложений (Tauri)
+Разработка децентрализованных приложений (Web3 DApp)
+Разработка драйверов оборудования
+Разработка драйверов устройств
+Разработка игр на Godot Engine
+Разработка игр на Godot Engine 4
+Разработка игр на Unity
+Разработка игр на Unreal Engine 5
+Разработка интернет-магазинов
+Разработка интернет-магазинов (E-commerce)
+Разработка кастомных CRM систем
+Разработка консольных утилит (CLI)
+Разработка корпоративных сайтов
+Разработка крипто-кошельков и Web3 фронтенда
+Разработка крипто-торговых ботов в Telegram
+Разработка магазинов на Shopify
+Разработка микросервисной архитектуры
+Разработка мобильных игр
+Разработка мобильных игр на Unity
+Разработка мобильных приложений (iOS/Android)
+Разработка мобильных приложений Android
+Разработка мобильных приложений iOS
+Разработка мобильных приложений на React Native
+Разработка на Kotlin / Jetpack Compose
+Разработка на Magento
+Разработка на Swift / SwiftUI
+Разработка одностраничных приложений (SPA)
+Разработка парсеров данных
+Разработка плагинов и расширений для браузеров (Chrome / Firefox)
+Разработка приложений для носимых устройств (Apple Watch / Wear OS)
+Разработка приложений на C# / WPF / WinUI
+Разработка приложений под Linux (C++ / Qt)
+Разработка приложений под Windows (C# / WPF)
+Разработка приложений под macOS (Swift)
+Разработка приложений с искусственным интеллектом
+Разработка прогрессивных веб-приложений (PWA)
+Разработка прошивок встроенных систем (C/C++)
+Разработка рекомендательных систем
+Разработка сайтов на Webflow
+Разработка сайтов под ключ
+Разработка сетевых сервисов и демонов
+Разработка смарт-контрактов (Solidity, Rust)
+Разработка смарт-контрактов (Solidity/Rust)
+Разработка смарт-контрактов на Solana (Rust)
+Разработка смарт-контрактов на Solidity
+Разработка собственных CMS систем
+Разработка софта под Linux
+Разработка софта под Windows
+Разработка софта под macOS
+Распознавание и синтез речи (Speech-to-Text / TTS)
+Распознавание речи и синтез (TTS / STT, Whisper)
+Ручное и функциональное тестирование ПО (QA)
+Ручное тестирование (QA Manual)
+Сетевой код для мультиплеерных игр
+Системная архитектура и технический консалтинг
+Системное программирование (C/C++/Rust/Go)
+Скрипты автопостинга и грабберы контента
+Создание NFT смарт-контрактов и минт-сайтов
+Создание RAG систем (Retrieval-Augmented Generation)
+Создание RAG-систем для поиска по документам
+Создание ботов для Discord
+Создание браузерных HTML5 игр
+Создание расширений для браузеров (Chrome / Firefox / Safari)
+Создание серверной части для мультиплеерных игр
+Создание тем и плагинов для WordPress
+Создание торговых и снайпер-ботов
+Создание шейдеров и визуальных эффектов (VFX)
+Телеграм парсеры и инвайтеры
+Улучшение показателей Core Web Vitals
+Управление кластерами Kubernetes и Helm чарты
+Фронтенд разработка (Frontend)
+Фулстек разработка (Fullstack)
+Эмуляция действий пользователя (Playwright / Puppeteer)
