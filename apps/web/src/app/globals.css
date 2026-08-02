@@ -36,7 +36,8 @@ body {
   background-color: #292524;
 }
 
-.dark [class*='bg-white/'] {
+.dark [class*='bg-white/'],
+.dark [class*='bg-stone-50/'] {
   background-color: rgba(41, 37, 36, 0.78);
 }
 
@@ -295,6 +296,9 @@ body {
 .dark [class*='bg-card-olive'] {
   background-color: #454f39;
 }
+.dark [class*='bg-cream-200'] {
+  background-color: #3a352e;
+}
 
 .dark input,
 .dark textarea,
@@ -307,23 +311,10 @@ body {
   color: #78716c;
 }
 
-.dark .premium-panel svg [stroke='#1A1A1A'],
-.dark .interactive-card svg [stroke='#1A1A1A'],
-.dark .workspace-hero svg [stroke='#1A1A1A'] {
-  stroke: #f5f5f4;
-}
-
-.dark .premium-panel svg [fill='#1A1A1A'],
-.dark .interactive-card svg [fill='#1A1A1A'],
-.dark .workspace-hero svg [fill='#1A1A1A'] {
-  fill: #f5f5f4;
-}
-
-.dark .premium-panel svg [fill='#FDFCFA'],
-.dark .interactive-card svg [fill='#FDFCFA'],
-.dark .workspace-hero svg [fill='#FDFCFA'] {
-  fill: #292524;
-}
+/* Кастомные иллюстрированные SVG-иконки (premium-panel/interactive-card/
+   workspace-hero) намеренно НЕ перекрашиваются в тёмной теме — остаются
+   такими же, как в светлой (прямой запрос: чёрный обвод/кремовая заливка
+   держат авторский вид иконок независимо от темы). */
 
 /* Те же утилиты, но в hover-варианте — иначе наведение на кнопки со
    светлым hover:bg-white/hover:bg-stone-50 заливает их сплошным белым

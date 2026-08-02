@@ -193,6 +193,7 @@ model Profile {
   city           String?
   githubUrl      String?
   websiteUrl     String?
+  linkedinUrl    String?
 
   successRate      Decimal?  @db.Decimal(5, 2) // % успешных сделок
   completionRate   Decimal?  @db.Decimal(5, 2)

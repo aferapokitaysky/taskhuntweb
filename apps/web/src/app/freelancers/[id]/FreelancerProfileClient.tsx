@@ -12,6 +12,7 @@ import { StarIcon } from '@/components/icons/StarIcon';
 import { ShareIcon } from '@/components/icons/ShareIcon';
 import { GithubIcon } from '@/components/icons/GithubIcon';
 import { GlobeIcon } from '@/components/icons/GlobeIcon';
+import { LinkedInIcon } from '@/components/icons/LinkedInIcon';
 import { AppHeader } from '@/components/AppHeader';
 import { GithubRepos, extractGithubUsername } from '@/components/GithubRepos';
 import { useToast } from '@/components/Toast';
@@ -29,6 +30,7 @@ interface PublicProfile {
     city?: string | null;
     githubUrl?: string | null;
     websiteUrl?: string | null;
+    linkedinUrl?: string | null;
     successRate?: string | null;
     completionRate?: string | null;
     avgResponseMins?: number | null;
@@ -225,6 +227,17 @@ export default function FreelancerProfileClient() {
             >
               <GlobeIcon className="h-4 w-4 shrink-0" />
               <span className="truncate">{data.profile.websiteUrl.replace(/^https?:\/\//, '')}</span>
+            </a>
+          )}
+          {data.profile.linkedinUrl && (
+            <a
+              href={data.profile.linkedinUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 text-sm text-stone-600 transition hover:text-brand"
+            >
+              <LinkedInIcon className="h-4 w-4 shrink-0" />
+              <span className="truncate">{data.profile.linkedinUrl.replace(/^https?:\/\//, '')}</span>
             </a>
           )}
         </div>

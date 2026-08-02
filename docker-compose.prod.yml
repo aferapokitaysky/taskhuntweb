@@ -1,0 +1,39 @@
+# Прод-оверлей поверх docker-compose.yml. Базовый файл монтирует исходники
+# как volume'ы поверх собранного образа (hot-reload для дева) — в проде это
+# нельзя: смонтированный на хосте apps/web/apps/api перекроет dist/standalone
+# внутри контейнера тем, что реально лежит на диске (а на диске может не быть
+# node_modules/собранного билда вовсе). Здесь эти volume'ы явно обнуляются.
+#
+# Запуск:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# NEXT_PUBLIC_API_URL/NEXT_PUBLIC_WEB_URL — build ARG'и Next.js (см.
+# apps/web/Dockerfile): "запекаются" в клиентский бандл на этапе сборки,
+# рантайм-переменные окружения на них уже не влияют. Меняете домен —
+# пересобираете web-образ, просто restart недостаточно.
+
+services:
+  postgres:
+    # В проде БД не должна торчать наружу с хоста — только api внутри compose-сети.
+    # !reset обязателен: обычный "ports: []" НЕ очищает список из базового
+    # файла (Compose по умолчанию склеивает списки между файлами, а не
+    # заменяет) — проверено на Compose v5.3.1 через `docker compose config`.
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  api:
+    environment:
+      NODE_ENV: production
+    volumes: !reset []
+
+  web:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL, e.g. https://api.taskhunt.example}
+        NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:?set NEXT_PUBLIC_WEB_URL, e.g. https://taskhunt.example}
+    environment:
+      NODE_ENV: production
+    volumes: !reset []

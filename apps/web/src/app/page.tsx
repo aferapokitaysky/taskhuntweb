@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Logo } from '@/components/Logo';
+import { LandingAuthCta } from '@/components/LandingAuthCta';
 import { OrderCard } from '@/components/OrderCard';
 import { CategoryIcon } from '@/components/CategoryIcon';
 import { Mascot } from '@/components/Mascot';
@@ -142,12 +143,7 @@ export default async function HomePage() {
           </Link>
         </nav>
         <div className="flex w-full items-center gap-2 sm:w-auto">
-          <Link href="/login" className="secondary-action flex-1 justify-center px-3 py-2 text-sm sm:flex-none sm:px-4">
-            Войти
-          </Link>
-          <Link href="/register?role=CLIENT" className="primary-action flex-1 justify-center px-3 py-2 text-sm sm:flex-none sm:px-4">
-            Разместить заказ
-          </Link>
+          <LandingAuthCta variant="header" />
         </div>
       </header>
 
@@ -399,12 +395,7 @@ export default async function HomePage() {
             Создайте профиль или заказ за несколько минут. Дальше TaskHunt подскажет совпадения, уведомления и безопасный путь оплаты.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link href="/register" className="primary-action px-6 py-3">
-              Создать аккаунт
-            </Link>
-            <Link href="/search" className="secondary-action px-6 py-3">
-              Посмотреть рынок
-            </Link>
+            <LandingAuthCta variant="section" />
           </div>
         </section>
 

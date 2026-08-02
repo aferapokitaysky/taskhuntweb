@@ -78,7 +78,7 @@ export function NotificationPreferencesPanel() {
   }
 
   return (
-    <section id="notifications" className="premium-panel scroll-mt-28 overflow-hidden p-0">
+    <section id="notifications" className="premium-panel scroll-mt-28 overflow-hidden rounded-[2rem] p-0">
       <div className="border-b border-stone-100 bg-gradient-to-br from-card-sage/45 via-white to-card-sand/55 p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

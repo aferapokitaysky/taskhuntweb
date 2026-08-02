@@ -51,6 +51,7 @@ export default function CategoryOrdersPage() {
   const [search, setSearch] = useState('');
   const [minBudget, setMinBudget] = useState('');
   const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedEntry[]>([]);
+  const [childFilter, setChildFilter] = useState('');
 
   useEffect(() => {
     api<User>('/users/me')
@@ -84,6 +85,9 @@ export default function CategoryOrdersPage() {
 
   const isFreelancer = me?.roles.includes('FREELANCER') ?? false;
   const recentlyViewedHere = recentlyViewed.filter((r) => orders.some((o) => o.id === r.id));
+  const filteredChildren = (category?.children ?? []).filter((child) =>
+    child.name.toLowerCase().includes(childFilter.trim().toLowerCase()),
+  );
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -102,16 +106,27 @@ export default function CategoryOrdersPage() {
               <h1 className="mt-1 font-serif text-3xl text-stone-900">{category?.name ?? 'Категория'}</h1>
               <p className="mt-2 text-sm text-stone-500">{orders.length} заказов в текущей выдаче</p>
           {category?.children && category.children.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {category.children.map((child) => (
-                <Link
-                  key={child.id}
-                  href={`/categories/${child.id}`}
-                  className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600 transition hover:bg-brand/10 hover:text-brand"
-                >
-                  {child.name}
-                </Link>
-              ))}
+            <div className="mt-3 max-w-xl">
+              {category.children.length > 8 && (
+                <input
+                  value={childFilter}
+                  onChange={(e) => setChildFilter(e.target.value)}
+                  placeholder={`Найти нишу среди ${category.children.length}...`}
+                  className="field-surface mb-2 w-full max-w-xs px-3 py-1.5 text-xs"
+                />
+              )}
+              <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pr-1">
+                {filteredChildren.map((child) => (
+                  <Link
+                    key={child.id}
+                    href={`/categories/${child.id}`}
+                    className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600 transition hover:bg-brand/10 hover:text-brand"
+                  >
+                    {child.name}
+                  </Link>
+                ))}
+                {filteredChildren.length === 0 && <p className="text-xs text-stone-400">Ничего не найдено.</p>}
+              </div>
             </div>
           )}
             </div>

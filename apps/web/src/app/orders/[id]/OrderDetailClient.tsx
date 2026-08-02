@@ -570,23 +570,34 @@ export default function OrderDetailClient() {
         </div>
 
         {isClient && order.status === 'OPEN' && !order.isPromoted && (
-          <div className="relative mt-4 rounded-3xl border border-amber-300/20 bg-amber-300/10 p-4">
-            <button
-              type="button"
-              onClick={boostOrder}
-              disabled={boosting}
-              className="flex items-center gap-2 rounded-full border border-amber-200/40 bg-amber-100 px-4 py-2 text-sm font-medium text-stone-950 hover:bg-amber-50 disabled:opacity-50"
-            >
-              <BoostIcon className="h-4 w-4" />
-              {boosting ? 'Оформляем…' : 'Продвинуть заказ (7 дней)'}
-            </button>
-            {boostResult && (
-              <p className="mt-2 text-sm text-stone-700">
-                {boostResult.paidFromQuota
-                  ? 'Продвижение активировано из бесплатной квоты тарифа.'
-                  : `Оплатите буст: ${boostResult.payAddress}`}
-              </p>
-            )}
+          <div className="relative mt-4 flex flex-wrap items-center justify-between gap-4 rounded-[2rem] border border-brand/25 bg-gradient-to-br from-brand/10 via-white to-card-sand/40 p-5 shadow-sm">
+            <div className="flex min-w-0 items-center gap-4">
+              <Mascot name="boostRocket" size="h-14 w-14" />
+              <div className="min-w-0">
+                <p className="font-serif text-xl text-stone-950">Поднимите заказ в топ поиска</p>
+                <p className="mt-1 max-w-md text-sm leading-6 text-stone-600">
+                  Продвинутые заказы фрилансеры видят первыми в ленте и каталоге — больше качественных откликов за 7 дней.
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0">
+              <button
+                type="button"
+                onClick={boostOrder}
+                disabled={boosting}
+                className="primary-action inline-flex items-center gap-2 px-5 py-3 text-sm disabled:opacity-50"
+              >
+                <BoostIcon className="h-4 w-4" />
+                {boosting ? 'Оформляем…' : 'Продвинуть заказ (7 дней)'}
+              </button>
+              {boostResult && (
+                <p className="mt-2 max-w-xs text-xs text-stone-700">
+                  {boostResult.paidFromQuota
+                    ? 'Продвижение активировано из бесплатной квоты тарифа.'
+                    : `Оплатите буст: ${boostResult.payAddress}`}
+                </p>
+              )}
+            </div>
           </div>
         )}
 

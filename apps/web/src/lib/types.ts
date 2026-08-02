@@ -74,6 +74,7 @@ export interface Profile {
   city?: string | null;
   githubUrl?: string | null;
   websiteUrl?: string | null;
+  linkedinUrl?: string | null;
   skills?: { skill: Skill }[];
   portfolioItems?: PortfolioItem[];
   availableForWork?: boolean;
@@ -94,6 +95,7 @@ export interface User {
   profile?: Profile | null;
   level?: 'TOP_RATED' | 'RISING_TALENT' | 'NEW';
   completedOrders?: number;
+  subscription?: { status: string; expiresAt: string; tier: { name: 'STARTER' | 'PRO' | 'PREMIUM' } } | null;
 }
 
 export interface WalletBalance {

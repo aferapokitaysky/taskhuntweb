@@ -60,7 +60,7 @@ const TICKET_PRIORITY_LABEL: Record<string, string> = {
 
 const FEATURE_FLAG_LABEL: Record<string, { title: string; description: string }> = {
   AI_FRAUD_SCORING: { title: 'AI-скоринг фрода', description: 'Автоматическая оценка риска заказов/профилей моделью — вне модели используется только rule-based антифрод.' },
-  REFERRALS: { title: 'Реферальная программа', description: 'Вкладка «Партнёрка» и начисление реферальных вознаграждений.' },
+  REFERRALS: { title: 'Реферальная программа', description: 'Начисление реферальных вознаграждений (сама вкладка сейчас переиспользована под «Партнёрство» — контакты для рекламы/сотрудничества, флаг на неё не влияет).' },
   MILESTONES: { title: 'Этапы (milestones)', description: 'Разбивка заказа на оплачиваемые этапы вместо оплаты целиком.' },
   TELEGRAM_NOTIFICATIONS: { title: 'Уведомления в Telegram', description: 'Дублирование уведомлений в Telegram-бот (пока не подключён).' },
   WALLET: { title: 'Кошелёк и эскроу', description: 'Вся денежная механика: баланс, вывод, эскроу-платежи. Выключать только в экстренной ситуации.' },

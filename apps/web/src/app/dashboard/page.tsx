@@ -20,12 +20,13 @@ import { Mascot } from '@/components/Mascot';
 import { TargetIcon } from '@/components/icons/TargetIcon';
 import { DownloadIcon } from '@/components/icons/DownloadIcon';
 import { OrderStatusBadge } from '@/components/OrderStatusBadge';
+import { TagAutocomplete } from '@/components/TagAutocomplete';
 import { Skeleton, OrderCardSkeleton } from '@/components/Skeleton';
 import { NextLevelWidget } from '@/components/NextLevelWidget';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api, API_URL, downloadFile } from '@/lib/api';
-import type { BidTemplate, Category, LedgerEntryItem, MyBid, Order, PaginatedOrders, PreviousFreelancer, SavedPayoutAddress, SavedSearch, User, WalletBalance, WalletDeposit } from '@/lib/types';
+import type { BidTemplate, Category, LedgerEntryItem, MyBid, Order, PaginatedOrders, PreviousFreelancer, SavedPayoutAddress, SavedSearch, Skill, User, WalletBalance, WalletDeposit } from '@/lib/types';
 import { PaymentConfirmDetails } from '@/components/PaymentConfirmDetails';
 import { money } from '@/lib/types';
 import { BID_STATUS_LABELS } from '@/lib/bidStatus';
@@ -76,6 +77,7 @@ function DashboardContent() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [recommendedOrders, setRecommendedOrders] = useState<Order[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,7 +90,6 @@ function DashboardContent() {
     deadline: '',
     tags: [] as string[],
   });
-  const [tagInput, setTagInput] = useState('');
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [savingOrderDraft, setSavingOrderDraft] = useState(false);
   const [orderFormNotice, setOrderFormNotice] = useState<string | null>(null);
@@ -128,7 +129,6 @@ function DashboardContent() {
   const [orderStatusView, setOrderStatusView] = useState<OrderStatusView>('all');
   const [filterCategoryId, setFilterCategoryId] = useState(searchParams.get('categoryId') ?? '');
   const [filterTags, setFilterTags] = useState<string[]>([]);
-  const [filterTagInput, setFilterTagInput] = useState('');
   const [filterMinBudget, setFilterMinBudget] = useState('');
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [bidTemplates, setBidTemplates] = useState<BidTemplate[]>([]);
@@ -150,8 +150,14 @@ function DashboardContent() {
     // применяем фильтр сразу в первом запросе, а не ждём отдельного
     // дебаунса (тот на первом рендере намеренно не стреляет, см. ниже).
     const initialOrdersUrl = filterCategoryId ? `/orders?categoryId=${filterCategoryId}` : '/orders';
-    Promise.all([api<User>('/users/me'), api<WalletBalance>('/wallet/balance'), api<PaginatedOrders>(initialOrdersUrl), api<Category[]>('/categories')])
-      .then(([user, balance, orderPage, categoryList]) => {
+    Promise.all([
+      api<User>('/users/me'),
+      api<WalletBalance>('/wallet/balance'),
+      api<PaginatedOrders>(initialOrdersUrl),
+      api<Category[]>('/categories'),
+      api<Skill[]>('/skills'),
+    ])
+      .then(([user, balance, orderPage, categoryList, skillList]) => {
         setMe(user);
         setWallet(balance);
         if (balance.autoWithdrawThreshold) {
@@ -160,6 +166,7 @@ function DashboardContent() {
         }
         setOrders(orderPage.items);
         setCategories(categoryList);
+        setSkills(skillList);
         const firstCategory = categoryList.flatMap((category) => [category, ...(category.children ?? [])])[0];
         setOrderForm((current) => ({ ...current, categoryId: firstCategory?.id ?? '' }));
 
@@ -365,7 +372,6 @@ function DashboardContent() {
     setOrderSearch('');
     setFilterCategoryId('');
     setFilterTags([]);
-    setFilterTagInput('');
     setFilterMinBudget('');
     setOrderStatusView('all');
     setShowSavedOnly(false);
@@ -427,7 +433,6 @@ function DashboardContent() {
       }
       setOrderForm((current) => ({ ...current, title: '', description: '', budgetMin: '', budgetMax: '', deadline: '', tags: [] }));
       setEditingDraftId(null);
-      setTagInput('');
       setOrderFormNotice('Заказ опубликован. Он уже виден фрилансерам в ленте.');
       await refreshOrders();
       await refreshDrafts().catch(() => undefined);
@@ -1236,18 +1241,13 @@ function DashboardContent() {
                       </option>
                     ))}
                   </select>
-                  <input
-                    placeholder="Теги, Enter"
-                    value={filterTagInput}
-                    onChange={(e) => setFilterTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter' || !filterTagInput.trim()) return;
-                      e.preventDefault();
-                      const tag = filterTagInput.trim();
-                      if (!filterTags.includes(tag)) setFilterTags((current) => [...current, tag]);
-                      setFilterTagInput('');
-                    }}
-                    className="field-surface rounded-[1.35rem] px-3 py-3 text-sm"
+                  <TagAutocomplete
+                    value={filterTags}
+                    onChange={setFilterTags}
+                    suggestions={skills.map((s) => s.name)}
+                    placeholder="Теги — начните вводить..."
+                    showChips={false}
+                    inputClassName="field-surface rounded-[1.35rem] px-3 py-3 text-sm"
                   />
                   <input
                     type="number"
@@ -1753,35 +1753,14 @@ function DashboardContent() {
               </label>
               <div>
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Стек и теги</span>
-                <input
-                  placeholder="Тэги/стек — Enter добавляет (React, Node.js…)"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter' || !tagInput.trim()) return;
-                    e.preventDefault();
-                    const tag = tagInput.trim();
-                    if (!orderForm.tags.includes(tag)) {
-                      setOrderForm((f) => ({ ...f, tags: [...f.tags, tag] }));
-                    }
-                    setTagInput('');
-                  }}
-                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
+                <TagAutocomplete
+                  value={orderForm.tags}
+                  onChange={(tags) => setOrderForm((f) => ({ ...f, tags }))}
+                  suggestions={skills.map((s) => s.name)}
+                  placeholder="Начните вводить стек — React, Node.js…"
+                  chipClassName="max-w-full break-words rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700 hover:line-through"
+                  inputClassName="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
                 />
-                {orderForm.tags.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {orderForm.tags.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => setOrderForm((f) => ({ ...f, tags: f.tags.filter((t) => t !== tag) }))}
-                        className="max-w-full break-words rounded-full bg-card-sand px-2.5 py-1 text-xs font-medium text-stone-700 hover:line-through"
-                      >
-                        {tag} ×
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
 

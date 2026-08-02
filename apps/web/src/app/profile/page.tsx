@@ -8,6 +8,7 @@ import type { BidTemplate, PortfolioItem, SessionItem, Skill, User } from '@/lib
 import { AppHeader } from '@/components/AppHeader';
 import { GithubIcon } from '@/components/icons/GithubIcon';
 import { GlobeIcon } from '@/components/icons/GlobeIcon';
+import { LinkedInIcon } from '@/components/icons/LinkedInIcon';
 import { EyeIcon } from '@/components/icons/EyeIcon';
 import { ProfileNavIcon } from '@/components/icons/illustrated/ProfileNavIcon';
 import { useToast } from '@/components/Toast';
@@ -43,6 +44,7 @@ export default function ProfilePage() {
     city: '',
     githubUrl: '',
     websiteUrl: '',
+    linkedinUrl: '',
   });
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -120,6 +122,7 @@ export default function ProfilePage() {
           city: user.profile?.city ?? '',
           githubUrl: user.profile?.githubUrl ?? '',
           websiteUrl: user.profile?.websiteUrl ?? '',
+          linkedinUrl: user.profile?.linkedinUrl ?? '',
         });
         setAvatarUrl(user.profile?.avatarUrl ?? null);
         setAvailableForWork(user.profile?.availableForWork ?? true);
@@ -521,6 +524,7 @@ export default function ProfilePage() {
           city: form.city || undefined,
           githubUrl: form.githubUrl || undefined,
           websiteUrl: form.websiteUrl || undefined,
+          linkedinUrl: form.linkedinUrl || undefined,
           skillIds: selectedSkillIds,
         }),
       });
@@ -533,6 +537,13 @@ export default function ProfilePage() {
   }
 
   const selectedSkills = allSkills.filter((skill) => selectedSkillIds.includes(skill.id));
+  const skillSuggestions = (() => {
+    const query = skillInput.trim().toLowerCase();
+    if (!query) return [];
+    return allSkills
+      .filter((skill) => !selectedSkillIds.includes(skill.id) && skill.name.toLowerCase().includes(query))
+      .slice(0, 8);
+  })();
   const profileCompletionItems = [
     Boolean(form.displayName.trim()),
     Boolean(form.bio.trim()),
@@ -705,7 +716,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {(form.githubUrl || form.websiteUrl) && (
+            {(form.githubUrl || form.websiteUrl || form.linkedinUrl) && (
               <div className="flex flex-col gap-2 border-t border-stone-100 p-5">
                 {form.githubUrl && (
                   <a href={form.githubUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-2xl bg-stone-50 px-3 py-2 text-sm text-stone-600 transition hover:text-brand">
@@ -717,6 +728,12 @@ export default function ProfilePage() {
                   <a href={form.websiteUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-2xl bg-stone-50 px-3 py-2 text-sm text-stone-600 transition hover:text-brand">
                     <GlobeIcon className="h-4 w-4 shrink-0" />
                     <span className="truncate">{form.websiteUrl.replace(/^https?:\/\//, '')}</span>
+                  </a>
+                )}
+                {form.linkedinUrl && (
+                  <a href={form.linkedinUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-2xl bg-stone-50 px-3 py-2 text-sm text-stone-600 transition hover:text-brand">
+                    <LinkedInIcon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{form.linkedinUrl.replace(/^https?:\/\//, '')}</span>
                   </a>
                 )}
               </div>
@@ -763,8 +780,8 @@ export default function ProfilePage() {
         </div>
 
         <div className="space-y-6">
-      <form onSubmit={handleSubmit} className="premium-panel overflow-hidden p-0">
-        <div className="border-b border-stone-100 bg-gradient-to-br from-white via-card-sand/40 to-card-lavender/35 p-6">
+      <form onSubmit={handleSubmit} className="premium-panel rounded-[2rem] p-0">
+        <div className="overflow-hidden rounded-t-[2rem] border-b border-stone-100 bg-gradient-to-br from-white via-card-sand/40 to-card-lavender/35 p-6">
         <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase text-stone-400">Основное</p>
@@ -818,7 +835,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-stone-600">GitHub</label>
             <input
@@ -839,6 +856,16 @@ export default function ProfilePage() {
               className="field-surface w-full px-4 py-3"
             />
           </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-stone-600">Соцсеть (LinkedIn и т.п.)</label>
+            <input
+              type="url"
+              placeholder="https://linkedin.com/in/username"
+              value={form.linkedinUrl}
+              onChange={(e) => setForm((f) => ({ ...f, linkedinUrl: e.target.value }))}
+              className="field-surface w-full px-4 py-3"
+            />
+          </div>
         </div>
 
         <div>
@@ -848,41 +875,73 @@ export default function ProfilePage() {
               {selectedSkillIds.length}/{MAX_SKILLS}
             </span>
           </div>
-          <div className="max-h-60 overflow-y-auto rounded-3xl border border-stone-100 bg-stone-50/70 p-3">
-          <div className="flex flex-wrap gap-2">
-            {allSkills.map((skill) => {
-              const selected = selectedSkillIds.includes(skill.id);
-              return (
+
+          {selectedSkills.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {selectedSkills.map((skill) => (
                 <button
                   key={skill.id}
                   type="button"
                   onClick={() => toggleSkill(skill.id)}
-                  className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
-                    selected ? 'border-brand bg-brand/10 text-brand' : 'border-stone-300 text-stone-600 hover:border-stone-400'
-                  }`}
+                  title="Убрать навык"
+                  className="flex items-center gap-1.5 rounded-full border border-brand bg-brand/10 px-3 py-1.5 text-sm font-medium text-brand transition hover:bg-brand/15"
                 >
                   {skill.name}
+                  <span aria-hidden className="text-brand/60">
+                    ×
+                  </span>
                 </button>
-              );
-            })}
-          </div>
-          </div>
+              ))}
+            </div>
+          )}
 
-          <div className="mt-3">
+          <div className="relative">
             <input
-              placeholder="Своего навыка нет в списке? Впишите и нажмите Enter"
+              placeholder={`Начните вводить навык (доступно ${allSkills.length})...`}
               value={skillInput}
-              disabled={skillCreating}
+              disabled={skillCreating || selectedSkillIds.length >= MAX_SKILLS}
               onChange={(e) => setSkillInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key !== 'Enter') return;
                 e.preventDefault();
-                addSkillByName(skillInput);
+                const query = skillInput.trim().toLowerCase();
+                const topMatch = allSkills.find((s) => !selectedSkillIds.includes(s.id) && s.name.toLowerCase().includes(query));
+                addSkillByName(topMatch ? topMatch.name : skillInput);
               }}
               className="field-surface w-full px-3 py-2 text-sm disabled:opacity-60"
             />
-            {skillError && <p className="mt-1 text-xs text-red-600">{skillError}</p>}
+            {skillInput.trim() && (
+              <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl border border-stone-100 bg-white shadow-lg">
+                {skillSuggestions.length > 0 ? (
+                  skillSuggestions.map((skill) => (
+                    <button
+                      key={skill.id}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        addSkillByName(skill.name);
+                      }}
+                      className="block w-full px-3 py-2 text-left text-sm text-stone-700 transition hover:bg-brand/10 hover:text-brand"
+                    >
+                      {skill.name}
+                    </button>
+                  ))
+                ) : (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      addSkillByName(skillInput);
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm text-stone-500"
+                  >
+                    Нет такого — нажмите Enter, чтобы добавить «{skillInput.trim()}» своим навыком
+                  </button>
+                )}
+              </div>
+            )}
           </div>
+          {skillError && <p className="mt-1 text-xs text-red-600">{skillError}</p>}
         </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -900,7 +959,7 @@ export default function ProfilePage() {
 
       <NotificationPreferencesPanel />
 
-      <section className="premium-panel p-6">
+      <section className="premium-panel rounded-[2rem] p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-serif text-xl text-stone-900">Портфолио</h2>
           {!showPortfolioForm && (
@@ -1040,7 +1099,7 @@ export default function ProfilePage() {
       </section>
 
       {isFreelancer && (
-        <section className="premium-panel p-6">
+        <section className="premium-panel rounded-[2rem] p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-serif text-xl text-stone-900">Шаблоны откликов</h2>
             {!showBidTemplateForm && (
@@ -1133,7 +1192,7 @@ export default function ProfilePage() {
         </section>
       )}
 
-      <section className="premium-panel p-6">
+      <section className="premium-panel rounded-[2rem] p-6">
         <h2 className="mb-4 font-serif text-xl text-stone-900">Безопасность</h2>
         <form onSubmit={submitPasswordChange} className="max-w-sm space-y-3">
           <div>
@@ -1325,7 +1384,7 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      <section className="premium-panel p-6">
+      <section className="premium-panel rounded-[2rem] p-6">
         <h2 className="mb-4 font-serif text-xl text-stone-900">Уведомления</h2>
         <div className="max-w-sm">
           <p className="mb-2 text-sm text-stone-600">Сводка непрочитанных уведомлений на email:</p>
@@ -1353,7 +1412,7 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      <section className="premium-panel p-6">
+      <section className="premium-panel rounded-[2rem] p-6">
         <h2 className="mb-4 font-serif text-xl text-stone-900">Данные и приватность</h2>
 
         <div className="max-w-sm">

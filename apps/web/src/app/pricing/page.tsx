@@ -36,7 +36,7 @@ const TIER_META: Record<SubscriptionTier['name'], { title: string; tone: string;
 };
 
 const PRICING_FEATURES: Array<{ title: string; text: string; mascot?: MascotName }> = [
-  { title: 'Комиссия понятна', text: 'Процент виден до выбора тарифа и не меняется внутри сделки.', mascot: 'wave' },
+  { title: 'Комиссия понятна', text: 'Процент виден до выбора тарифа и не меняется внутри сделки.' },
   { title: 'Бусты включены', text: 'На старших тарифах продвижение заказов не требует ручной оплаты каждый раз.' },
   { title: 'Лимиты честные', text: 'Видно, сколько заказов и откликов доступно в месяц.' },
 ];

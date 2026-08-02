@@ -19,6 +19,9 @@ import { ProfileNavIcon } from './icons/illustrated/ProfileNavIcon';
 import { ReferralNavIcon } from './icons/illustrated/ReferralNavIcon';
 import { SupportNavIcon } from './icons/illustrated/SupportNavIcon';
 import { TalentNavIcon } from './icons/illustrated/TalentNavIcon';
+import { SeedlingIcon } from './icons/illustrated/SeedlingIcon';
+import { RocketIcon } from './icons/illustrated/RocketIcon';
+import { CrownIllustratedIcon } from './icons/illustrated/CrownIllustratedIcon';
 
 type NavIcon = ComponentType<{ className?: string }>;
 
@@ -35,7 +38,7 @@ const NAV_LINKS: NavLink[] = [
   { href: '/categories', label: 'Категории', Icon: CategoriesNavIcon },
   { href: '/freelancers', label: 'Фрилансеры', Icon: TalentNavIcon },
   { href: '/pricing', label: 'Тарифы', Icon: PricingNavIcon },
-  { href: '/referrals', label: 'Партнёрка', Icon: ReferralNavIcon },
+  { href: '/referrals', label: 'Партнёрство', Icon: ReferralNavIcon },
   { href: '/support', label: 'Поддержка', Icon: SupportNavIcon },
 ];
 
@@ -76,6 +79,17 @@ export function AppHeader() {
   const links: NavLink[] = [...NAV_LINKS, { href: '/admin', label: 'Admin', Icon: AdminNavIcon, staffOnly: true }].filter(
     (link) => !link.staffOnly || me?.isStaff,
   );
+
+  const tierName = me?.subscription?.status === 'ACTIVE' ? me.subscription.tier.name : 'STARTER';
+  const TIER_LABEL: Record<'STARTER' | 'PRO' | 'PREMIUM', string> = { STARTER: 'Starter', PRO: 'Pro', PREMIUM: 'Premium' };
+  // Те же иконки, что и в TIER_META на /pricing — узнаваемость тарифа
+  // сохраняется между шапкой и страницей тарифов.
+  const TIER_ICON: Record<'STARTER' | 'PRO' | 'PREMIUM', NavIcon> = {
+    STARTER: SeedlingIcon,
+    PRO: RocketIcon,
+    PREMIUM: CrownIllustratedIcon,
+  };
+  const TierIcon = TIER_ICON[tierName];
   return (
     <div className="relative left-1/2 right-1/2 z-30 mb-8 flex w-screen -translate-x-1/2 justify-center px-4">
       <header className="app-shell-header premium-panel relative flex w-full max-w-[1500px] items-center gap-2 rounded-[1.75rem] px-2 py-2 dark:bg-stone-900 md:gap-3 md:px-3">
@@ -119,6 +133,18 @@ export function AppHeader() {
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-1.5 md:gap-2">
+          <Link
+            href="/pricing"
+            title="Ваш тариф"
+            className={`hidden items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition sm:flex ${
+              tierName === 'STARTER'
+                ? 'border-stone-200 bg-white/70 text-stone-500 hover:border-brand/30 hover:text-brand dark:border-stone-700 dark:text-stone-400'
+                : 'border-brand/30 bg-brand/10 text-brand hover:bg-brand/15'
+            }`}
+          >
+            <TierIcon className="h-4 w-4 shrink-0" />
+            {TIER_LABEL[tierName]}
+          </Link>
           <HeaderSearch />
           <ThemeToggle />
           <NotificationBell />

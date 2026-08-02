@@ -26,6 +26,10 @@ export class UpdateProfileDto {
   websiteUrl?: string;
 
   @IsOptional()
+  @IsUrl()
+  linkedinUrl?: string;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   skillIds?: string[];

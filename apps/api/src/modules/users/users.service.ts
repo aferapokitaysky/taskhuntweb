@@ -277,6 +277,7 @@ export class UsersService {
           city: user.profile.city,
           githubUrl: user.profile.githubUrl,
           websiteUrl: user.profile.websiteUrl,
+          linkedinUrl: user.profile.linkedinUrl,
           successRate: user.profile.successRate,
           completionRate: user.profile.completionRate,
           avgResponseMins: user.profile.avgResponseMins,
@@ -865,6 +866,7 @@ export class UsersService {
           avatarData: null,
           githubUrl: null,
           websiteUrl: null,
+          linkedinUrl: null,
         },
       });
     });
