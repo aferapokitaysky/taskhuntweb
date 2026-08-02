@@ -510,10 +510,11 @@ export class UsersService {
       update: { ...dto, structuredAnswers },
     });
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { status: 'ACTIVE' },
-    });
+    // Раньше здесь безусловно ставился status: 'ACTIVE' — это тихо обходило
+    // верификацию почты: пользователь становился ACTIVE сразу по заполнении
+    // анкеты, до перехода по ссылке из письма (единственное законное место
+    // для PENDING_VERIFICATION -> ACTIVE — AuthService.verifyEmail). Само
+    // прохождение анкеты не должно трогать статус аккаунта.
 
     return onboarding;
   }
