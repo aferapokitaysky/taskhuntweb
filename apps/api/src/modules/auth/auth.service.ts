@@ -188,6 +188,25 @@ export class AuthService {
     return { changed: true };
   }
 
+  /**
+   * Первичная установка пароля для OAuth-аккаунта (passwordHash изначально
+   * NULL — нечего проверять как "текущий пароль", в отличие от changePassword
+   * выше). Если пароль уже задан, отправляем именно сюда стучаться нельзя —
+   * иначе украденный access-токен позволил бы тихо переустановить пароль
+   * LOCAL-аккаунта в обход проверки текущего.
+   */
+  async setPassword(userId: string, newPassword: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (user.passwordHash) {
+      throw new BadRequestException('Пароль уже задан — используйте смену пароля');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+
+    return { changed: true };
+  }
+
   async login(dto: LoginDto, meta?: RequestMeta) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (!user || !user.passwordHash) {

@@ -80,7 +80,12 @@ export default function ProfilePage() {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' });
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordSaved, setPasswordSaved] = useState(false);
+  const [justSetPassword, setJustSetPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  // true по умолчанию — до загрузки /users/me считаем, что пароль есть, и
+  // показываем обычную форму смены (не мигаем формой "задать пароль" для
+  // подавляющего большинства пользователей, у которых он и правда есть).
+  const [hasPassword, setHasPassword] = useState(true);
 
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [totpEnrollment, setTotpEnrollment] = useState<{ qrCodeDataUrl: string } | null>(null);
@@ -134,6 +139,7 @@ export default function ProfilePage() {
         setSelectedSkillIds((user.profile?.skills ?? []).map((s) => s.skill.id));
         setPortfolioItems(user.profile?.portfolioItems ?? []);
         setTotpEnabled(user.totpEnabled ?? false);
+        setHasPassword(user.hasPassword ?? true);
         setDigestFrequency(user.digestFrequency ?? 'NONE');
         loadSessions();
         setIsFreelancer(user.roles.includes('FREELANCER'));
@@ -295,23 +301,35 @@ export default function ProfilePage() {
     e.preventDefault();
     setPasswordError(null);
     setPasswordSaved(false);
+    setJustSetPassword(false);
     if (passwordForm.newPassword !== passwordForm.repeatPassword) {
       setPasswordError('Новый пароль и повтор не совпадают');
       return;
     }
     setPasswordSaving(true);
     try {
-      await api('/auth/change-password', {
-        method: 'POST',
-        body: JSON.stringify({
-          currentPassword: passwordForm.currentPassword,
-          newPassword: passwordForm.newPassword,
-        }),
-      });
+      if (hasPassword) {
+        await api('/auth/change-password', {
+          method: 'POST',
+          body: JSON.stringify({
+            currentPassword: passwordForm.currentPassword,
+            newPassword: passwordForm.newPassword,
+          }),
+        });
+      } else {
+        // OAuth-аккаунт без пароля — нечего проверять как "текущий",
+        // /auth/set-password просто отказывает, если пароль уже есть.
+        await api('/auth/set-password', {
+          method: 'POST',
+          body: JSON.stringify({ newPassword: passwordForm.newPassword }),
+        });
+        setHasPassword(true);
+        setJustSetPassword(true);
+      }
       setPasswordSaved(true);
       setPasswordForm({ currentPassword: '', newPassword: '', repeatPassword: '' });
     } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : 'Не удалось сменить пароль');
+      setPasswordError(err instanceof Error ? err.message : 'Не удалось сохранить пароль');
     } finally {
       setPasswordSaving(false);
     }
@@ -1194,17 +1212,25 @@ export default function ProfilePage() {
 
       <section className="premium-panel rounded-[2rem] p-6">
         <h2 className="mb-4 font-serif text-xl text-stone-900">Безопасность</h2>
+        {!hasPassword && (
+          <p className="mb-3 max-w-sm text-sm text-stone-500">
+            Вход в аккаунт настроен через Google/GitHub, отдельного пароля нет. Задайте его, чтобы можно было также
+            входить по email и паролю.
+          </p>
+        )}
         <form onSubmit={submitPasswordChange} className="max-w-sm space-y-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-stone-600">Текущий пароль</label>
-            <input
-              required
-              type="password"
-              value={passwordForm.currentPassword}
-              onChange={(e) => setPasswordForm((f) => ({ ...f, currentPassword: e.target.value }))}
-              className="field-surface w-full px-4 py-2.5 text-sm"
-            />
-          </div>
+          {hasPassword && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-stone-600">Текущий пароль</label>
+              <input
+                required
+                type="password"
+                value={passwordForm.currentPassword}
+                onChange={(e) => setPasswordForm((f) => ({ ...f, currentPassword: e.target.value }))}
+                className="field-surface w-full px-4 py-2.5 text-sm"
+              />
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-sm font-medium text-stone-600">Новый пароль</label>
             <input
@@ -1229,14 +1255,14 @@ export default function ProfilePage() {
           </div>
 
           {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
-          {passwordSaved && <p className="text-sm text-emerald-600">Пароль изменён.</p>}
+          {passwordSaved && <p className="text-sm text-emerald-600">{justSetPassword ? 'Пароль задан.' : 'Пароль изменён.'}</p>}
 
           <button
             type="submit"
             disabled={passwordSaving}
             className="primary-action px-6 py-2.5 text-sm font-medium disabled:opacity-50"
           >
-            {passwordSaving ? 'Сохраняем…' : 'Сменить пароль'}
+            {passwordSaving ? 'Сохраняем…' : hasPassword ? 'Сменить пароль' : 'Задать пароль'}
           </button>
         </form>
 

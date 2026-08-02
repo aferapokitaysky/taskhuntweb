@@ -7,6 +7,7 @@ import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { SetPasswordDto } from './dto/set-password.dto';
 import { ConfirmTotpDto, DisableTotpDto, VerifyTotpDto } from './dto/totp.dto';
 import { GoogleInitGuard, GithubInitGuard, AppleInitGuard } from './guards/oauth-init.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -76,6 +77,13 @@ export class AuthController {
   @Post('change-password')
   changePassword(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(user.id, dto.currentPassword, dto.newPassword);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('set-password')
+  setPassword(@CurrentUser() user: AuthenticatedUser, @Body() dto: SetPasswordDto) {
+    return this.authService.setPassword(user.id, dto.newPassword);
   }
 
   // --- 2FA (TOTP) ---

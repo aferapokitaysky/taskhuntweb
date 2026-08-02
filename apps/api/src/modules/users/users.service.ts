@@ -209,6 +209,10 @@ export class UsersService {
     // на оба места, не дублируется руками.
     return {
       ...sanitizeUser(user),
+      // passwordHash сам вырезан sanitizeUser — этот булев флаг решает,
+      // какую форму показать в профиле: "задать пароль" (OAuth-аккаунт без
+      // пароля) или "сменить пароль" (нужен текущий для проверки).
+      hasPassword: Boolean(user.passwordHash),
       profileCompleteness,
       missingSteps,
       level: freelancerLevel,

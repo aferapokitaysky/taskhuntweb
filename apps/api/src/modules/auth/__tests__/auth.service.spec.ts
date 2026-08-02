@@ -176,4 +176,26 @@ describe('AuthService — verification & password reset', () => {
       expect(newHashIsValid).toBe(true);
     });
   });
+
+  describe('setPassword', () => {
+    it('бросает BadRequestException, если пароль уже задан', async () => {
+      const realHash = await bcrypt.hash('already-set', 4);
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'user-1', passwordHash: realHash });
+
+      await expect(service.setPassword('user-1', 'newpassword123')).rejects.toThrow(BadRequestException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('задаёт пароль валидным хэшем для OAuth-аккаунта без пароля', async () => {
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'user-1', passwordHash: null });
+
+      const result = await service.setPassword('user-1', 'brand-new-password');
+
+      expect(result).toEqual({ changed: true });
+      const call = prisma.user.update.mock.calls[0][0];
+      expect(call.where).toEqual({ id: 'user-1' });
+      const newHashIsValid = await bcrypt.compare('brand-new-password', call.data.passwordHash);
+      expect(newHashIsValid).toBe(true);
+    });
+  });
 });

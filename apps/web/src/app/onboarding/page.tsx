@@ -25,6 +25,11 @@ function OnboardingForm() {
   const [step, setStep] = useState(1);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  // Сколько ниш показано на категорию — открывается только у выбранных
+  // категорий (см. рендер step 1), иначе на IT-категории пришлось бы
+  // рисовать все 400+ ниш одним полотном сразу при заходе на онбординг.
+  const [nicheLimits, setNicheLimits] = useState<Record<string, number>>({});
+  const NICHE_PAGE_SIZE = 20;
   const [experienceLevel, setExperienceLevel] = useState('middle');
   const [availability, setAvailability] = useState('part_time');
   const [expectedRateMin, setExpectedRateMin] = useState('');
@@ -40,7 +45,6 @@ function OnboardingForm() {
       .catch((err) => setError(err instanceof Error ? err.message : 'Не удалось загрузить категории'));
   }, []);
 
-  const flatCategories = categories.flatMap((category) => [category, ...(category.children ?? [])]);
   const lastStep = role === 'FREELANCER' ? 3 : 2;
 
   function toggleCategory(id: string) {
@@ -133,7 +137,7 @@ function OnboardingForm() {
               <p className="mt-2 text-sm text-stone-600">Можно выбрать несколько — по ним строятся рекомендации и быстрые фильтры.</p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              {flatCategories.map((category) => (
+              {categories.map((category) => (
                 <button
                   key={category.id}
                   type="button"
@@ -148,6 +152,45 @@ function OnboardingForm() {
                 </button>
               ))}
             </div>
+
+            {categories
+              .filter((category) => selectedCategories.includes(category.id) && (category.children?.length ?? 0) > 0)
+              .map((category) => {
+                const niches = category.children!;
+                const limit = nicheLimits[category.id] ?? NICHE_PAGE_SIZE;
+                const visibleNiches = niches.slice(0, limit);
+                const remaining = niches.length - visibleNiches.length;
+                return (
+                  <div key={category.id} className="rounded-2xl border border-stone-100 bg-white/60 p-4">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-400">Ниши — {category.name}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {visibleNiches.map((niche) => (
+                        <button
+                          key={niche.id}
+                          type="button"
+                          onClick={() => toggleCategory(niche.id)}
+                          className={`interactive-card rounded-2xl border px-4 py-2.5 text-left text-sm font-medium ${
+                            selectedCategories.includes(niche.id)
+                              ? 'border-brand bg-brand/10 text-brand shadow-sm'
+                              : 'border-stone-200 bg-white hover:border-brand'
+                          }`}
+                        >
+                          {niche.name}
+                        </button>
+                      ))}
+                    </div>
+                    {remaining > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setNicheLimits((current) => ({ ...current, [category.id]: limit + NICHE_PAGE_SIZE }))}
+                        className="secondary-action mt-3 px-4 py-2 text-xs"
+                      >
+                        Показать ещё ({remaining})
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         )}
 
