@@ -16,7 +16,12 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
-RUN pnpm --filter @taskhunt/api prisma generate
+# "--filter <pkg> prisma generate" (без exec) — pnpm ищет package.json СКРИПТ
+# с именем "prisma", не находит, печатает предупреждение и молча завершается
+# успешно, ничего не сделав (клиент собирается из того, что уже сгенерировал
+# postinstall-хук @prisma/client при `pnpm install` — обычно совпадает со
+# схемой, но полагаться на это не стоит). "exec" — явный вызов бинаря.
+RUN pnpm --filter @taskhunt/api exec prisma generate
 # --filter @taskhunt/api build (без "...") ставит только nest build без
 # @taskhunt/shared-types — тот компилируется отдельно, а pnpm его резолвит
 # через workspace-симлинк на СЫРОЙ TS (без build), что валится с "Cannot

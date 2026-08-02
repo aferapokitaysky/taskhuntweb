@@ -16,9 +16,15 @@ COPY . .
 # запекаются в клиентский бандл, а не читаются из окружения в рантайме.
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_WEB_URL
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_WEB_URL=${NEXT_PUBLIC_WEB_URL}
-RUN pnpm --filter @taskhunt/web build
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}
+# "..." тянет @taskhunt/shared-types первым (топологически) — см.
+# apps/api/Dockerfile для полного объяснения; @taskhunt/web тоже на него
+# завязан (PayoutAddressBook.tsx и другие), просто раньше сборка ни разу не
+# доходила до этого шага живьём (соседний сервис падал первым).
+RUN pnpm exec turbo run build --filter=@taskhunt/web...
 
 # output: 'standalone' (next.config.mjs) кладёт минимальный рантайм в
 # .next/standalone/apps/web/ — полный путь от корня монорепо, не просто

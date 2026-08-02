@@ -34,6 +34,8 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL, e.g. https://api.taskhunt.example}
         NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:?set NEXT_PUBLIC_WEB_URL, e.g. https://taskhunt.example}
+        # Необязателен — если не задан, GA просто не грузится (см. layout.tsx).
+        NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
     environment:
       NODE_ENV: production
     volumes: !reset []
