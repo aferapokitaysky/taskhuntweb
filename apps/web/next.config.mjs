@@ -13,15 +13,19 @@ const apiWsOrigin = apiOrigin.replace(/^http/, 'ws');
 // (клиентские страницы с useEffect зависают на loading-состоянии). В проде
 // (next build) eval не используется — там эта директива не нужна и не даётся.
 const scriptSrc = process.env.NODE_ENV === 'production' ? `'self' 'unsafe-inline'` : `'self' 'unsafe-inline' 'unsafe-eval'`;
+// GA4 (@next/third-parties, layout.tsx) грузит gtag.js с googletagmanager.com
+// и шлёт события на google-analytics.com. static.cloudflareinsights.com —
+// RUM-беакон, который Cloudflare сам инжектит в HTML, если в панели домена
+// включена "Web Analytics" — не наш код, но CSP всё равно должен его пускать.
 const csp = [
   `default-src 'self'`,
-  `script-src ${scriptSrc}`,
+  `script-src ${scriptSrc} https://www.googletagmanager.com https://static.cloudflareinsights.com`,
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: ${apiOrigin} https:`,
   `font-src 'self' data:`,
   // api.github.com — публичный readonly GitHub API, дёргается напрямую с
   // клиента в GithubRepos.tsx (профиль фрилансера, вкладка GitHub).
-  `connect-src 'self' ${apiOrigin} ${apiWsOrigin} https://api.github.com`,
+  `connect-src 'self' ${apiOrigin} ${apiWsOrigin} https://api.github.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://cloudflareinsights.com`,
   `frame-ancestors 'none'`,
   `object-src 'none'`,
   `base-uri 'self'`,
