@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@next/third-parties": "^14.2.13",
     "@taskhunt/shared-types": "workspace:*",
     "@web3icons/react": "^4.1.19",
     "next": "^14.2.13",
