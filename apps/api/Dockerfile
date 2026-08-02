@@ -1,6 +1,14 @@
 FROM node:20-alpine AS base
 WORKDIR /app
 RUN corepack enable
+# node:20-alpine не ставит openssl вообще (даже CLI отсутствует) — без него
+# Prisma не может определить версию OpenSSL ни на generate, ни на рантайме,
+# и в обоих случаях молча выбирает неправильный движок (см. binaryTargets в
+# schema.prisma: генерирует ОБА варианта верно, но при старте всё равно
+# грузит linux-musl без -openssl-3.0.x суффикса и падает с "Error loading
+# shared library libssl.so.1.1: No such file or directory" — поймали живьём
+# на реальном деплое). Установка openssl чинит детекцию у самого Prisma.
+RUN apk add --no-cache openssl
 
 FROM base AS deps
 # apps/api зависит от @taskhunt/shared-types (workspace-пакет) и от prisma
@@ -32,6 +40,7 @@ RUN pnpm exec turbo run build --filter=@taskhunt/api...
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
+RUN apk add --no-cache openssl
 # pnpm в build-стадии кладёт реальные файлы в node_modules/.pnpm и
 # символьные ссылки на них в node_modules каждого пакета — flatten в
 # /app/dist ломает эти относительные симлинки. Переносим монорепо целиком
