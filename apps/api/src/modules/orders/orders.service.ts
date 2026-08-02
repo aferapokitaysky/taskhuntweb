@@ -220,6 +220,11 @@ export class OrdersService {
       categoryId: filters.categoryId,
       clientId: filters.clientId,
       status: (filters.status as any) ?? { not: 'DRAFT' },
+      // Скрываем заказы staff/admin-аккаунтов из публичного браузинга — но
+      // только когда явно НЕ запрошены заказы конкретного клиента (clientId
+      // используется, например, для "пригласить на свой открытый заказ" —
+      // там staff должен видеть свои же заказы, см. FreelancerProfileClient).
+      ...(!filters.clientId && { client: { isStaff: false } }),
       ...(and.length > 0 && { AND: and }),
     };
 

@@ -32,7 +32,9 @@ export class StatsController {
 
     const [totalOrders, totalFreelancers, escrowVolume] = await Promise.all([
       this.prisma.order.count(),
-      this.prisma.user.count({ where: { OR: [{ primaryRole: 'FREELANCER' }, { roles: { has: 'FREELANCER' } }] } }),
+      this.prisma.user.count({
+        where: { OR: [{ primaryRole: 'FREELANCER' }, { roles: { has: 'FREELANCER' } }], isStaff: false },
+      }),
       this.prisma.ledgerEntry.aggregate({
         where: { balanceType: 'ESCROW', direction: 'CREDIT' },
         _sum: { amount: true },
@@ -69,7 +71,7 @@ export class StatsController {
 
     const [recentOpenOrders, categories, openOrdersByCategory, stats] = await Promise.all([
       this.prisma.order.findMany({
-        where: { status: 'OPEN' },
+        where: { status: 'OPEN', client: { isStaff: false } },
         include: { category: true, _count: { select: { bids: true } } },
         orderBy: { createdAt: 'desc' },
         take: 60,
@@ -78,7 +80,7 @@ export class StatsController {
         where: { parentId: null },
         select: { id: true, name: true, slug: true },
       }),
-      this.prisma.order.groupBy({ by: ['categoryId'], where: { status: 'OPEN' }, _count: { _all: true } }),
+      this.prisma.order.groupBy({ by: ['categoryId'], where: { status: 'OPEN', client: { isStaff: false } }, _count: { _all: true } }),
       this.getStats(),
     ]);
     const openCountByCategory = new Map(openOrdersByCategory.map((row) => [row.categoryId, row._count._all]));

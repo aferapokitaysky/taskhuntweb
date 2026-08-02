@@ -328,6 +328,9 @@ export class UsersService {
   async findFreelancers(filters: { categoryId?: string; skillId?: string; search?: string }) {
     const where: Prisma.UserWhereInput = {
       OR: [{ primaryRole: 'FREELANCER' }, { roles: { has: 'FREELANCER' } }],
+      // Staff/admin-аккаунты не должны светиться в публичном листинге
+      // фрилансеров — даже если у них выставлена роль FREELANCER.
+      isStaff: false,
     };
 
     if (filters.skillId) {

@@ -292,6 +292,13 @@ function DashboardContent() {
   const isFreelancer = me?.roles.includes('FREELANCER') ?? false;
   const hasAside = isClient || !!selectedOrder;
   const flatCategories = categories.flatMap((category) => [category, ...(category.children ?? [])]);
+  // Верхнеуровневая категория для формы заказа выводится ИЗ выбранного
+  // categoryId (а не хранится отдельным состоянием) — так работает и для
+  // значения по умолчанию, и для загрузки черновика (draft.categoryId может
+  // быть как категорией, так и её нишей — см. loadDraftIntoForm).
+  const orderFormParentCategory = categories.find(
+    (category) => category.id === orderForm.categoryId || (category.children ?? []).some((child) => child.id === orderForm.categoryId),
+  );
   const orderFormChecks = [
     { label: 'Категория', done: Boolean(orderForm.categoryId) },
     { label: 'Название 5+ символов', done: orderForm.title.trim().length >= 5 },
@@ -1681,20 +1688,39 @@ function DashboardContent() {
 
           <form onSubmit={createOrder} className="grid gap-6 p-6 md:p-8 lg:grid-cols-[1.3fr_1fr]">
             <div className="space-y-3">
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Категория</span>
-                <select
-                  value={orderForm.categoryId}
-                  onChange={(e) => setOrderForm({ ...orderForm, categoryId: e.target.value })}
-                  className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
-                >
-                  {flatCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Категория</span>
+                  <select
+                    value={orderFormParentCategory?.id ?? ''}
+                    onChange={(e) => setOrderForm({ ...orderForm, categoryId: e.target.value })}
+                    className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
+                  >
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {(orderFormParentCategory?.children?.length ?? 0) > 0 && (
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Ниша (необязательно)</span>
+                    <select
+                      value={orderForm.categoryId}
+                      onChange={(e) => setOrderForm({ ...orderForm, categoryId: e.target.value })}
+                      className="field-surface w-full rounded-[1.35rem] px-3 py-3 text-sm"
+                    >
+                      <option value={orderFormParentCategory!.id}>Без уточнения — вся категория</option>
+                      {orderFormParentCategory!.children!.map((niche) => (
+                        <option key={niche.id} value={niche.id}>
+                          {niche.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Название результата</span>
                 <input

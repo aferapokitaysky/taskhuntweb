@@ -50,7 +50,7 @@ export class SearchService {
 
     const [orders, skills, categories, freelancers] = await Promise.all([
       this.prisma.order.findMany({
-        where: { status: 'OPEN', title: { contains: trimmed, mode: 'insensitive' } },
+        where: { status: 'OPEN', title: { contains: trimmed, mode: 'insensitive' }, client: { isStaff: false } },
         select: { id: true, title: true },
         take: 5,
         orderBy: { createdAt: 'desc' },
