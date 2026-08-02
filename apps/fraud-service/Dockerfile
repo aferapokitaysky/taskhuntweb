@@ -12,12 +12,19 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
-RUN pnpm --filter fraud-service build
+# "..." тянет @taskhunt/shared-types первым (топологически) — см.
+# apps/api/Dockerfile для полного объяснения.
+RUN pnpm exec turbo run build --filter=fraud-service...
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
-COPY --from=build /app/dist ./dist
+# Сохраняем структуру монорепо в рантайме — см. apps/api/Dockerfile,
+# та же причина (pnpm-симлинки в node_modules ссылаются относительными
+# путями на node_modules/.pnpm, flatten их ломает).
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/package.json ./
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/packages/shared-types ./packages/shared-types
+COPY --from=build /app/apps/fraud-service ./apps/fraud-service
+WORKDIR /app/apps/fraud-service
 EXPOSE 3002
 CMD ["node", "dist/main.js"]

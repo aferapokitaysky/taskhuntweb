@@ -17,13 +17,25 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY . .
 RUN pnpm --filter @taskhunt/api prisma generate
-RUN pnpm --filter @taskhunt/api build
+# --filter @taskhunt/api build (без "...") ставит только nest build без
+# @taskhunt/shared-types — тот компилируется отдельно, а pnpm его резолвит
+# через workspace-симлинк на СЫРОЙ TS (без build), что валится с "Cannot
+# find module" у зависящих пакетов. "..." тянет shared-types в топологическом
+# порядке первым, тем же путём, что раньше делал `pnpm build` через turbo
+# на весь монорепо — только теперь не собирая заодно web/notifications/fraud.
+RUN pnpm exec turbo run build --filter=@taskhunt/api...
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
-COPY --from=build /app/dist ./dist
+# pnpm в build-стадии кладёт реальные файлы в node_modules/.pnpm и
+# символьные ссылки на них в node_modules каждого пакета — flatten в
+# /app/dist ломает эти относительные симлинки. Переносим монорепо целиком
+# (без исходников — только то, что нужно для рантайма) и держим ту же
+# относительную структуру, что была на сборке.
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/prisma ./prisma
-COPY package.json ./
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/packages/shared-types ./packages/shared-types
+COPY --from=build /app/apps/api ./apps/api
+WORKDIR /app/apps/api
 EXPOSE 3001
 CMD ["node", "dist/main"]
