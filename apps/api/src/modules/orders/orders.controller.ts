@@ -61,9 +61,10 @@ export class OrdersController {
     });
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.ordersService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser | null) {
+    return this.ordersService.findOne(id, user?.id);
   }
 
   // Регистрируем ДО ':id', чтобы 'saved' не перехватился параметром — хотя

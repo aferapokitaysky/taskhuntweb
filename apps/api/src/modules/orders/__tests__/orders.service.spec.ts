@@ -456,6 +456,7 @@ describe('OrdersService', () => {
     it('обогащает отклики статистикой рейтинга фрилансера (avgRating и reviewsCount)', async () => {
       prisma.order.findUnique.mockResolvedValue({
         id: 'order-1',
+        clientId: 'client-1',
         bids: [
           { freelancerId: 'free-1', freelancer: { id: 'free-1' } },
         ],
@@ -464,10 +465,45 @@ describe('OrdersService', () => {
         { targetId: 'free-1', _avg: { rating: 4.8 }, _count: { id: 5 } },
       ]);
 
-      const res: any = await service.findOne('order-1');
+      // requesterId = сам заказчик — иначе visibleBidsFor теперь отфильтрует
+      // чужой отклик (см. фикс приватности сообщений откликов).
+      const res: any = await service.findOne('order-1', 'client-1');
 
       expect(res.bids[0].freelancer.avgRating).toBe(4.8);
       expect(res.bids[0].freelancer.reviewsCount).toBe(5);
+    });
+
+    it('скрывает чужие отклики (в т.ч. message) от фрилансера, который не является заказчиком', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 'order-1',
+        clientId: 'client-1',
+        bids: [
+          { freelancerId: 'free-1', message: 'моё сопроводительное письмо', freelancer: { id: 'free-1' } },
+          { freelancerId: 'free-2', message: 'чужое сопроводительное письмо', freelancer: { id: 'free-2' } },
+        ],
+      });
+      prisma.review.groupBy.mockResolvedValue([]);
+
+      const res: any = await service.findOne('order-1', 'free-1');
+
+      expect(res.bids).toHaveLength(1);
+      expect(res.bids[0].freelancerId).toBe('free-1');
+      expect(res.bids.some((b: any) => b.message === 'чужое сопроводительное письмо')).toBe(false);
+    });
+
+    it('скрывает все отклики от постороннего/анонимного зрителя', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 'order-1',
+        clientId: 'client-1',
+        bids: [{ freelancerId: 'free-1', message: 'секрет', freelancer: { id: 'free-1' } }],
+      });
+      prisma.review.groupBy.mockResolvedValue([]);
+
+      const asStranger: any = await service.findOne('order-1', 'stranger-id');
+      const asAnonymous: any = await service.findOne('order-1', undefined);
+
+      expect(asStranger.bids).toHaveLength(0);
+      expect(asAnonymous.bids).toHaveLength(0);
     });
   });
 

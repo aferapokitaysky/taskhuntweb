@@ -302,7 +302,20 @@ export class OrdersService {
     return this.matching.rankBidsForOrder(orderId);
   }
 
-  async findOne(id: string) {
+  /**
+   * Отклики (Bid.message, сумма, срок) видны только заказчику этого заказа
+   * и автору конкретного отклика — остальным (другим фрилансерам, анонимам)
+   * отдаём пустой массив. Раньше findOne отдавал bids целиком БЕЗ фильтра
+   * кому угодно, включая сообщение отклика — сопроводительный текст одного
+   * фрилансера был читаем всеми остальными претендентами на тот же заказ
+   * (и вообще кем угодно, эндпоинт публичный). ownerId — order.clientId.
+   */
+  private visibleBidsFor(bids: any[], ownerId: string, requesterId?: string | null) {
+    if (requesterId && requesterId === ownerId) return bids;
+    return bids.filter((bid) => requesterId && bid.freelancerId === requesterId);
+  }
+
+  async findOne(id: string, requesterId?: string | null) {
     // Инкремент счётчика просмотров тем же запросом, что и чтение — простая
     // метрика по аналогии с Profile.viewsCount, не защищена от накрутки
     // владельцем, это осознанно (см. TZ_CLAUDE_13.md, п.1).
@@ -380,13 +393,14 @@ export class OrdersService {
       return {
         ...order,
         client: clientWithVerified,
-        bids: bidsWithStats,
+        bids: this.visibleBidsFor(bidsWithStats, order.clientId, requesterId),
       };
     }
 
     return {
       ...order,
       client: clientWithVerified,
+      bids: this.visibleBidsFor(order.bids, order.clientId, requesterId),
     };
   }
 

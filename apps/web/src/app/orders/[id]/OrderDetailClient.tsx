@@ -660,6 +660,14 @@ export default function OrderDetailClient() {
         )}
       </section>
 
+      {/* Сообщения откликов (Bid.message) видны только заказчику — бэкенд
+          (OrdersService.findOne) теперь и сам фильтрует bids по этому же
+          правилу, но панель "отбора кандидатов" в принципе не имеет смысла
+          показывать не-заказчику (нет ни прав принять/отклонить отклик,
+          ни смысла видеть чужие заявки — раньше не было ни этой проверки,
+          ни серверной фильтрации, и сообщение любого отклика читалось кем
+          угодно, включая других фрилансеров-конкурентов). */}
+      {isClient && (
       <section className="premium-panel mb-6 overflow-hidden rounded-[2rem] p-0">
         <div className="border-b border-stone-100 bg-white/74 p-5 md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -877,6 +885,7 @@ export default function OrderDetailClient() {
           )}
         </div>
       </section>
+      )}
 
       {hasAcceptedBid && (
         <section className="premium-panel mb-6 overflow-hidden rounded-[2rem] p-5 md:p-6">
