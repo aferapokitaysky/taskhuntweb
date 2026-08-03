@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { BullBoardModule } from '@bull-board/nestjs';
@@ -12,6 +12,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { EventBusModule } from './common/events/event-bus.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { SubscriptionAwareThrottlerGuard } from './common/guards/subscription-aware-throttler.guard';
+import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -30,8 +31,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { SavedSearchesModule } from './modules/saved-searches/saved-searches.module';
 import { FraudModule } from './modules/fraud/fraud.module';
 import { SearchModule } from './modules/search/search.module';
+import { StatsModule } from './modules/stats/stats.module';
 import { PAYOUT_QUEUE } from './modules/wallet/payout.processor';
-import { FILE_SCAN_QUEUE } from './modules/files/files.service';
 import { SUBSCRIPTION_EXPIRATION_QUEUE } from './modules/subscriptions/subscription-expiration.processor';
 import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
 
@@ -69,10 +70,6 @@ import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
       adapter: BullMQAdapter as any,
     }),
     BullBoardModule.forFeature({
-      name: FILE_SCAN_QUEUE,
-      adapter: BullMQAdapter as any,
-    }),
-    BullBoardModule.forFeature({
       name: SUBSCRIPTION_EXPIRATION_QUEUE,
       adapter: BullMQAdapter as any,
     }),
@@ -99,10 +96,16 @@ import { EVENT_QUEUE_NAME } from '@taskhunt/shared-types';
     SavedSearchesModule,
     FraudModule,
     SearchModule,
+    StatsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_GUARD, useClass: SubscriptionAwareThrottlerGuard },
+    // @AuditLog(...) на ~20 admin-роутов было проставлено, но интерцептор,
+    // который его читает, никогда не был зарегистрирован — ни глобально,
+    // ни на самом AdminController. Вся система аудит-логов молчала с
+    // момента, как её написали: метаданные есть, писать в БД некому.
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })
 export class AppModule {}

@@ -167,7 +167,7 @@ describe('WalletService', () => {
           type: 'REFUND',
           entries: [
             { walletId: 'client-wallet', balanceType: 'ESCROW', direction: 'DEBIT', amount: 42 },
-            { walletId: systemWallet.id, balanceType: 'MAIN', direction: 'CREDIT', amount: 42 },
+            { walletId: 'client-wallet', balanceType: 'MAIN', direction: 'CREDIT', amount: 42 },
           ],
         }),
       );

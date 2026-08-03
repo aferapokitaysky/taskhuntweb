@@ -31,17 +31,6 @@ services:
       timeout: 5s
       retries: 10
 
-  clamav:
-    image: clamav/clamav-debian:latest
-    restart: unless-stopped
-    ports:
-      - "3310:3310"
-    healthcheck:
-      test: ["CMD", "clamdscan", "--ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   api:
     build:
       context: .
@@ -60,8 +49,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      clamav:
         condition: service_healthy
     volumes:
       - ./apps/api:/app/apps/api

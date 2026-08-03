@@ -3,6 +3,7 @@ import { IsString } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { AuditLog } from '../../common/decorators/audit-log.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PermissionCode } from '@taskhunt/shared-types';
@@ -54,6 +55,7 @@ export class SupportController {
 
   @UseGuards(PermissionsGuard)
   @RequirePermissions(PermissionCode.DisputeAssign)
+  @AuditLog('SUPPORT_TICKET_ASSIGNED', 'SupportTicket')
   @Patch(':id/assign')
   assign(@CurrentUser() user: AuthenticatedUser, @Param('id') ticketId: string) {
     return this.supportService.assign(ticketId, user.id);
@@ -61,6 +63,7 @@ export class SupportController {
 
   @UseGuards(PermissionsGuard)
   @RequirePermissions(PermissionCode.DisputeView)
+  @AuditLog('SUPPORT_TICKET_STATUS_CHANGED', 'SupportTicket')
   @Patch(':id/status')
   updateStatus(@Param('id') ticketId: string, @Body('status') status: 'OPEN' | 'PENDING' | 'RESOLVED' | 'CLOSED') {
     return this.supportService.updateStatus(ticketId, status);

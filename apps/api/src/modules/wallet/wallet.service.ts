@@ -6,6 +6,7 @@ import { LedgerService } from './ledger.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { DomainEventName } from '@taskhunt/shared-types';
 import { SYSTEM_ACCOUNT_EMAIL, DEFAULT_MARKETPLACE_FEE_PERCENT } from './constants';
+import { escapeCsvCell } from '../../common/utils/csv';
 
 // PDFKit-овские встроенные Standard-14 шрифты (Helvetica и т.п.) не
 // поддерживают кириллицу — без встраивания отдельного TTF-шрифта русский
@@ -153,6 +154,46 @@ export class WalletService {
   }
 
   /**
+   * Оплата счёта с собственного основного баланса кошелька — без нового
+   * крипто-платежа через NOWPayments. В отличие от lockEscrowForInvoice
+   * (деньги "заходят" от внешнего мира через системный счёт), здесь это
+   * чисто внутренний перевод MAIN -> ESCROW ОДНОГО И ТОГО ЖЕ кошелька:
+   * баланс уже был пополнен раньше (см. DepositService), платить второй
+   * раз реальной криптой не нужно.
+   */
+  async lockEscrowFromMainBalance(params: {
+    clientWalletId: string;
+    clientId: string;
+    amount: number;
+    invoiceId: string;
+    orderId: string;
+  }) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { id: params.clientWalletId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+    if (Number(wallet.mainBalance) < params.amount) {
+      throw new ForbiddenException('Недостаточно средств на основном балансе для оплаты счёта');
+    }
+
+    await this.ledger.applyTransaction({
+      type: 'ESCROW_LOCK',
+      referenceType: 'INVOICE',
+      referenceId: params.invoiceId,
+      description: `Escrow lock for invoice ${params.invoiceId} (paid from main balance)`,
+      entries: [
+        { walletId: params.clientWalletId, balanceType: 'MAIN', direction: 'DEBIT', amount: params.amount },
+        { walletId: params.clientWalletId, balanceType: 'ESCROW', direction: 'CREDIT', amount: params.amount },
+      ],
+    });
+
+    await this.eventBus.publish(DomainEventName.EscrowLocked, {
+      orderId: params.orderId,
+      walletId: params.clientWalletId,
+      clientId: params.clientId,
+      amount: params.amount,
+    });
+  }
+
+  /**
    * Релиз эскроу фрилансеру при принятии сдачи работы. Комиссия платформы
    * удерживается тут же, одной сбалансированной транзакцией:
    *   DEBIT client.ESCROW (amount)
@@ -192,10 +233,14 @@ export class WalletService {
     });
   }
 
-  /** Возврат эскроу заказчику целиком — при отмене заказа или решении спора в его пользу. */
+  /**
+   * Возврат эскроу заказчику целиком — при отмене заказа или решении спора
+   * в его пользу. КРИТИЧНО: кредитуется MAIN самого клиента, а не системный
+   * счёт — раньше здесь ошибочно стояло system.id, из-за чего разрешённый
+   * в пользу заказчика спор технически "съедал" его же деньги в пользу
+   * площадки вместо возврата (нашли при финансовом аудите ledger-потоков).
+   */
   async refundEscrow(params: { clientWalletId: string; amount: number; invoiceId: string }) {
-    const system = await this.getSystemWallet();
-
     await this.ledger.applyTransaction({
       type: 'REFUND',
       referenceType: 'INVOICE',
@@ -203,7 +248,7 @@ export class WalletService {
       description: `Escrow refund for invoice ${params.invoiceId}`,
       entries: [
         { walletId: params.clientWalletId, balanceType: 'ESCROW', direction: 'DEBIT', amount: params.amount },
-        { walletId: system.id, balanceType: 'MAIN', direction: 'CREDIT', amount: params.amount },
+        { walletId: params.clientWalletId, balanceType: 'MAIN', direction: 'CREDIT', amount: params.amount },
       ],
     });
   }
@@ -281,20 +326,13 @@ export class WalletService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const escapeCsv = (str: string) => {
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-
     const header = 'Date,Type,Amount,Currency,Description\n';
     const rows = entries.map((e) => {
       const date = e.createdAt.toISOString();
       const type = e.transaction.type;
       const amount = e.amount.toString();
       const currency = wallet.currency;
-      const desc = escapeCsv(e.transaction.description ?? '');
+      const desc = escapeCsvCell(e.transaction.description ?? '');
       return `${date},${type},${amount},${currency},${desc}`;
     });
 

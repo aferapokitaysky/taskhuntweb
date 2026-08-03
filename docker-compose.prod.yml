@@ -1,0 +1,63 @@
+# Прод-оверлей поверх docker-compose.yml. Базовый файл монтирует исходники
+# как volume'ы поверх собранного образа (hot-reload для дева) — в проде это
+# нельзя: смонтированный на хосте apps/web/apps/api перекроет dist/standalone
+# внутри контейнера тем, что реально лежит на диске (а на диске может не быть
+# node_modules/собранного билда вовсе). Здесь эти volume'ы явно обнуляются.
+#
+# Запуск:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# NEXT_PUBLIC_API_URL/NEXT_PUBLIC_WEB_URL — build ARG'и Next.js (см.
+# apps/web/Dockerfile): "запекаются" в клиентский бандл на этапе сборки,
+# рантайм-переменные окружения на них уже не влияют. Меняете домен —
+# пересобираете web-образ, просто restart недостаточно.
+
+services:
+  postgres:
+    # В проде БД не должна торчать наружу с хоста — только api внутри compose-сети.
+    # !reset обязателен: обычный "ports: []" НЕ очищает список из базового
+    # файла (Compose по умолчанию склеивает списки между файлами, а не
+    # заменяет) — проверено на Compose v5.3.1 через `docker compose config`.
+    ports: !reset []
+    # Дефолт "taskhunt"/"taskhunt" (docker-compose.yml) — ок для дева, не для
+    # прода. POSTGRES_PASSWORD должен совпадать с паролем в DATABASE_URL
+    # каждого сервисного .env — это не связано автоматически, при смене
+    # обновите оба места.
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD to match DATABASE_URL in every service .env}
+
+  redis:
+    ports: !reset []
+
+  api:
+    environment:
+      NODE_ENV: production
+    volumes: !reset []
+
+  # Базовый docker-compose.yml монтирует исходники fraud-service/
+  # notifications-service поверх образа тем же паттерном, что и api/web
+  # (см. комментарий вверху файла) — без !reset здесь хостовый apps/*
+  # (сырой TS, без dist/) перекрывает собранный билд внутри контейнера,
+  # что и вызывало "Cannot find module dist/main.js" в проде (образ
+  # собран верно, но volume поверх него подменял /app/apps/<service>).
+  notifications-service:
+    environment:
+      NODE_ENV: production
+    volumes: !reset []
+
+  fraud-service:
+    environment:
+      NODE_ENV: production
+    volumes: !reset []
+
+  web:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL, e.g. https://api.taskhunt.example}
+        NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:?set NEXT_PUBLIC_WEB_URL, e.g. https://taskhunt.example}
+        # Необязателен — если не задан, GA просто не грузится (см. layout.tsx).
+        NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
+    environment:
+      NODE_ENV: production
+    volumes: !reset []

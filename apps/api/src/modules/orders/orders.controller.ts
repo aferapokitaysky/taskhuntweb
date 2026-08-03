@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -8,7 +9,9 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { OrdersService } from './orders.service';
 import { MilestonesService } from './milestones.service';
 import { ReviewsService } from './reviews.service';
+import { InvoiceService } from '../wallet/invoice.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDraftDto } from './dto/create-order-draft.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { CreateBidDto } from './dto/create-bid.dto';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
@@ -21,6 +24,7 @@ export class OrdersController {
     private readonly ordersService: OrdersService,
     private readonly milestonesService: MilestonesService,
     private readonly reviewsService: ReviewsService,
+    private readonly invoiceService: InvoiceService,
   ) {}
 
   @UseGuards(OptionalJwtAuthGuard)
@@ -33,12 +37,17 @@ export class OrdersController {
     @Query('tags') tagsParam?: string,
     @Query('minBudget') minBudgetParam?: string,
     @Query('clientId') clientId?: string,
+    @Query('page') pageParam?: string,
+    @Query('limit') limitParam?: string,
   ) {
     const tags = tagsParam
       ?.split(',')
       .map((t) => t.trim())
       .filter(Boolean);
     const minBudget = minBudgetParam !== undefined ? parseFloat(minBudgetParam) : undefined;
+    const page = pageParam ? parseInt(pageParam, 10) : undefined;
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+
     return this.ordersService.findMany({
       categoryId,
       status,
@@ -47,12 +56,15 @@ export class OrdersController {
       minBudget,
       clientId,
       requesterId: user?.id,
+      page,
+      limit,
     });
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.ordersService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser | null) {
+    return this.ordersService.findOne(id, user?.id);
   }
 
   // Регистрируем ДО ':id', чтобы 'saved' не перехватился параметром — хотя
@@ -65,10 +77,59 @@ export class OrdersController {
   }
 
   // Тоже до ':id' — тот же приём, что 'saved/mine' строкой выше.
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('FREELANCER')
+  @Get('bids/mine')
+  listMyBids(@CurrentUser() user: AuthenticatedUser) {
+    return this.ordersService.listMyBids(user.id);
+  }
+
+  // Тоже до ':id' — тот же приём, что 'saved/mine' строкой выше.
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Get('drafts/mine')
+  listMyDrafts(@CurrentUser() user: AuthenticatedUser) {
+    return this.ordersService.listMyDrafts(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Post('drafts')
+  createDraft(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateOrderDraftDto) {
+    return this.ordersService.createDraft(user.id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Post('drafts/:id/publish')
+  publishDraft(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.ordersService.publishDraft(user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Delete('drafts/:id')
+  deleteDraft(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.ordersService.deleteDraft(user.id, id);
+  }
+
+  // Тоже до ':id' — тот же приём, что 'saved/mine' строкой выше.
   @UseGuards(JwtAuthGuard)
   @Get('invites/mine')
   listMyInvites(@CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.listMyInvites(user.id);
+  }
+
+  // 3-сегментный путь — не конфликтует с ':id/invite' (POST, 2 сегмента)
+  // выше и с ':id' catch-all роутами дальше.
+  @UseGuards(JwtAuthGuard)
+  @Patch('invites/:inviteId/respond')
+  respondToInvite(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('inviteId') inviteId: string,
+    @Body('accept') accept: boolean,
+  ) {
+    return this.ordersService.respondToInvite(user.id, inviteId, Boolean(accept));
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -238,5 +299,76 @@ export class OrdersController {
     @Body('skillId') skillId: string,
   ) {
     return this.ordersService.endorseSkill(user.id, orderId, skillId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/disputes/:disputeId/attach')
+  attachFileToDispute(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') orderId: string,
+    @Param('disputeId') disputeId: string,
+    @Body('fileId') fileId: string,
+  ) {
+    return this.ordersService.attachFileToDispute(user.id, orderId, disputeId, fileId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('disputes/:id/files')
+  listDisputeFiles(@CurrentUser() user: AuthenticatedUser, @Param('id') disputeId: string) {
+    return this.ordersService.listDisputeFiles(user.id, disputeId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('FREELANCER')
+  @Post(':id/deadline-extension')
+  requestDeadlineExtension(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') orderId: string,
+    @Body() dto: { newDeadline: string; reason?: string },
+  ) {
+    return this.ordersService.requestDeadlineExtension(user.id, orderId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Post(':id/deadline-extension/:requestId/respond')
+  respondDeadlineExtension(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') orderId: string,
+    @Param('requestId') requestId: string,
+    @Body('approve') approve: boolean,
+  ) {
+    return this.ordersService.respondDeadlineExtension(user.id, orderId, requestId, approve);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Post(':id/bids/:bidId/reject')
+  rejectBid(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') orderId: string,
+    @Param('bidId') bidId: string,
+    @Body('reason') reason?: string,
+  ) {
+    return this.ordersService.rejectBid(user.id, orderId, bidId, reason);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/invoices')
+  listOrderInvoices(@CurrentUser() user: AuthenticatedUser, @Param('id') orderId: string) {
+    return this.invoiceService.listOrderInvoices(user.id, orderId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/invoices/export.csv')
+  async exportOrderInvoicesCsv(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') orderId: string,
+    @Res() res: Response,
+  ) {
+    const csv = await this.invoiceService.exportOrderInvoicesCsv(user.id, orderId);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="invoices-order-${orderId}.csv"`);
+    return res.send(csv);
   }
 }

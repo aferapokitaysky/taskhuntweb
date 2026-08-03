@@ -1,6 +1,8 @@
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma-client"
+  // См. apps/api/prisma/schema.prisma — тот же фикс, та же причина.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -33,4 +35,16 @@ model NotificationPreference {
 
   @@unique([userId, channel])
   @@map("notification_preferences")
+}
+
+// Только для чтения — сервис уведомлений не владеет заказами, но обработчику
+// BidSubmitted нужен clientId (кому слать уведомление о новом отклике), а в
+// событии его нет (см. BidSubmittedEvent в shared-types). Минимальный
+// read-only слепок таблицы orders вместо полной модели из apps/api.
+model Order {
+  id       String @id
+  clientId String
+  title    String
+
+  @@map("orders")
 }

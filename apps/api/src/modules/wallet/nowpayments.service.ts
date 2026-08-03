@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
@@ -15,6 +15,7 @@ export interface CreatePaymentResult {
  */
 @Injectable()
 export class NowPaymentsService {
+  private readonly logger = new Logger(NowPaymentsService.name);
   private readonly apiKey: string;
   private readonly ipnSecret: string;
   private readonly baseUrl: string;
@@ -45,7 +46,18 @@ export class NowPaymentsService {
     });
 
     if (!res.ok) {
-      throw new Error(`NOWPayments createPayment failed: ${res.status} ${await res.text()}`);
+      const body = await res.text();
+      this.logger.error(`createPayment failed: ${res.status} ${body}`);
+      // AMOUNT_MINIMAL_ERROR — это не сбой провайдера, а невалидный ввод
+      // (сумма счёта конвертируется в меньше минимально принимаемого
+      // провайдером объёма крипты). Раньше это тоже летело как 503
+      // "провайдер недоступен" — пользователь не понимал, что нужно просто
+      // увеличить сумму, и пробовал снова с той же суммой.
+      if (body.includes('AMOUNT_MINIMAL_ERROR')) {
+        throw new BadRequestException('Сумма слишком мала для оплаты в криптовалюте — минимальный платёж провайдера обычно около $10. Увеличьте сумму.');
+      }
+      // Остальные ошибки провайдера — 503, не течём деталями наружу.
+      throw new ServiceUnavailableException('Платёжный провайдер временно недоступен. Попробуйте выставить счёт позже.');
     }
 
     const data = await res.json();
@@ -79,7 +91,9 @@ export class NowPaymentsService {
     });
 
     if (!res.ok) {
-      throw new Error(`NOWPayments createPayout failed: ${res.status} ${await res.text()}`);
+      const body = await res.text();
+      this.logger.error(`createPayout failed: ${res.status} ${body}`);
+      throw new ServiceUnavailableException('Платёжный провайдер временно недоступен. Выплата будет повторена позже.');
     }
 
     const data = await res.json();

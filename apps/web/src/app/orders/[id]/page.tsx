@@ -29,6 +29,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   return {
     title: order.title,
     description: order.description.slice(0, 160),
+    alternates: { canonical: `/orders/${params.id}` },
   };
 }
 

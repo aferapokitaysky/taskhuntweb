@@ -64,6 +64,9 @@ jobs:
       - name: Type check
         run: pnpm --filter @taskhunt/web exec tsc --noEmit
 
+      - name: Test
+        run: pnpm --filter @taskhunt/web test
+
       - name: Build
         run: pnpm --filter @taskhunt/web build
 
@@ -101,3 +104,28 @@ jobs:
 
       - name: Test fraud-service
         run: pnpm --filter fraud-service test
+
+  # Некритичный — не блокирует мердж (continue-on-error), просто держит
+  # известные уязвимости зависимостей на виду в логах CI. Ужесточать до
+  # блокирующего имеет смысл отдельным осознанным решением, не молча.
+  security-audit:
+    name: pnpm audit — уязвимости зависимостей (не блокирует мердж)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm audit
+        run: pnpm audit --audit-level=high
+        continue-on-error: true

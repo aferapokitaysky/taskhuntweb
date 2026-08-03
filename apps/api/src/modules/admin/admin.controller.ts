@@ -10,6 +10,7 @@ import { FraudService } from '../fraud/fraud.service';
 import { AdminService } from './admin.service';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
 import { UpdateFraudFlagDto } from './dto/update-fraud-flag.dto';
+import { ResolveModerationDto } from './dto/resolve-moderation.dto';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('admin')
@@ -196,8 +197,14 @@ export class AdminController {
 
   @RequirePermissions(PermissionCode.FraudReview)
   @Get('fraud-flags')
-  listFraudFlags(@Query('status') status?: string, @Query('severity') severity?: string) {
-    return this.fraudService.list({ status, severity });
+  listFraudFlags(
+    @Query('status') status?: string,
+    @Query('severity') severity?: string,
+    @Query('userId') userId?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.fraudService.list({ status, severity, userId, cursor, limit: limit ? Number(limit) : undefined });
   }
 
   @RequirePermissions(PermissionCode.FraudReview)
@@ -205,5 +212,114 @@ export class AdminController {
   @Patch('fraud-flags/:id')
   updateFraudFlag(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdateFraudFlagDto) {
     return this.fraudService.updateStatus(id, user.id, dto.status, dto.note);
+  }
+
+  // --- Модерация (CodexTZ 021) ---
+
+  @RequirePermissions(PermissionCode.ContentModerate)
+  @Get('moderation-queue')
+  getModerationQueue() {
+    return this.adminService.getModerationQueue();
+  }
+
+  @RequirePermissions(PermissionCode.OrderModerate)
+  @AuditLog('ORDER_FLAG_MODERATED', 'FraudFlag')
+  @Patch('moderation-queue/orders/:id')
+  resolveOrderModeration(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: ResolveModerationDto) {
+    return this.adminService.resolveOrderOrProfileModeration(user.id, id, dto.action, 'ORDER', dto.note);
+  }
+
+  @RequirePermissions(PermissionCode.ContentModerate)
+  @AuditLog('PROFILE_FLAG_MODERATED', 'FraudFlag')
+  @Patch('moderation-queue/profiles/:id')
+  resolveProfileModeration(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: ResolveModerationDto) {
+    return this.adminService.resolveOrderOrProfileModeration(user.id, id, dto.action, 'PROFILE', dto.note);
+  }
+
+  @RequirePermissions(PermissionCode.ContentModerate)
+  @AuditLog('REVIEW_MODERATED', 'Review')
+  @Patch('moderation-queue/reviews/:id')
+  resolveReviewModeration(@Param('id') id: string, @Body() dto: ResolveModerationDto) {
+    return this.adminService.resolveReviewModeration(id, dto.action);
+  }
+
+  @RequirePermissions(PermissionCode.UserBan)
+  @AuditLog('USERS_BULK_SUSPENDED', 'User')
+  @Post('users/bulk-suspend')
+  bulkSuspend(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body('userIds') userIds: string[],
+    @Body('reason') reason: string,
+  ) {
+    return this.adminService.bulkSuspendUsers(user.id, userIds ?? [], reason ?? '');
+  }
+
+  @RequirePermissions(PermissionCode.UserBan)
+  @AuditLog('USER_2FA_RESET', 'User')
+  @Post('users/:id/reset-2fa')
+  reset2FA(@Param('id') id: string) {
+    return this.adminService.resetUser2FA(id);
+  }
+
+  // --- Финансы ---
+
+  @RequirePermissions(PermissionCode.FinanceViewReports)
+  @Get('finance/overview')
+  getFinanceOverview() {
+    return this.adminService.getFinanceOverview();
+  }
+
+  // --- Подписки ---
+
+  @RequirePermissions(PermissionCode.FinanceViewReports)
+  @Get('subscriptions')
+  listSubscriptions(@Query('tierName') tierName?: string) {
+    return this.adminService.listSubscriptions(tierName);
+  }
+
+  @RequirePermissions(PermissionCode.WalletAdjust)
+  @AuditLog('SUBSCRIPTION_GRANTED', 'Subscription', 'userId')
+  @Post('subscriptions/:userId/grant')
+  grantSubscription(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId') userId: string,
+    @Body('tierName') tierName: 'PRO' | 'PREMIUM',
+    @Body('days') days?: number,
+  ) {
+    return this.adminService.grantSubscription(user.id, userId, tierName, days ?? 30);
+  }
+
+  @RequirePermissions(PermissionCode.WalletAdjust)
+  @AuditLog('SUBSCRIPTION_REVOKED', 'Subscription', 'userId')
+  @Post('subscriptions/:userId/revoke')
+  revokeSubscription(@Param('userId') userId: string) {
+    return this.adminService.revokeSubscription(userId);
+  }
+
+  // --- Логи действий staff ---
+
+  @RequirePermissions(PermissionCode.FinanceViewReports)
+  @Get('audit-logs')
+  listAuditLogs(
+    @Query('cursor') cursor?: string,
+    @Query('actorId') actorId?: string,
+    @Query('targetType') targetType?: string,
+  ) {
+    return this.adminService.listAuditLogs({ cursor, actorId, targetType });
+  }
+
+  // --- Просмотр чатов (арбитраж) ---
+
+  @RequirePermissions(PermissionCode.DisputeView)
+  @Get('chats')
+  searchChatThreads(@Query('orderId') orderId?: string, @Query('userId') userId?: string) {
+    return this.adminService.searchChatThreads({ orderId, userId });
+  }
+
+  @RequirePermissions(PermissionCode.DisputeView)
+  @AuditLog('CHAT_THREAD_VIEWED', 'ChatThread')
+  @Get('chats/:threadId/messages')
+  getChatThreadMessages(@Param('threadId') threadId: string) {
+    return this.adminService.getChatThreadMessages(threadId);
   }
 }

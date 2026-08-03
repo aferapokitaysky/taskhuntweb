@@ -32,7 +32,7 @@ export function IllustratedCard({
 }) {
   return (
     <div
-      className={`group flex flex-col gap-4 rounded-3xl p-6 transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg ${BACKGROUNDS[color]} ${className}`}
+      className={`interactive-card group flex flex-col gap-4 rounded-3xl p-6 ${BACKGROUNDS[color]} ${className}`}
     >
       <div className="flex h-20 w-20 items-center justify-center transition-transform duration-300 group-hover:animate-wiggle">
         {icon}

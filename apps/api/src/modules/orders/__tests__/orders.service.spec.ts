@@ -23,6 +23,7 @@ describe('OrdersService', () => {
       },
       bid: {
         create: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
@@ -37,9 +38,16 @@ describe('OrdersService', () => {
       },
       chatThread: {
         upsert: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue(null),
       },
       dispute: {
         create: jest.fn(),
+      },
+      supportTicket: {
+        create: jest.fn().mockResolvedValue({ id: 'ticket-1' }),
+      },
+      user: {
+        findMany: jest.fn().mockResolvedValue([]),
       },
       review: {
         groupBy: jest.fn().mockResolvedValue([]),
@@ -48,6 +56,10 @@ describe('OrdersService', () => {
         upsert: jest.fn(),
         deleteMany: jest.fn(),
         findMany: jest.fn(),
+      },
+      notification: {
+        create: jest.fn(),
+        createMany: jest.fn(),
       },
       $transaction: jest.fn(async (cb: any) => cb(prisma)),
     };
@@ -85,6 +97,7 @@ describe('OrdersService', () => {
 
   describe('findMany', () => {
     it('возвращает заказы с isPromoted: true на первых местах', async () => {
+      prisma.order.count.mockResolvedValue(2);
       prisma.order.findMany.mockResolvedValue([
         { id: 'order-normal', title: 'Normal Order', createdAt: new Date() },
         { id: 'order-promoted', title: 'Promoted Order', createdAt: new Date() },
@@ -95,13 +108,16 @@ describe('OrdersService', () => {
 
       const result = await service.findMany({});
 
-      expect(result[0].id).toBe('order-promoted');
-      expect(result[0].isPromoted).toBe(true);
-      expect(result[1].id).toBe('order-normal');
-      expect(result[1].isPromoted).toBe(false);
+      expect(result.items[0].id).toBe('order-promoted');
+      expect(result.items[0].isPromoted).toBe(true);
+      expect(result.items[1].id).toBe('order-normal');
+      expect(result.items[1].isPromoted).toBe(false);
+      expect(result.total).toBe(2);
+      expect(result.page).toBe(1);
     });
 
     it('фильтрует по тэгам через hasSome, не ломая текстовый поиск', async () => {
+      prisma.order.count.mockResolvedValue(0);
       prisma.order.findMany.mockResolvedValue([]);
 
       await service.findMany({ search: 'сайт', tags: ['React', 'Node.js'] });
@@ -116,6 +132,7 @@ describe('OrdersService', () => {
     });
 
     it('фильтр по минимальному бюджету учитывает заказы без верхней границы', async () => {
+      prisma.order.count.mockResolvedValue(0);
       prisma.order.findMany.mockResolvedValue([]);
 
       await service.findMany({ minBudget: 100 });
@@ -253,6 +270,7 @@ describe('OrdersService', () => {
         id: 'order-1',
         clientId: 'client-1',
         status: 'OPEN',
+        title: 'Landing page redesign',
       });
       prisma.bid.findUnique.mockResolvedValue({
         id: 'bid-1',
@@ -260,6 +278,10 @@ describe('OrdersService', () => {
         freelancerId: 'freelancer-1',
         amount: '150.00',
       });
+      prisma.bid.findMany.mockResolvedValue([
+        { id: 'bid-2', freelancerId: 'freelancer-2' },
+        { id: 'bid-3', freelancerId: 'freelancer-3' },
+      ]);
       prisma.order.update.mockResolvedValue({
         id: 'order-1',
         status: 'IN_PROGRESS',
@@ -281,6 +303,34 @@ describe('OrdersService', () => {
         create: { orderId: 'order-1', freelancerId: 'freelancer-1' },
         update: {},
       });
+      expect(prisma.notification.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            userId: 'freelancer-2',
+            title: 'Отклик закрыт',
+            message: 'Заказчик выбрал другого исполнителя по заказу «Landing page redesign». Ваш отклик закрыт автоматически.',
+            eventName: 'BidRejected',
+            metadata: {
+              orderId: 'order-1',
+              bidId: 'bid-2',
+              acceptedBidId: 'bid-1',
+              href: '/orders/order-1',
+            },
+          },
+          {
+            userId: 'freelancer-3',
+            title: 'Отклик закрыт',
+            message: 'Заказчик выбрал другого исполнителя по заказу «Landing page redesign». Ваш отклик закрыт автоматически.',
+            eventName: 'BidRejected',
+            metadata: {
+              orderId: 'order-1',
+              bidId: 'bid-3',
+              acceptedBidId: 'bid-1',
+              href: '/orders/order-1',
+            },
+          },
+        ],
+      });
       expect(eventBus.publish).toHaveBeenCalledWith(
         DomainEventName.BidAccepted,
         expect.objectContaining({
@@ -292,6 +342,48 @@ describe('OrdersService', () => {
         }),
       );
       expect(res.status).toBe('IN_PROGRESS');
+    });
+  });
+
+  describe('rejectBid', () => {
+    it('отклоняет отклик и уведомляет фрилансера с причиной и deep link в заказ', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 'order-1',
+        clientId: 'client-1',
+        title: 'Landing page redesign',
+      });
+      prisma.bid.findUnique.mockResolvedValue({
+        id: 'bid-1',
+        orderId: 'order-1',
+        freelancerId: 'freelancer-1',
+        status: 'PENDING',
+      });
+      prisma.bid.update.mockResolvedValue({
+        id: 'bid-1',
+        status: 'REJECTED',
+        rejectionReason: 'Не подходит срок',
+      });
+
+      const result = await service.rejectBid('client-1', 'order-1', 'bid-1', 'Не подходит срок');
+
+      expect(prisma.bid.update).toHaveBeenCalledWith({
+        where: { id: 'bid-1' },
+        data: { status: 'REJECTED', rejectionReason: 'Не подходит срок' },
+      });
+      expect(prisma.notification.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'freelancer-1',
+          title: 'Отклик отклонён',
+          message: 'Ваш отклик на заказ «Landing page redesign» отклонён. Причина: Не подходит срок',
+          eventName: 'BidRejected',
+          metadata: {
+            orderId: 'order-1',
+            bidId: 'bid-1',
+            href: '/orders/order-1',
+          },
+        },
+      });
+      expect(result.status).toBe('REJECTED');
     });
   });
 
@@ -338,12 +430,33 @@ describe('OrdersService', () => {
       );
       expect(result.id).toBe('dispute-123');
     });
+
+    it('резолвит и сохраняет chatThreadId переписки с принятым фрилансером, чтобы админ открывал чат без ручного ввода ID', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 'order-1',
+        clientId: 'client-1',
+        title: 'Landing page',
+        bids: [{ freelancerId: 'freelancer-1', status: 'ACCEPTED' }],
+      });
+      prisma.chatThread.findUnique.mockResolvedValue({ id: 'thread-1' });
+      prisma.dispute.create.mockResolvedValue({ id: 'dispute-123', orderId: 'order-1' });
+
+      await service.openDispute('client-1', 'order-1', 'Poor quality');
+
+      expect(prisma.chatThread.findUnique).toHaveBeenCalledWith({
+        where: { orderId_freelancerId: { orderId: 'order-1', freelancerId: 'freelancer-1' } },
+      });
+      expect(prisma.dispute.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ chatThreadId: 'thread-1' }),
+      });
+    });
   });
 
   describe('findOne', () => {
     it('обогащает отклики статистикой рейтинга фрилансера (avgRating и reviewsCount)', async () => {
       prisma.order.findUnique.mockResolvedValue({
         id: 'order-1',
+        clientId: 'client-1',
         bids: [
           { freelancerId: 'free-1', freelancer: { id: 'free-1' } },
         ],
@@ -352,10 +465,45 @@ describe('OrdersService', () => {
         { targetId: 'free-1', _avg: { rating: 4.8 }, _count: { id: 5 } },
       ]);
 
-      const res: any = await service.findOne('order-1');
+      // requesterId = сам заказчик — иначе visibleBidsFor теперь отфильтрует
+      // чужой отклик (см. фикс приватности сообщений откликов).
+      const res: any = await service.findOne('order-1', 'client-1');
 
       expect(res.bids[0].freelancer.avgRating).toBe(4.8);
       expect(res.bids[0].freelancer.reviewsCount).toBe(5);
+    });
+
+    it('скрывает чужие отклики (в т.ч. message) от фрилансера, который не является заказчиком', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 'order-1',
+        clientId: 'client-1',
+        bids: [
+          { freelancerId: 'free-1', message: 'моё сопроводительное письмо', freelancer: { id: 'free-1' } },
+          { freelancerId: 'free-2', message: 'чужое сопроводительное письмо', freelancer: { id: 'free-2' } },
+        ],
+      });
+      prisma.review.groupBy.mockResolvedValue([]);
+
+      const res: any = await service.findOne('order-1', 'free-1');
+
+      expect(res.bids).toHaveLength(1);
+      expect(res.bids[0].freelancerId).toBe('free-1');
+      expect(res.bids.some((b: any) => b.message === 'чужое сопроводительное письмо')).toBe(false);
+    });
+
+    it('скрывает все отклики от постороннего/анонимного зрителя', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 'order-1',
+        clientId: 'client-1',
+        bids: [{ freelancerId: 'free-1', message: 'секрет', freelancer: { id: 'free-1' } }],
+      });
+      prisma.review.groupBy.mockResolvedValue([]);
+
+      const asStranger: any = await service.findOne('order-1', 'stranger-id');
+      const asAnonymous: any = await service.findOne('order-1', undefined);
+
+      expect(asStranger.bids).toHaveLength(0);
+      expect(asAnonymous.bids).toHaveLength(0);
     });
   });
 

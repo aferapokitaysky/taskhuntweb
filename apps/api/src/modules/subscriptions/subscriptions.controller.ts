@@ -32,6 +32,13 @@ export class SubscriptionsController {
     return this.subscriptionsService.checkout(user.id, dto.tierName);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('checkout/from-balance')
+  checkoutFromBalance(@CurrentUser() user: AuthenticatedUser, @Body() dto: CheckoutSubscriptionDto) {
+    return this.subscriptionsService.checkoutFromBalance(user.id, dto.tierName);
+  }
+
   /** См. WalletModule/NowPaymentsController.handleIpn — тот же паттерн проверки подписи. */
   @Post('nowpayments/ipn')
   @HttpCode(200)

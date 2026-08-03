@@ -77,6 +77,11 @@ export class SavedSearchMatcherListener {
               ? `Заказ "${order.title}" подходит под ваш фильтр «${labels[0]}».`
               : `Заказ "${order.title}" подходит сразу под несколько ваших фильтров: ${labels.join(', ')}.`,
           eventName: 'SavedSearchMatch',
+          metadata: {
+            orderId: order.id,
+            labels,
+            href: `/orders/${order.id}`,
+          },
         });
       } catch (err) {
         this.logger.error(`Failed to notify user ${userId} about saved search match: ${err}`);

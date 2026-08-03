@@ -1,6 +1,8 @@
 import type {
   BidAcceptedEvent,
   BidSubmittedEvent,
+  DeadlineExtensionRequestedEvent,
+  DeadlineExtensionRespondedEvent,
   DisputeOpenedEvent,
   EscrowLockedEvent,
   EscrowReleasedEvent,
@@ -8,6 +10,7 @@ import type {
   InvoicePaidEvent,
   OrderCreatedEvent,
   OrderInviteCreatedEvent,
+  OrderInviteRespondedEvent,
   WorkSubmittedEvent,
 } from '@taskhunt/shared-types';
 import type { HandlerContext } from './shared';
@@ -22,13 +25,37 @@ export function handleOrderCreated(event: OrderCreatedEvent, context: HandlerCon
   });
 }
 
-export function handleBidSubmitted(event: BidSubmittedEvent, context: HandlerContext) {
-  return notifyUser(context, event.payload.freelancerId, {
-    eventName: event.name,
-    title: 'Отклик отправлен',
-    message: `Отклик ${event.payload.bidId} на заказ ${event.payload.orderId} отправлен.`,
-    metadata: event.payload,
+export async function handleBidSubmitted(event: BidSubmittedEvent, context: HandlerContext) {
+  const order = await context.prisma.order.findUnique({
+    where: { id: event.payload.orderId },
+    select: { clientId: true, title: true },
   });
+
+  const notifications = [
+    notifyUser(context, event.payload.freelancerId, {
+      eventName: event.name,
+      title: 'Отклик отправлен',
+      message: `Отклик ${event.payload.bidId} на заказ ${event.payload.orderId} отправлен.`,
+      metadata: event.payload,
+    }),
+  ];
+
+  // Заказчик раньше вообще не узнавал о новом отклике — только сам
+  // фрилансер получал подтверждение "отклик отправлен". Без уведомления
+  // клиент видел новых откликнувшихся, только зайдя на страницу заказа
+  // вручную (баг из живого тестирования: "нет уведомления заказчику").
+  if (order) {
+    notifications.push(
+      notifyUser(context, order.clientId, {
+        eventName: event.name,
+        title: 'Новый отклик на заказ',
+        message: `На заказ «${order.title}» откликнулись за ${event.payload.amount}.`,
+        metadata: event.payload,
+      }),
+    );
+  }
+
+  return Promise.all(notifications);
 }
 
 export function handleBidAccepted(event: BidAcceptedEvent, context: HandlerContext) {
@@ -118,11 +145,56 @@ export function handleOrderInviteCreated(event: OrderInviteCreatedEvent, context
   });
 }
 
+export function handleOrderInviteResponded(event: OrderInviteRespondedEvent, context: HandlerContext) {
+  return notifyUser(context, event.payload.clientId, {
+    eventName: event.name,
+    title: event.payload.accepted ? 'Приглашение принято' : 'Приглашение отклонено',
+    message: event.payload.accepted
+      ? `Фрилансер принял приглашение на заказ «${event.payload.orderTitle}».`
+      : `Фрилансер отклонил приглашение на заказ «${event.payload.orderTitle}».`,
+    metadata: { ...event.payload, accepted: String(event.payload.accepted) },
+  });
+}
+
 export function handleDisputeOpened(event: DisputeOpenedEvent, context: HandlerContext) {
   return notifyUser(context, event.payload.openedById, {
     eventName: event.name,
     title: 'Спор открыт',
     message: `По заказу ${event.payload.orderId} открыт спор.`,
     metadata: event.payload,
+  });
+}
+
+// Раньше эти два события имели in-app уведомление (см.
+// apps/api/.../notifications-events.listener.ts), но не email — фрилансер/
+// заказчик, не открывший вкладку с сайтом, не узнавал о запросе продления
+// дедлайна вовремя.
+export async function handleDeadlineExtensionRequested(event: DeadlineExtensionRequestedEvent, context: HandlerContext) {
+  const order = await context.prisma.order.findUnique({
+    where: { id: event.payload.orderId },
+    select: { clientId: true, title: true },
+  });
+  if (!order) return;
+
+  return notifyUser(context, event.payload.clientId, {
+    eventName: event.name,
+    title: 'Запрошено продление срока',
+    message: `Фрилансер просит продлить срок по заказу "${order.title}" до ${new Date(event.payload.newDeadline).toLocaleDateString('ru-RU')}.`,
+    metadata: { orderId: event.payload.orderId, requestId: event.payload.requestId, freelancerId: event.payload.freelancerId },
+  });
+}
+
+export async function handleDeadlineExtensionResponded(event: DeadlineExtensionRespondedEvent, context: HandlerContext) {
+  const order = await context.prisma.order.findUnique({
+    where: { id: event.payload.orderId },
+    select: { clientId: true, title: true },
+  });
+  if (!order) return;
+
+  return notifyUser(context, event.payload.freelancerId, {
+    eventName: event.name,
+    title: event.payload.approved ? 'Продление принято' : 'Продление отклонено',
+    message: `Заказчик ${event.payload.approved ? 'принял' : 'отклонил'} продление срока по заказу "${order.title}".`,
+    metadata: { orderId: event.payload.orderId, requestId: event.payload.requestId, clientId: event.payload.clientId },
   });
 }

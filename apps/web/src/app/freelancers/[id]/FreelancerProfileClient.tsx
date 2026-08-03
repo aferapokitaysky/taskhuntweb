@@ -4,13 +4,18 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api, API_URL } from '@/lib/api';
-import type { Order, PortfolioItem, User } from '@/lib/types';
+import type { ChatInboxThread, Order, PaginatedOrders, PortfolioItem, User } from '@/lib/types';
 import { money } from '@/lib/types';
 import { TierBadge } from '@/components/TierBadge';
 import { FreelancerLevelBadge, type FreelancerLevel } from '@/components/FreelancerLevelBadge';
 import { StarIcon } from '@/components/icons/StarIcon';
+import { ShareIcon } from '@/components/icons/ShareIcon';
+import { GithubIcon } from '@/components/icons/GithubIcon';
+import { GlobeIcon } from '@/components/icons/GlobeIcon';
+import { LinkedInIcon } from '@/components/icons/LinkedInIcon';
 import { AppHeader } from '@/components/AppHeader';
 import { GithubRepos, extractGithubUsername } from '@/components/GithubRepos';
+import { useToast } from '@/components/Toast';
 
 interface PublicProfile {
   id: string;
@@ -25,13 +30,14 @@ interface PublicProfile {
     city?: string | null;
     githubUrl?: string | null;
     websiteUrl?: string | null;
+    linkedinUrl?: string | null;
     successRate?: string | null;
     completionRate?: string | null;
     avgResponseMins?: number | null;
     disputesCount: number;
     lateDeliveries: number;
     viewsCount?: number;
-    skills: { id: string; name: string }[];
+    skills: { id: string; name: string; endorsementCount?: number }[];
     portfolioItems?: PortfolioItem[];
   };
   subscriptionTier: 'STARTER' | 'PRO' | 'PREMIUM';
@@ -40,6 +46,7 @@ interface PublicProfile {
 
 export default function FreelancerProfileClient() {
   const params = useParams<{ id: string }>();
+  const { showToast } = useToast();
   const [data, setData] = useState<PublicProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +57,7 @@ export default function FreelancerProfileClient() {
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [invitedOrderId, setInvitedOrderId] = useState<string | null>(null);
+  const [existingChat, setExistingChat] = useState<ChatInboxThread | null>(null);
 
   useEffect(() => {
     api<PublicProfile>(`/users/${params.id}`)
@@ -59,14 +67,35 @@ export default function FreelancerProfileClient() {
     api<User>('/users/me')
       .then(setMe)
       .catch(() => undefined);
+    // Открыть чат с этого профиля можно только если с этим человеком уже
+    // есть общий тред (переписка привязана к паре заказ+фрилансер, а не
+    // существует "в вакууме") — ищем среди своего инбокса самый свежий.
+    api<ChatInboxThread[]>('/chat/threads')
+      .then((threads) => {
+        const withThisPerson = threads.filter((t) => t.participant?.id === params.id);
+        setExistingChat(withThisPerson[0] ?? null);
+      })
+      .catch(() => undefined);
   }, [params.id]);
 
   async function openInviteModal() {
     setShowInviteModal(true);
     setInviteError(null);
     if (!myOpenOrders && me) {
-      const orders = await api<Order[]>(`/orders?clientId=${me.id}&status=OPEN`).catch(() => []);
-      setMyOpenOrders(orders);
+      const orderPage = await api<PaginatedOrders>(`/orders?clientId=${me.id}&status=OPEN`).catch(
+        () => ({ items: [] }) as Pick<PaginatedOrders, 'items'>,
+      );
+      setMyOpenOrders(orderPage.items);
+    }
+  }
+
+  async function shareProfile() {
+    const url = `${window.location.origin}/freelancers/${params.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('Ссылка на профиль скопирована', 'success');
+    } catch {
+      showToast('Не удалось скопировать ссылку', 'error');
     }
   }
 
@@ -142,29 +171,73 @@ export default function FreelancerProfileClient() {
                 <span className="text-sm text-stone-500">({data.reviews.length})</span>
               </div>
             )}
-            {me?.roles.includes('CLIENT') && me.id !== data.id && (
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={openInviteModal}
-                className="rounded-full border border-brand px-4 py-1.5 text-sm font-medium text-brand transition hover:bg-brand/10"
+                onClick={shareProfile}
+                title="Скопировать ссылку на профиль"
+                className="flex items-center gap-1.5 rounded-full border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-600 transition hover:border-brand hover:text-brand"
               >
-                Пригласить на заказ
+                <ShareIcon className="h-4 w-4" />
+                Поделиться
               </button>
-            )}
+              {me?.roles.includes('CLIENT') && me.id !== data.id && (
+                <button
+                  type="button"
+                  onClick={openInviteModal}
+                  className="rounded-full border border-brand px-4 py-1.5 text-sm font-medium text-brand transition hover:bg-brand/10"
+                >
+                  Пригласить на заказ
+                </button>
+              )}
+              {existingChat && me && me.id !== data.id && (
+                <Link
+                  href={`/chats?orderId=${existingChat.orderId}&freelancerId=${existingChat.freelancerId}`}
+                  className="rounded-full bg-brand px-4 py-1.5 text-sm font-medium text-white transition hover:bg-brand-dark"
+                >
+                  Открыть чат
+                </Link>
+              )}
+            </div>
           </div>
         </div>
 
         {data.profile.bio && <p className="mt-4 whitespace-pre-wrap text-stone-700">{data.profile.bio}</p>}
 
-        <div className="mt-4 flex flex-wrap gap-3 text-sm">
+        <div className="mt-4 flex flex-wrap gap-4">
           {data.profile.githubUrl && (
-            <a href={data.profile.githubUrl} target="_blank" rel="noreferrer" className="text-brand hover:underline">
-              GitHub
+            <a
+              href={data.profile.githubUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 text-sm text-stone-600 transition hover:text-brand"
+            >
+              <GithubIcon className="h-4 w-4 shrink-0" />
+              <span className="truncate">
+                {extractGithubUsername(data.profile.githubUrl) ?? data.profile.githubUrl.replace(/^https?:\/\//, '')}
+              </span>
             </a>
           )}
           {data.profile.websiteUrl && (
-            <a href={data.profile.websiteUrl} target="_blank" rel="noreferrer" className="text-brand hover:underline">
-              Сайт/портфолио
+            <a
+              href={data.profile.websiteUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 text-sm text-stone-600 transition hover:text-brand"
+            >
+              <GlobeIcon className="h-4 w-4 shrink-0" />
+              <span className="truncate">{data.profile.websiteUrl.replace(/^https?:\/\//, '')}</span>
+            </a>
+          )}
+          {data.profile.linkedinUrl && (
+            <a
+              href={data.profile.linkedinUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 text-sm text-stone-600 transition hover:text-brand"
+            >
+              <LinkedInIcon className="h-4 w-4 shrink-0" />
+              <span className="truncate">{data.profile.linkedinUrl.replace(/^https?:\/\//, '')}</span>
             </a>
           )}
         </div>
@@ -174,6 +247,7 @@ export default function FreelancerProfileClient() {
             {data.profile.skills.map((skill) => (
               <span key={skill.id} className="rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-stone-600">
                 {skill.name}
+                {!!skill.endorsementCount && <span className="ml-1 text-stone-400">· {skill.endorsementCount}</span>}
               </span>
             ))}
           </div>

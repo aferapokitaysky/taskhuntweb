@@ -2,7 +2,7 @@ import { IsArray, IsOptional, IsString, IsUUID, MinLength } from 'class-validato
 
 export class DeliverWorkDto {
   @IsString()
-  @MinLength(5)
+  @MinLength(5, { message: 'Опишите, что сделано — минимум 5 символов' })
   description!: string;
 
   @IsOptional()

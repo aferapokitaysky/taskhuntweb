@@ -1,0 +1,67 @@
+name: Deploy
+
+# Намеренно НЕ триггерится на каждый push в main (в отличие от ci.yml) —
+# домен/сервер ещё не выбраны (см. orchestration/PLAN_PRODUCTION_2026.md,
+# Часть 11), запускать деплой в никуда нет смысла и этот job будет висеть
+# красным без причины. Включайте `push: tags: ['v*']` после того, как
+# появится реальный сервер и секреты ниже — до этого момента только
+# ручной запуск (Actions → Deploy → Run workflow) для проверки, что
+# сборка образов вообще работает.
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    name: Собрать и запушить Docker-образы в GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: [api, web, notifications-service, fraud-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_WEB_URL=${{ vars.NEXT_PUBLIC_WEB_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Заполнить, когда появится реальный сервер (Часть 11.1/11.3 плана —
+  # решение пользователя: VPS+docker-compose или managed k8s). Порядок
+  # шагов ниже — обязательный: миграции ПЕРЕД раскаткой новых контейнеров,
+  # не после (иначе новый код может упасть на отсутствующей колонке —
+  # именно так себя повёл GET /orders в этой сессии на локальной БД,
+  # где миграция была закоммичена, но не задеплоена).
+  deploy:
+    name: Задеплоить на сервер
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: false # снять, когда будут готовы SSH_HOST/SSH_KEY секреты
+    steps:
+      - name: Прогнать миграции БД (ПЕРЕД раскаткой)
+        run: |
+          echo "TODO: ssh на сервер, pnpm --filter @taskhunt/api prisma migrate deploy"
+          exit 1
+
+      - name: Раскатить новые образы
+        run: |
+          echo "TODO: ssh на сервер, docker compose pull && docker compose up -d"
+          exit 1

@@ -19,7 +19,9 @@ describe('SubscriptionsService', () => {
       },
     };
     nowPayments = { createPayment: jest.fn().mockResolvedValue({ paymentId: 'pay-1', payAddress: '0xabc' }) };
-    service = new SubscriptionsService(prisma, nowPayments as any);
+    const wallet = { getSystemWalletId: jest.fn().mockResolvedValue('system-wallet-1') };
+    const ledger = { applyTransaction: jest.fn().mockResolvedValue(undefined) };
+    service = new SubscriptionsService(prisma, nowPayments as any, wallet as any, ledger as any);
   });
 
   describe('getMyEffectiveSubscription', () => {

@@ -50,6 +50,13 @@ export interface BidTemplate {
   createdAt: string;
 }
 
+export interface PreviousFreelancer {
+  id: string;
+  hireCount: number;
+  myAvgRating: number | null;
+  profile: { displayName: string; avatarUrl?: string | null } | null;
+}
+
 export interface SessionItem {
   id: string;
   userAgent?: string | null;
@@ -67,10 +74,13 @@ export interface Profile {
   city?: string | null;
   githubUrl?: string | null;
   websiteUrl?: string | null;
+  linkedinUrl?: string | null;
   skills?: { skill: Skill }[];
   portfolioItems?: PortfolioItem[];
   availableForWork?: boolean;
+  vacationUntil?: string | null;
   viewsCount?: number;
+  successRate?: string | null;
 }
 
 export interface User {
@@ -79,8 +89,14 @@ export interface User {
   primaryRole: MarketplaceRole;
   roles: MarketplaceRole[];
   isStaff: boolean;
+  hasPassword?: boolean;
+  status?: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
   totpEnabled?: boolean;
+  digestFrequency?: 'NONE' | 'DAILY' | 'WEEKLY';
   profile?: Profile | null;
+  level?: 'TOP_RATED' | 'RISING_TALENT' | 'NEW';
+  completedOrders?: number;
+  subscription?: { status: string; expiresAt: string; tier: { name: 'STARTER' | 'PRO' | 'PREMIUM' } } | null;
 }
 
 export interface WalletBalance {
@@ -90,6 +106,8 @@ export interface WalletBalance {
   withdrawableBalance: string;
   pendingBalance: string;
   currency: string;
+  autoWithdrawThreshold?: string | null;
+  autoWithdrawAddressId?: string | null;
 }
 
 export interface Bid {
@@ -103,12 +121,52 @@ export interface Bid {
   freelancer?: User & { profile?: Profile | null };
 }
 
+/** Ответ GET /orders/bids/mine — отклик фрилансера + заказ, на который он подан. */
+export interface MyBid extends Bid {
+  orderId: string;
+  createdAt: string;
+  order: Order;
+}
+
 export interface Invoice {
   id: string;
+  orderId?: string;
+  milestoneId?: string | null;
+  milestone?: { id: string; title: string } | null;
   amount: string;
   currency: string;
   description?: string | null;
   status: 'PENDING' | 'PAID' | 'CANCELLED' | 'EXPIRED';
+  payAddress?: string | null;
+  payAmount?: string | null;
+  payCurrency?: string | null;
+  paymentNetwork?: string | null;
+  createdAt?: string;
+  paidAt?: string | null;
+}
+
+/** Пополнение кошелька через NOWPayments (POST /wallet/deposits, GET /wallet/deposits/:id/payment). */
+export interface WalletDeposit {
+  depositId: string;
+  amount: string;
+  currency: string;
+  status: 'PENDING' | 'PAID' | 'CANCELLED' | 'EXPIRED';
+  payAddress?: string | null;
+  payAmount?: string | null;
+  payCurrency?: string | null;
+  paymentNetwork?: string | null;
+}
+
+export interface InvoicePaymentDetails {
+  invoiceId: string;
+  orderId: string;
+  amount: string;
+  currency: string;
+  status: Invoice['status'];
+  payAddress?: string | null;
+  payAmount?: string | null;
+  payCurrency?: string | null;
+  paymentNetwork?: string | null;
 }
 
 export interface ChatMessage {
@@ -119,6 +177,9 @@ export interface ChatMessage {
   invoice?: Invoice | null;
   createdAt: string;
   sender?: User & { profile?: Profile | null };
+  /** Только на живых WebSocket-пушах (ChatGateway.broadcastToOrder) — нужны на /chats, где один сокет держит сразу все треды. REST-ответы их не возвращают. */
+  orderId?: string;
+  freelancerId?: string;
 }
 
 export type MilestoneStatus = 'PENDING' | 'FUNDED' | 'IN_PROGRESS' | 'DELIVERED' | 'APPROVED' | 'RELEASED' | 'DISPUTED';
@@ -154,7 +215,19 @@ export interface Order {
   isPromoted?: boolean;
   disputes?: Dispute[];
   viewsCount?: number;
+  matchScore?: number;
+  matchReasons?: string[];
+  missing?: string[];
   compatibilityPercent?: number | null;
+  client?: { id: string; verifiedPayer?: boolean } | null;
+}
+
+export interface PaginatedOrders {
+  items: Order[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
 }
 
 export interface OrderInvite {
@@ -173,6 +246,19 @@ export interface ChatThreadSummary {
   hasThread: boolean;
   freelancer?: User & { profile?: Profile | null };
   lastMessage?: ChatMessage | null;
+  unreadCount?: number;
+}
+
+export interface ChatInboxThread {
+  threadId: string;
+  orderId: string;
+  freelancerId: string;
+  role: 'CLIENT' | 'FREELANCER';
+  createdAt: string;
+  order: Order;
+  participant?: User & { profile?: Profile | null };
+  lastMessage?: ChatMessage | null;
+  unreadCount?: number;
 }
 
 export interface SavedPayoutAddress {
@@ -203,6 +289,7 @@ export interface Dispute {
   reason: string;
   status: string;
   resolutionNotes?: string | null;
+  chatThreadId?: string | null;
   openedBy?: User & { profile?: Profile | null };
   order?: Order;
 }

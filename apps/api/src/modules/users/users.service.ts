@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MatchingService } from '../matching/matching.service';
+import { sanitizeUser } from '../../common/utils/sanitize-user';
 import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { CreatePortfolioItemDto } from './dto/create-portfolio-item.dto';
@@ -48,6 +49,88 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly matching: MatchingService,
   ) {}
+
+  /**
+   * CodexTZ 020 / CODEX_CLAUDE_SYNC.md — процент заполненности профиля,
+   * зависит от роли (клиент/фрилансер собирают разные поля). Возвращает
+   * ближайшее недостающее поле как nextAction, чтобы фронт мог показать
+   * одну конкретную подсказку, а не список из десяти пунктов сразу.
+   */
+  async getCompleteness(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        profile: { include: { skills: true, portfolioItems: true } },
+        onboarding: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const isClient = user.primaryRole === 'CLIENT';
+    const profile = user.profile;
+    const onboarding = user.onboarding;
+
+    const checklist = isClient
+      ? [
+          { done: Boolean(profile?.bio), field: 'bio', label: 'Расскажите о компании или о себе', action: 'Заполните описание в профиле' },
+          {
+            done: Boolean(onboarding?.interestedCategoryIds?.length),
+            field: 'categories',
+            label: 'Интересующие категории заказов',
+            action: 'Отметьте категории, с которыми обычно работаете',
+          },
+          {
+            done: onboarding?.expectedBudgetMin != null,
+            field: 'budget',
+            label: 'Типичный бюджет заказа',
+            action: 'Укажите примерный бюджет — так фрилансеры лучше поймут ваши заказы',
+          },
+          {
+            done: await this.prisma.invoice.count({ where: { payerId: userId, status: 'PAID' } }).then((n) => n > 0),
+            field: 'payment',
+            label: 'Готовность к оплате',
+            action: 'Пополните кошелёк или оплатите первый счёт',
+          },
+        ]
+      : [
+          { done: Boolean(profile?.bio), field: 'headline', label: 'Заголовок/описание профиля', action: 'Опишите себя в двух предложениях' },
+          {
+            done: Boolean(profile?.skills?.length),
+            field: 'skills',
+            label: 'Навыки',
+            action: 'Добавьте навыки — по ним вас находят заказчики',
+          },
+          {
+            done: onboarding?.expectedRateMin != null,
+            field: 'rate',
+            label: 'Ожидаемая ставка',
+            action: 'Укажите ставку, чтобы попадать в подходящие по бюджету заказы',
+          },
+          {
+            done: Boolean(onboarding?.availability),
+            field: 'availability',
+            label: 'Занятость',
+            action: 'Укажите, сколько времени готовы уделять заказам',
+          },
+          {
+            done: Boolean(profile?.portfolioItems?.length),
+            field: 'portfolio',
+            label: 'Портфолио',
+            action: 'Добавьте примеры работ — это сильно повышает доверие',
+          },
+        ];
+
+    const done = checklist.filter((item) => item.done);
+    const missing = checklist.filter((item) => !item.done);
+    const percentage = Math.round((done.length / checklist.length) * 100);
+
+    return {
+      percentage,
+      role: isClient ? 'CLIENT' : 'FREELANCER',
+      missingFields: missing.map((item) => ({ field: item.field, label: item.label })),
+      nextAction: missing[0]?.action ?? 'Профиль полностью заполнен',
+    };
+  }
 
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -107,23 +190,33 @@ export class UsersService {
 
     missingSteps.sort((a, b) => b.points - a.points);
 
+    let freelancerLevel: FreelancerLevel | undefined;
+    let completedOrders: number | undefined;
+    if (user.roles.includes('FREELANCER')) {
+      completedOrders = await this.prisma.bid.count({
+        where: { freelancerId: userId, status: 'ACCEPTED', order: { status: 'COMPLETED' } },
+      });
+      freelancerLevel = computeFreelancerLevel(completedOrders, profile?.successRate ?? null);
+    }
+
     // Никогда не отдаём секреты наружу — passwordHash/totpSecret/токены
     // верификации-сброса раньше утекали целиком через `...user` (реальный
     // баг, найден при добавлении 2FA: секрет TOTP через этот же спред
     // сделал бы саму двухфакторку бессмысленной — любой с access-токеном
     // мог бы прочитать totpSecret и сам генерировать валидные коды).
-    const {
-      passwordHash: _passwordHash,
-      totpSecret: _totpSecret,
-      emailVerificationToken: _emailVerificationToken,
-      passwordResetToken: _passwordResetToken,
-      ...safeUser
-    } = user;
-
+    // См. sanitizeUser — тот же баг позже нашёлся в admin.service.ts
+    // (listUsers/banUser/suspendUser), поэтому список полей теперь один
+    // на оба места, не дублируется руками.
     return {
-      ...safeUser,
+      ...sanitizeUser(user),
+      // passwordHash сам вырезан sanitizeUser — этот булев флаг решает,
+      // какую форму показать в профиле: "задать пароль" (OAuth-аккаунт без
+      // пароля) или "сменить пароль" (нужен текущий для проверки).
+      hasPassword: Boolean(user.passwordHash),
       profileCompleteness,
       missingSteps,
+      level: freelancerLevel,
+      completedOrders,
     };
   }
 
@@ -146,6 +239,7 @@ export class UsersService {
           },
         },
         reviewsReceived: {
+          where: { hiddenAt: null },
           include: {
             author: {
               include: {
@@ -187,6 +281,7 @@ export class UsersService {
           city: user.profile.city,
           githubUrl: user.profile.githubUrl,
           websiteUrl: user.profile.websiteUrl,
+          linkedinUrl: user.profile.linkedinUrl,
           successRate: user.profile.successRate,
           completionRate: user.profile.completionRate,
           avgResponseMins: user.profile.avgResponseMins,
@@ -237,6 +332,9 @@ export class UsersService {
   async findFreelancers(filters: { categoryId?: string; skillId?: string; search?: string }) {
     const where: Prisma.UserWhereInput = {
       OR: [{ primaryRole: 'FREELANCER' }, { roles: { has: 'FREELANCER' } }],
+      // Staff/admin-аккаунты не должны светиться в публичном листинге
+      // фрилансеров — даже если у них выставлена роль FREELANCER.
+      isStaff: false,
     };
 
     if (filters.skillId) {
@@ -412,10 +510,11 @@ export class UsersService {
       update: { ...dto, structuredAnswers },
     });
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { status: 'ACTIVE' },
-    });
+    // Раньше здесь безусловно ставился status: 'ACTIVE' — это тихо обходило
+    // верификацию почты: пользователь становился ACTIVE сразу по заполнении
+    // анкеты, до перехода по ссылке из письма (единственное законное место
+    // для PENDING_VERIFICATION -> ACTIVE — AuthService.verifyEmail). Само
+    // прохождение анкеты не должно трогать статус аккаунта.
 
     return onboarding;
   }
@@ -740,17 +839,9 @@ export class UsersService {
         })
       : [];
 
-    const {
-      passwordHash: _passwordHash,
-      totpSecret: _totpSecret,
-      emailVerificationToken: _emailVerificationToken,
-      passwordResetToken: _passwordResetToken,
-      ...safeUser
-    } = user;
-
     return {
       exportedAt: new Date().toISOString(),
-      user: safeUser,
+      user: sanitizeUser(user),
       ledgerEntries,
     };
   }
@@ -783,6 +874,7 @@ export class UsersService {
           avatarData: null,
           githubUrl: null,
           websiteUrl: null,
+          linkedinUrl: null,
         },
       });
     });

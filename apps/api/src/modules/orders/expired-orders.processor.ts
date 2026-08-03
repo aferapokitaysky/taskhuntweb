@@ -39,6 +39,10 @@ export class ExpiredOrdersProcessor extends WorkerHost {
           title: 'Заказ автоматически архивирован',
           message: `Ваш заказ «${order.title}» автоматически архивирован — 0 откликов за 60 дней, можно переопубликовать.`,
           eventName: 'OrderExpired',
+          metadata: {
+            orderId: order.id,
+            href: `/orders/${order.id}`,
+          },
         },
       });
     }

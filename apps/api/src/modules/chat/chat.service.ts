@@ -1,9 +1,16 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ChatService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   /**
    * Тред один на пару (заказ, фрилансер), а не один на заказ — заказчик
@@ -30,11 +37,26 @@ export class ChatService {
       throw new ForbiddenException('This freelancer has no active bid on the order');
     }
 
-    return this.prisma.chatThread.upsert({
-      where: { orderId_freelancerId: { orderId, freelancerId } },
-      create: { orderId, freelancerId },
-      update: {},
-    });
+    try {
+      return await this.prisma.chatThread.upsert({
+        where: { orderId_freelancerId: { orderId, freelancerId } },
+        create: { orderId, freelancerId },
+        update: {},
+      });
+    } catch (err) {
+      // Гонка: два запроса (например, joinOrder по сокету + REST-фолбэк
+      // одновременно из двух вкладок) прошли upsert параллельно — оба видят
+      // "записи ещё нет" до COMMIT первого, второй падает на уникальном
+      // индексе (orderId, freelancerId), хотя семантически это не ошибка,
+      // тред просто уже существует. Дочитываем его вместо падения запроса.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const existing = await this.prisma.chatThread.findUnique({
+          where: { orderId_freelancerId: { orderId, freelancerId } },
+        });
+        if (existing) return existing;
+      }
+      throw err;
+    }
   }
 
   /** Список тредов заказа, видимых текущему юзеру. */
@@ -58,11 +80,24 @@ export class ChatService {
       },
     });
     const threadByFreelancer = new Map(existingThreads.map((t) => [t.freelancerId, t]));
+    const unreadByThreadId = await this.getUnreadCountByThreadId(
+      userId,
+      existingThreads.map((thread) => thread.id),
+    );
 
     if (!isClient) {
       const own = threadByFreelancer.get(userId);
       return own
-        ? [{ freelancerId: userId, threadId: own.id, freelancer: own.freelancer, lastMessage: own.messages[0] ?? null, hasThread: true }]
+        ? [
+            {
+              freelancerId: userId,
+              threadId: own.id,
+              freelancer: own.freelancer,
+              lastMessage: own.messages[0] ?? null,
+              hasThread: true,
+              unreadCount: unreadByThreadId.get(own.id) ?? 0,
+            },
+          ]
         : [];
     }
 
@@ -75,31 +110,85 @@ export class ChatService {
         freelancer: thread?.freelancer ?? bid.freelancer,
         lastMessage: thread?.messages[0] ?? null,
         hasThread: Boolean(thread),
+        unreadCount: thread ? (unreadByThreadId.get(thread.id) ?? 0) : 0,
+      };
+    });
+  }
+
+  /** Общий inbox для отдельной страницы чатов: все диалоги, где пользователь заказчик или фрилансер. */
+  async listMyThreads(userId: string) {
+    const threads = await this.prisma.chatThread.findMany({
+      where: {
+        OR: [{ freelancerId: userId }, { order: { clientId: userId } }],
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        freelancer: { include: { profile: true } },
+        order: {
+          include: {
+            category: true,
+            client: { include: { profile: true } },
+          },
+        },
+        messages: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: { sender: { include: { profile: true } }, invoice: true, file: true },
+        },
+      },
+    });
+    const unreadByThreadId = await this.getUnreadCountByThreadId(
+      userId,
+      threads.map((thread) => thread.id),
+    );
+
+    return threads.map((thread) => {
+      const isClientSide = thread.order.clientId === userId;
+      const participant = isClientSide ? thread.freelancer : thread.order.client;
+      return {
+        threadId: thread.id,
+        orderId: thread.orderId,
+        freelancerId: thread.freelancerId,
+        order: thread.order,
+        participant,
+        role: isClientSide ? 'CLIENT' : 'FREELANCER',
+        lastMessage: thread.messages[0] ?? null,
+        unreadCount: unreadByThreadId.get(thread.id) ?? 0,
+        createdAt: thread.createdAt,
       };
     });
   }
 
   async listMessages(orderId: string, freelancerId: string, userId: string) {
     const thread = await this.getOrCreateThread(orderId, freelancerId, userId);
-    return this.prisma.chatMessage.findMany({
+    const messages = await this.prisma.chatMessage.findMany({
       where: { threadId: thread.id, deletedAt: null },
       orderBy: { createdAt: 'asc' },
       include: { sender: { include: { profile: true } }, invoice: true, file: true },
     });
+    await this.markThreadRead(thread.id, userId);
+    return messages;
   }
 
   async sendTextMessage(orderId: string, freelancerId: string, senderId: string, body: string) {
     const thread = await this.getOrCreateThread(orderId, freelancerId, senderId);
-    return this.prisma.chatMessage.create({
+    const message = await this.prisma.chatMessage.create({
       data: { threadId: thread.id, senderId, type: 'TEXT', body },
+      include: { sender: { include: { profile: true } }, invoice: true, file: true },
     });
+    await this.notifyChatRecipient(thread.id, orderId, freelancerId, senderId, message.id, 'TEXT', body);
+    return message;
   }
 
   async sendFileMessage(orderId: string, freelancerId: string, senderId: string, fileId: string, body?: string) {
     const thread = await this.getOrCreateThread(orderId, freelancerId, senderId);
-    return this.prisma.chatMessage.create({
+    const message = await this.prisma.chatMessage.create({
       data: { threadId: thread.id, senderId, type: 'FILE', fileId, body },
+      include: { sender: { include: { profile: true } }, invoice: true, file: true },
     });
+    await this.notifyChatRecipient(thread.id, orderId, freelancerId, senderId, message.id, 'FILE', body);
+    return message;
   }
 
   async softDeleteMessage(messageId: string, requesterId: string) {
@@ -107,6 +196,11 @@ export class ChatService {
     if (!message) throw new NotFoundException('Message not found');
     if (message.senderId !== requesterId) throw new ForbiddenException('Not your message');
     return this.prisma.chatMessage.update({ where: { id: messageId }, data: { deletedAt: new Date() } });
+  }
+
+  async markThreadReadByOrder(orderId: string, freelancerId: string, userId: string) {
+    const thread = await this.getOrCreateThread(orderId, freelancerId, userId);
+    return this.markThreadRead(thread.id, userId);
   }
 
   /**
@@ -118,6 +212,119 @@ export class ChatService {
     if (!thread) return; // теоретически не должно происходить — инвойс шлёт только тот, у кого уже есть тред
     return this.prisma.chatMessage.create({
       data: { threadId: thread.id, senderId: freelancerId, type: 'INVOICE', invoiceId },
+      // Без include фронт получал message.invoice === undefined в живом
+      // сокет-пуше (в отличие от REST listMessages, который его подтягивает)
+      // — карточка счёта рендерилась пустым текстовым сообщением, пока
+      // пользователь не перезагружал страницу и не получал полный REST-ответ.
+      include: { sender: { include: { profile: true } }, invoice: true, file: true },
     });
+  }
+
+  /** orderId/freelancerId нужны только для адресации комнаты, до которой сервис не имеет прямого доступа. */
+  async findThreadRoomForInvoice(invoiceId: string): Promise<{ orderId: string; freelancerId: string } | null> {
+    const message = await this.prisma.chatMessage.findFirst({
+      where: { invoiceId },
+      include: { thread: true },
+    });
+    if (!message) return null;
+    return { orderId: message.thread.orderId, freelancerId: message.thread.freelancerId };
+  }
+
+  private async markThreadRead(threadId: string, userId: string) {
+    return this.prisma.chatThreadRead.upsert({
+      where: { threadId_userId: { threadId, userId } },
+      create: { threadId, userId, lastReadAt: new Date() },
+      update: { lastReadAt: new Date() },
+    });
+  }
+
+  private async notifyChatRecipient(
+    threadId: string,
+    orderId: string,
+    freelancerId: string,
+    senderId: string,
+    messageId: string,
+    type: 'TEXT' | 'FILE',
+    body?: string | null,
+  ) {
+    try {
+      const thread = await this.prisma.chatThread.findUnique({
+        where: { id: threadId },
+        include: {
+          freelancer: { include: { profile: true } },
+          order: { include: { client: { include: { profile: true } } } },
+        },
+      });
+      if (!thread) return;
+
+      const recipientId = senderId === thread.order.clientId ? thread.freelancerId : thread.order.clientId;
+      if (recipientId === senderId) return;
+
+      const sender =
+        senderId === thread.order.clientId
+          ? thread.order.client
+          : senderId === thread.freelancerId
+            ? thread.freelancer
+            : await this.prisma.user.findUnique({ where: { id: senderId }, include: { profile: true } });
+      const senderName = sender?.profile?.displayName ?? sender?.email ?? 'Участник';
+      const orderTitle = thread.order.title || 'заказ';
+      const cleanBody = (body ?? '').trim().replace(/\s+/g, ' ');
+      const preview =
+        type === 'FILE'
+          ? `Файл${cleanBody ? `: ${cleanBody.slice(0, 90)}` : ' во вложении'}`
+          : cleanBody.length > 120
+            ? `${cleanBody.slice(0, 117)}...`
+            : cleanBody || 'Новое сообщение';
+
+      const notification = await this.prisma.notification.create({
+        data: {
+          userId: recipientId,
+          title: 'Новое сообщение',
+          message: `${senderName} написал по заказу "${orderTitle}": ${preview}`,
+          eventName: 'ChatMessageCreated',
+          metadata: {
+            orderId,
+            freelancerId,
+            threadId,
+            messageId,
+            senderId,
+            href: `/chats?orderId=${orderId}&freelancerId=${freelancerId}`,
+          },
+        },
+      });
+      // Раньше уведомление только писалось в БД — колокольчик узнавал о
+      // нём лишь на следующем 30с-поллинге. Толкаем сразу через тот же
+      // личный сокет-канал, что и NotificationsEventsListener.
+      this.notificationsGateway.emitToUser(recipientId, 'notification', notification);
+    } catch (err) {
+      this.logger.error(`Failed to create chat notification for message ${messageId}: ${err}`);
+    }
+  }
+
+  private async getUnreadCountByThreadId(userId: string, threadIds: string[]) {
+    const unreadByThreadId = new Map<string, number>();
+    if (threadIds.length === 0) return unreadByThreadId;
+
+    const reads = await this.prisma.chatThreadRead.findMany({
+      where: { userId, threadId: { in: threadIds } },
+    });
+    const readAtByThreadId = new Map(reads.map((read) => [read.threadId, read.lastReadAt]));
+
+    const incomingMessages = await this.prisma.chatMessage.findMany({
+      where: {
+        threadId: { in: threadIds },
+        senderId: { not: userId },
+        deletedAt: null,
+      },
+      select: { threadId: true, createdAt: true },
+    });
+
+    for (const message of incomingMessages) {
+      const lastReadAt = readAtByThreadId.get(message.threadId);
+      if (lastReadAt && message.createdAt <= lastReadAt) continue;
+      unreadByThreadId.set(message.threadId, (unreadByThreadId.get(message.threadId) ?? 0) + 1);
+    }
+
+    return unreadByThreadId;
   }
 }

@@ -114,6 +114,9 @@ export class MilestonesService {
     if (!order) throw new NotFoundException('Order not found');
     if (order.clientId !== clientId) throw new ForbiddenException('Not your order');
     if (!order.client.wallet) throw new BadRequestException('Client wallet missing');
+    if (order.status === 'DISPUTED' || order.status === 'CANCELLED' || order.status === 'COMPLETED') {
+      throw new BadRequestException('Заказ уже завершён или находится в споре — приёмка недоступна');
+    }
 
     const acceptedBid = await this.prisma.bid.findFirst({
       where: { orderId, status: 'ACCEPTED' },
@@ -122,10 +125,21 @@ export class MilestonesService {
     if (!acceptedBid?.freelancer.wallet) throw new BadRequestException('Freelancer wallet missing');
 
     const invoice = await this.prisma.invoice.findFirst({
-      where: { orderId, status: 'PAID', milestoneId: milestoneId ?? null },
+      where: { orderId, status: 'PAID', milestoneId: milestoneId ?? null, escrowSettledAt: null },
       orderBy: { paidAt: 'desc' },
     });
     if (!invoice) throw new BadRequestException('No paid invoice found for this order/milestone');
+
+    // Атомарно "застолбить" инвойс перед движением денег: если два запроса
+    // на приёмку прилетят одновременно (двойной клик, повтор запроса), второй
+    // получит claimed.count === 0 и остановится ДО releaseEscrow — иначе один
+    // и тот же эскроу можно было релизнуть дважды (см. комментарий у поля
+    // escrowSettledAt в schema.prisma).
+    const claimed = await this.prisma.invoice.updateMany({
+      where: { id: invoice.id, escrowSettledAt: null },
+      data: { escrowSettledAt: new Date() },
+    });
+    if (claimed.count === 0) throw new BadRequestException('Эскроу по этому счёту уже обработано');
 
     await this.wallet.releaseEscrow({
       clientWalletId: order.client.wallet.id,

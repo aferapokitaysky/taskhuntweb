@@ -9,6 +9,11 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["omitApi"]
+  // node:20-alpine (3.23) ставит только OpenSSL 3.x — без явного бинарника
+  // Prisma не может определить версию на этапе generate, тихо дефолтится
+  // на openssl-1.1.x и падает в рантайме с "Error loading shared library
+  // libssl.so.1.1: No such file or directory" (нашли деплоя вживую).
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -77,6 +82,7 @@ model User {
   profile    Profile?
   wallet     Wallet?
   onboarding OnboardingResponse?
+  walletDeposits WalletDeposit[]
 
   ordersAsClient  Order[]  @relation("ClientOrders")
   bids            Bid[]
@@ -85,6 +91,7 @@ model User {
 
   sentChatMessages        ChatMessage[]    @relation("ChatSender")
   chatThreadsAsFreelancer ChatThread[]     @relation("ChatThreadFreelancer")
+  chatThreadReads         ChatThreadRead[]
   supportTickets          SupportTicket[]  @relation("TicketOwner")
   assignedTickets         SupportTicket[]  @relation("TicketAssignee")
   supportMessages         SupportMessage[]
@@ -117,7 +124,11 @@ model User {
   sentInvites     OrderInvite[] @relation("OrderInviteClient")
   receivedInvites OrderInvite[] @relation("OrderInviteFreelancer")
 
-  bidTemplates BidTemplate[]
+  bidTemplates   BidTemplate[]
+  orderTemplates OrderTemplate[]
+
+  blocksCreated    ClientBlock[] @relation("ClientBlockOwner")
+  blockedByClients ClientBlock[] @relation("ClientBlockTarget")
 
   fraudFlags         FraudFlag[] @relation("FraudFlagSubject")
   fraudFlagsReviewed FraudFlag[] @relation("FraudFlagReviewer")
@@ -141,6 +152,21 @@ model TotpBackupCode {
   createdAt DateTime  @default(now())
 
   @@map("totp_backup_codes")
+}
+
+// IP-адреса, замеченные у забаненных аккаунтов (см. AdminService.banUser) —
+// закрывает самый частый способ обхода бана: зарегистрировать новый аккаунт
+// с того же устройства/сети. Настоящий device-fingerprint (canvas/WebGL)
+// не реализован — потребовал бы отдельной клиентской библиотеки; список по
+// IP уже перекрывает основной сценарий обхода без риска ложных блокировок
+// существующих аккаунтов на том же IP (см. комментарий в auth.service.ts).
+model BannedIp {
+  ip           String   @id
+  reason       String?
+  bannedUserId String?
+  createdAt    DateTime @default(now())
+
+  @@map("banned_ips")
 }
 
 model RefreshSession {
@@ -172,6 +198,7 @@ model Profile {
   city           String?
   githubUrl      String?
   websiteUrl     String?
+  linkedinUrl    String?
 
   successRate      Decimal?  @db.Decimal(5, 2) // % успешных сделок
   completionRate   Decimal?  @db.Decimal(5, 2)
@@ -275,6 +302,7 @@ model Category {
   children      Category[]    @relation("CategoryTree")
   orders        Order[]
   savedSearches SavedSearch[]
+  orderTemplates OrderTemplate[]
 
   @@index([parentId])
   @@map("categories")
@@ -311,21 +339,23 @@ model Order {
   deadline    DateTime?
   tags        String[]  @default([])
 
-  status        OrderStatus @default(OPEN)
-  acceptedBidId String?     @unique
-  viewsCount    Int         @default(0)
+  status                OrderStatus @default(OPEN)
+  acceptedBidId         String?     @unique
+  viewsCount            Int         @default(0)
+  deadlineWarningSentAt DateTime?
 
-  bids              Bid[]
-  milestones        Milestone[]
-  versions          OrderVersion[]
-  chatThreads       ChatThread[]
-  deliveries        Delivery[]
-  disputes          Dispute[]
-  invoices          Invoice[]
-  fraudFlags        FraudFlag[]
-  savedBy           SavedOrder[]
-  skillEndorsements SkillEndorsement[]
-  invites           OrderInvite[]
+  bids                      Bid[]
+  milestones                Milestone[]
+  versions                  OrderVersion[]
+  chatThreads               ChatThread[]
+  deliveries                Delivery[]
+  disputes                  Dispute[]
+  invoices                  Invoice[]
+  fraudFlags                FraudFlag[]
+  savedBy                   SavedOrder[]
+  skillEndorsements         SkillEndorsement[]
+  invites                   OrderInvite[]
+  deadlineExtensionRequests DeadlineExtensionRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -432,7 +462,8 @@ model Bid {
   amount       Decimal   @db.Decimal(12, 2)
   deliveryDays Int
   message      String
-  status       BidStatus @default(PENDING)
+  status          BidStatus @default(PENDING)
+  rejectionReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -584,6 +615,31 @@ enum InvoiceStatus {
 }
 
 // Инвойс/счёт, выставляемый прямо в чате заказа
+// Пополнение кошелька пользователем через NOWPayments (не привязано к заказу,
+// в отличие от Invoice — это просто "занести деньги на платформу").
+model WalletDeposit {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount   Decimal       @db.Decimal(12, 2)
+  currency String        @default("USD")
+  status   InvoiceStatus @default(PENDING)
+
+  nowPaymentsPaymentId String?   @unique
+  payAddress           String?
+  payAmount            Decimal?  @db.Decimal(18, 8)
+  payCurrency          String?
+  paidAt               DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@map("wallet_deposits")
+}
+
 model Invoice {
   id          String     @id @default(uuid())
   orderId     String
@@ -599,7 +655,19 @@ model Invoice {
   status      InvoiceStatus @default(PENDING)
 
   nowPaymentsPaymentId String?   @unique
+  payAddress           String?
+  payAmount            Decimal?  @db.Decimal(18, 8)
+  payCurrency          String?
   paidAt               DateTime?
+
+  // Момент, когда эскроу по этому инвойсу было релизнуто фрилансеру ИЛИ
+  // возвращено заказчику. status остаётся 'PAID' и после этого (это поле
+  // читается в других местах как "клиент реально заплатил", не как "деньги
+  // ещё лежат в эскроу") — поэтому именно escrowSettledAt защищает от
+  // повторного releaseEscrow/refundEscrow по одному и тому же инвойсу
+  // (нашли баг: approve() после уже разрешённого спора второй раз релизил
+  // тот же инвойс, увели эскроу в минус).
+  escrowSettledAt DateTime?
 
   chatMessage ChatMessage?
 
@@ -625,10 +693,23 @@ model ChatThread {
   freelancerId String
   freelancer   User          @relation("ChatThreadFreelancer", fields: [freelancerId], references: [id])
   messages     ChatMessage[]
+  reads        ChatThreadRead[]
   createdAt    DateTime      @default(now())
 
   @@unique([orderId, freelancerId])
   @@map("chat_threads")
+}
+
+model ChatThreadRead {
+  threadId   String
+  thread     ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime   @default(now())
+
+  @@id([threadId, userId])
+  @@index([userId, lastReadAt])
+  @@map("chat_thread_reads")
 }
 
 enum ChatMessageType {
@@ -680,6 +761,12 @@ model SupportTicket {
   user         User    @relation("TicketOwner", fields: [userId], references: [id])
   assignedToId String?
   assignedTo   User?   @relation("TicketAssignee", fields: [assignedToId], references: [id])
+
+  // Тикет мог родиться из спора (openDispute) — тогда сторонам не нужно
+  // заводить отдельное обращение, чтобы обсудить его с поддержкой; резолюшн
+  // спора автоматически отписывается сюда же.
+  disputeId String?  @unique
+  dispute   Dispute? @relation(fields: [disputeId], references: [id])
 
   subject  String
   status   TicketStatus   @default(OPEN)
@@ -737,10 +824,15 @@ model FileAsset {
   sizeBytes  Int
   kind       FileKind
   scanStatus ScanStatus @default(PENDING)
+  // Снимает файл с /admin/moderation-queue после того, как модератор его
+  // просмотрел — scanStatus остаётся фактом антивируса (не переписываем
+  // его вручную), а это поле — только "уже разобрано человеком".
+  moderatedAt DateTime?
 
   chatMessages    ChatMessage[]
   supportMessages SupportMessage[]
   deliveryFiles   DeliveryFile[]
+  disputeFiles    DisputeFile[]
 
   createdAt DateTime @default(now())
 
@@ -789,6 +881,12 @@ model Review {
   comment   String?
   createdAt DateTime @default(now())
 
+  // Модерация (CodexTZ 017.017/021) — hiddenAt скрывает отзыв из публичного
+  // профиля, moderatedAt снимает его с /admin/moderation-queue независимо
+  // от решения (в т.ч. когда модератор оставил отзыв видимым).
+  hiddenAt    DateTime?
+  moderatedAt DateTime?
+
   @@unique([orderId, authorId])
   @@map("reviews")
 }
@@ -815,6 +913,15 @@ model Dispute {
   reason          String
   status          DisputeStatus @default(OPEN)
   resolutionNotes String?
+
+  // Резолвится автоматически при открытии спора (чат между заказчиком и
+  // принятым фрилансером по этому заказу) — админ открывает переписку сразу
+  // одним кликом из карточки спора, без ручного ввода orderId/userId в
+  // поиске на вкладке "Чаты заказов".
+  chatThreadId String?
+
+  files         DisputeFile[]
+  supportTicket SupportTicket?
 
   createdAt  DateTime  @default(now())
   resolvedAt DateTime?
@@ -1034,6 +1141,7 @@ model Notification {
   title     String
   message   String
   eventName String
+  metadata  Json?
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -1104,4 +1212,67 @@ model SkillEndorsement {
 
   @@unique([endorserId, targetId, skillId, orderId])
   @@map("skill_endorsements")
+}
+
+model DisputeFile {
+  disputeId String
+  fileId    String
+  dispute   Dispute   @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  file      FileAsset @relation(fields: [fileId], references: [id])
+
+  @@id([disputeId, fileId])
+  @@map("dispute_files")
+}
+
+model DeadlineExtensionRequest {
+  id          String   @id @default(uuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  requestedBy String
+  newDeadline DateTime
+  reason      String?
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+
+  @@map("deadline_extension_requests")
+}
+
+model OrderTemplate {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      User     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  title       String
+  description String
+  budgetMin   Decimal  @db.Decimal(12, 2)
+  budgetMax   Decimal? @db.Decimal(12, 2)
+  tags        String[] @default([])
+  frequency   String
+  nextRunAt   DateTime
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@map("order_templates")
+}
+
+model SearchLog {
+  id        String   @id @default(uuid())
+  query     String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("search_logs")
+}
+
+model ClientBlock {
+  id           String   @id @default(uuid())
+  clientId     String
+  client       User     @relation("ClientBlockOwner", fields: [clientId], references: [id], onDelete: Cascade)
+  freelancerId String
+  freelancer   User     @relation("ClientBlockTarget", fields: [freelancerId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([clientId, freelancerId])
+  @@map("client_blocks")
 }

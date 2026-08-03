@@ -11,4 +11,15 @@ export class SearchController {
   search(@Query('q') q?: string) {
     return this.searchService.search(q ?? '');
   }
+
+  @Get('trending')
+  getTrending() {
+    return this.searchService.getTrending();
+  }
+
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  @Get('suggest')
+  suggest(@Query('q') q?: string) {
+    return this.searchService.suggest(q ?? '');
+  }
 }

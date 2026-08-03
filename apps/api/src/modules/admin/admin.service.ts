@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
+import { sanitizeUser } from '../../common/utils/sanitize-user';
 
 @Injectable()
 export class AdminService {
@@ -12,21 +13,64 @@ export class AdminService {
 
   // --- Пользователи ---
 
+  /**
+   * Staff-аккаунты нельзя банить/приостанавливать/сбрасывать им 2FA через
+   * эти ручки — иначе один держатель user.ban (сейчас это только OWNER, но
+   * ролями управляет seed-скрипт, а не рантайм-эндпоинт, так что состав
+   * ролей может измениться) мог бы заблокировать или перехватить другой
+   * staff-аккаунт, в т.ч. другого OWNER. bulkSuspendUsers уже так делал —
+   * тут та же защита, просто раньше её не было на одиночных ручках.
+   */
+  private async assertTargetIsNotStaff(userId: string) {
+    const target = await this.prisma.user.findUnique({ where: { id: userId }, select: { isStaff: true } });
+    if (target?.isStaff) {
+      throw new ForbiddenException('Cannot perform this action on a staff account');
+    }
+  }
+
   async banUser(userId: string) {
-    return this.prisma.user.update({ where: { id: userId }, data: { status: 'BANNED' } });
+    await this.assertTargetIsNotStaff(userId);
+    const user = await this.prisma.user.update({ where: { id: userId }, data: { status: 'BANNED' } });
+
+    // Блокируем IP этого аккаунта на будущее — самый частый обход бана:
+    // зарегистрировать новый аккаунт с того же устройства/сети. Берём
+    // из RefreshSession (её пишет каждый логин/регистрация), а не только
+    // "последний" — человек мог заходить с нескольких сетей.
+    const sessions = await this.prisma.refreshSession.findMany({
+      where: { userId, ip: { not: null } },
+      select: { ip: true },
+      distinct: ['ip'],
+    });
+    const bannedIpCount = sessions.length;
+    if (bannedIpCount > 0) {
+      await this.prisma.$transaction(
+        sessions.map((s) =>
+          this.prisma.bannedIp.upsert({
+            where: { ip: s.ip! },
+            create: { ip: s.ip!, bannedUserId: userId, reason: 'Аккаунт забанен' },
+            update: {},
+          }),
+        ),
+      );
+    }
+
+    return { ...sanitizeUser(user), bannedIpCount };
   }
 
   async suspendUser(userId: string) {
-    return this.prisma.user.update({ where: { id: userId }, data: { status: 'SUSPENDED' } });
+    await this.assertTargetIsNotStaff(userId);
+    const user = await this.prisma.user.update({ where: { id: userId }, data: { status: 'SUSPENDED' } });
+    return sanitizeUser(user);
   }
 
   async listUsers(status?: string) {
-    return this.prisma.user.findMany({
+    const users = await this.prisma.user.findMany({
       where: status ? { status: status as any } : undefined,
       include: { profile: true },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
+    return users.map(sanitizeUser);
   }
 
   // --- Споры ---
@@ -52,19 +96,32 @@ export class AdminService {
       include: { order: { include: { client: { include: { wallet: true } } } } },
     });
     if (!dispute) throw new NotFoundException('Dispute not found');
+    if (dispute.status !== 'OPEN' && dispute.status !== 'UNDER_REVIEW') {
+      throw new BadRequestException('Спор уже разрешён');
+    }
 
     const acceptedBid = await this.prisma.bid.findFirst({
       where: { orderId: dispute.orderId, status: 'ACCEPTED' },
       include: { freelancer: { include: { wallet: true } } },
     });
     const paidInvoice = await this.prisma.invoice.findFirst({
-      where: { orderId: dispute.orderId, status: 'PAID' },
+      where: { orderId: dispute.orderId, status: 'PAID', escrowSettledAt: null },
       orderBy: { paidAt: 'desc' },
     });
 
     if (!paidInvoice || !dispute.order.client.wallet) {
       throw new BadRequestException('No escrowed funds found for this order');
     }
+
+    // Та же защита от повторной обработки, что и в MilestonesService.approve():
+    // застолбить инвойс до того, как деньги реально сдвинутся, иначе клиент
+    // мог успеть нажать "принять сдачу" уже после разрешения спора и релизнуть
+    // тот же эскроу второй раз (см. комментарий у escrowSettledAt в schema.prisma).
+    const claimed = await this.prisma.invoice.updateMany({
+      where: { id: paidInvoice.id, escrowSettledAt: null },
+      data: { escrowSettledAt: new Date() },
+    });
+    if (claimed.count === 0) throw new BadRequestException('Эскроу по этому счёту уже обработано');
 
     if (dto.resolution === 'RESOLVED_FREELANCER') {
       if (!acceptedBid?.freelancer.wallet) throw new BadRequestException('Freelancer wallet missing');
@@ -84,7 +141,12 @@ export class AdminService {
       });
     }
 
-    return this.prisma.dispute.update({
+    await this.prisma.order.update({
+      where: { id: dispute.orderId },
+      data: { status: dto.resolution === 'RESOLVED_FREELANCER' ? 'COMPLETED' : 'CANCELLED' },
+    });
+
+    const resolved = await this.prisma.dispute.update({
       where: { id: disputeId },
       data: {
         status: dto.resolution,
@@ -92,6 +154,40 @@ export class AdminService {
         resolvedAt: new Date(),
       },
     });
+
+    // Если при открытии спора автоматически завёлся тикет поддержки —
+    // отписываемся туда решением и закрываем его: пользователь узнаёт
+    // результат там же, где обсуждал спор, а не только через уведомление.
+    const ticket = await this.prisma.supportTicket.findUnique({ where: { disputeId } });
+    if (ticket) {
+      const resolutionLabel =
+        dto.resolution === 'RESOLVED_FREELANCER'
+          ? 'в пользу исполнителя'
+          : dto.resolution === 'RESOLVED_CLIENT'
+            ? 'в пользу заказчика'
+            : 'частично';
+      await this.prisma.$transaction([
+        this.prisma.supportMessage.create({
+          data: {
+            ticketId: ticket.id,
+            senderId: staffId,
+            body: `Спор рассмотрен и решён ${resolutionLabel}.${dto.notes ? ` Комментарий: ${dto.notes}` : ''}`,
+          },
+        }),
+        this.prisma.supportTicket.update({ where: { id: ticket.id }, data: { status: 'RESOLVED' } }),
+      ]);
+      await this.prisma.notification.create({
+        data: {
+          userId: ticket.userId,
+          title: 'Спор решён',
+          message: `Спор по вашему обращению "${ticket.subject}" рассмотрен ${resolutionLabel}.`,
+          eventName: 'SupportTicketStatusChanged',
+          metadata: { ticketId: ticket.id, disputeId, href: `/support?ticketId=${ticket.id}` },
+        },
+      });
+    }
+
+    return resolved;
   }
 
   // --- Feature flags ---
@@ -538,5 +634,371 @@ export class AdminService {
     });
 
     return { success: true };
+  }
+
+  async bulkSuspendUsers(staffUserId: string, userIds: string[], reason: string) {
+    const validIds = userIds.filter((id) => id !== staffUserId);
+
+    const staffUsers = await this.prisma.user.findMany({
+      where: { id: { in: validIds }, isStaff: true },
+      select: { id: true },
+    });
+    const staffIdSet = new Set(staffUsers.map((u) => u.id));
+    const targetIds = validIds.filter((id) => !staffIdSet.has(id));
+
+    if (targetIds.length > 0) {
+      await this.prisma.user.updateMany({
+        where: { id: { in: targetIds } },
+        data: { status: 'SUSPENDED' },
+      });
+    }
+
+    return { suspendedCount: targetIds.length };
+  }
+
+  async resetUser2FA(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.isStaff) throw new ForbiddenException('Cannot perform this action on a staff account');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { totpSecret: null, totpEnabled: false },
+      });
+      await (tx as any).totpBackupCode.deleteMany({ where: { userId } });
+    });
+
+    return { success: true };
+  }
+
+  // --- Модерация (CodexTZ 021) ---
+
+  /**
+   * Единая очередь на review — источники: открытые FraudFlag (риск-скоринг
+   * fraud-service, см. FraudService) с orderId → тип ORDER, без orderId
+   * (только userId) → тип PROFILE; отзывы с низким рейтингом и текстом, ещё
+   * не разобранные — тип REVIEW (эвристика, а не report-система: жалоб на
+   * отзывы в продукте пока нет, но абьюзивный низкий отзыв — разумный
+   * сигнал для ручной проверки). Очередь заражённых файлов убрана вместе с
+   * антивирус-сканированием (ClamAV) — см. docker-compose.yml.
+   */
+  async getModerationQueue() {
+    const [orderFlags, profileFlags, flaggedReviews] = await Promise.all([
+      this.prisma.fraudFlag.findMany({
+        where: { status: 'OPEN', orderId: { not: null } },
+        include: { order: { select: { id: true, title: true } }, user: { include: { profile: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.fraudFlag.findMany({
+        where: { status: 'OPEN', orderId: null },
+        include: { user: { include: { profile: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.review.findMany({
+        where: { hiddenAt: null, moderatedAt: null, rating: { lte: 2 }, comment: { not: null } },
+        include: { author: { include: { profile: true } }, target: { include: { profile: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+    ]);
+
+    const orders = orderFlags.map((f) => ({
+      type: 'ORDER' as const,
+      id: f.id,
+      severity: f.severity,
+      reasons: f.reasons,
+      riskScore: f.riskScore,
+      order: f.order,
+      user: f.user ? { id: f.user.id, displayName: f.user.profile?.displayName ?? f.user.email } : null,
+      createdAt: f.createdAt,
+    }));
+
+    const profiles = profileFlags.map((f) => ({
+      type: 'PROFILE' as const,
+      id: f.id,
+      severity: f.severity,
+      reasons: f.reasons,
+      riskScore: f.riskScore,
+      user: f.user ? { id: f.user.id, displayName: f.user.profile?.displayName ?? f.user.email } : null,
+      createdAt: f.createdAt,
+    }));
+
+    const reviews = flaggedReviews.map((r) => ({
+      type: 'REVIEW' as const,
+      id: r.id,
+      rating: r.rating,
+      comment: r.comment,
+      author: { id: r.author.id, displayName: r.author.profile?.displayName ?? r.author.email },
+      target: { id: r.target.id, displayName: r.target.profile?.displayName ?? r.target.email },
+      createdAt: r.createdAt,
+    }));
+
+    return { orders, profiles, reviews };
+  }
+
+  private fraudActionToStatus(action: 'APPROVE' | 'REJECT' | 'REQUEST_EDITS'): 'DISMISSED' | 'CONFIRMED' | 'REVIEWED' {
+    if (action === 'APPROVE') return 'DISMISSED';
+    if (action === 'REJECT') return 'CONFIRMED';
+    return 'REVIEWED';
+  }
+
+  async resolveOrderOrProfileModeration(
+    staffId: string,
+    flagId: string,
+    action: 'APPROVE' | 'REJECT' | 'REQUEST_EDITS',
+    expectedType: 'ORDER' | 'PROFILE',
+    note?: string,
+  ) {
+    const flag = await this.prisma.fraudFlag.findUnique({ where: { id: flagId } });
+    if (!flag) throw new NotFoundException('Moderation item not found');
+
+    // Роут /moderation-queue/orders/:id и /moderation-queue/profiles/:id
+    // требуют разные права (OrderModerate / ContentModerate) — без этой
+    // проверки держатель только одного из двух мог бы резолвить flag
+    // другого типа через "не свой" роут.
+    const actualType: 'ORDER' | 'PROFILE' = flag.orderId ? 'ORDER' : 'PROFILE';
+    if (actualType !== expectedType) {
+      throw new NotFoundException('Moderation item not found');
+    }
+
+    return this.prisma.fraudFlag.update({
+      where: { id: flagId },
+      data: { status: this.fraudActionToStatus(action), reviewNote: note, reviewedById: staffId, reviewedAt: new Date() },
+    });
+  }
+
+  async resolveReviewModeration(reviewId: string, action: 'APPROVE' | 'REJECT' | 'REQUEST_EDITS') {
+    const review = await this.prisma.review.findUnique({ where: { id: reviewId } });
+    if (!review) throw new NotFoundException('Review not found');
+
+    return this.prisma.review.update({
+      where: { id: reviewId },
+      data: { moderatedAt: new Date(), hiddenAt: action === 'REJECT' ? new Date() : null },
+    });
+  }
+
+  // --- Финансы (баланс площадки, выплаты, эскроу в моменте) ---
+
+  /**
+   * "Сколько денег на кошельке / сколько выплачено" — то, чего раньше в
+   * админке не было вообще (только выручка и GMV из getMetrics). Все суммы
+   * читаются напрямую из леджера, не из денормализованных полей Wallet —
+   * так они остаются верными, даже если Wallet.* когда-нибудь разъедется
+   * с реальной историей проводок.
+   *
+   * ВАЖНО про systemMainBalance: это "виртуальный" баланс площадки в
+   * ledger-модели, а НЕ обязательно то, что физически лежит в реальном
+   * крипто-кошельке на NOWPayments прямо сейчас — при заявке на вывод
+   * (requestWithdrawal) вся сумма сразу зачисляется на system.MAIN как
+   * "зарезервировано под выплату", но при УСПЕШНОЙ отправке крипты через
+   * NOWPayments обратного списания нет (списывается только при ПРОВАЛЕ
+   * выплаты — тогда сумма возвращается пользователю). Это осознанный
+   * пробел ledger-модели, а не баг в этом методе: чтобы система.MAIN
+   * дословно совпадал с реальным ончейн-балансом, нужно отдельное событие
+   * webhook-подтверждения от NOWPayments по каждой выплате, которого сейчас
+   * в интеграции нет. totalNetPaidOut ниже — независимая от этого нюанса
+   * оценка "сколько реально ушло фрилансерам" по факту списания их
+   * WITHDRAWABLE, за вычетом того, что вернулось обратно из-за провалов.
+   */
+  async getFinanceOverview() {
+    const systemWalletId = await this.walletService.getSystemWalletId();
+    const systemWallet = await this.prisma.wallet.findUniqueOrThrow({ where: { id: systemWalletId } });
+
+    const [totalRevenueAgg, escrowLockedAgg, withdrawableDebitAgg, failedPayoutRefundAgg, subscriptionRevenueAgg] =
+      await Promise.all([
+        this.prisma.ledgerEntry.aggregate({
+          where: { walletId: systemWalletId, direction: 'CREDIT' },
+          _sum: { amount: true },
+        }),
+        this.prisma.wallet.aggregate({ _sum: { escrowBalance: true } }),
+        this.prisma.ledgerEntry.aggregate({
+          where: { balanceType: 'WITHDRAWABLE', direction: 'DEBIT' },
+          _sum: { amount: true },
+        }),
+        this.prisma.ledgerEntry.aggregate({
+          where: { balanceType: 'WITHDRAWABLE', direction: 'CREDIT', transaction: { referenceType: 'PAYOUT_FAILED' } },
+          _sum: { amount: true },
+        }),
+        this.prisma.ledgerEntry.aggregate({
+          where: { walletId: systemWalletId, direction: 'CREDIT', transaction: { referenceType: 'SUBSCRIPTION' } },
+          _sum: { amount: true },
+        }),
+      ]);
+
+    const totalNetPaidOut =
+      Number(withdrawableDebitAgg._sum.amount ?? 0) - Number(failedPayoutRefundAgg._sum.amount ?? 0);
+
+    return {
+      systemMainBalance: systemWallet.mainBalance,
+      totalRevenue: totalRevenueAgg._sum.amount ?? 0,
+      totalEscrowLocked: escrowLockedAgg._sum.escrowBalance ?? 0,
+      totalPaidOutToFreelancers: totalNetPaidOut,
+      // Только оплаты подписки с баланса пишут ledger-запись — оплаченные
+      // криптой (confirmFromIpn) просто активируют Subscription без
+      // проводки, поэтому это НЕ полная выручка по подпискам, только её
+      // отслеживаемая через леджер часть. Полную картину "кто на каком
+      // тарифе" даёт listSubscriptions ниже — не зависит от способа оплаты.
+      subscriptionRevenueFromBalancePayments: subscriptionRevenueAgg._sum.amount ?? 0,
+    };
+  }
+
+  // --- Подписки ---
+
+  async listSubscriptions(tierName?: string) {
+    const [subscriptions, counts] = await Promise.all([
+      this.prisma.subscription.findMany({
+        where: tierName ? { tier: { name: tierName as never } } : undefined,
+        include: { user: { include: { profile: true } }, tier: true },
+        orderBy: { startedAt: 'desc' },
+        take: 200,
+      }),
+      this.prisma.subscription.groupBy({
+        by: ['tierId'],
+        where: { status: 'ACTIVE', expiresAt: { gt: new Date() } },
+        _count: { id: true },
+      }),
+    ]);
+
+    const tiers = await this.prisma.subscriptionTier.findMany();
+    const tierById = new Map(tiers.map((t) => [t.id, t]));
+    const activeCountsByTierName = Object.fromEntries(
+      counts.map((c) => [tierById.get(c.tierId)?.name ?? c.tierId, c._count.id]),
+    );
+
+    return {
+      subscriptions: subscriptions.map((s) => ({
+        id: s.id,
+        userId: s.userId,
+        userEmail: s.user.email,
+        userDisplayName: s.user.profile?.displayName ?? s.user.email,
+        tierName: s.tier.name,
+        status: s.status,
+        startedAt: s.startedAt,
+        expiresAt: s.expiresAt,
+      })),
+      activeCountsByTierName,
+    };
+  }
+
+  /** Ручная выдача подписки — оплата картой/по договорённости вне платформы, поддержка и т.д. */
+  async grantSubscription(staffId: string, userId: string, tierName: 'PRO' | 'PREMIUM', days: number) {
+    const tier = await this.prisma.subscriptionTier.findUnique({ where: { name: tierName } });
+    if (!tier) throw new NotFoundException('Subscription tier not found');
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    return this.prisma.subscription.upsert({
+      where: { userId },
+      create: { userId, tierId: tier.id, status: 'ACTIVE', expiresAt },
+      update: { tierId: tier.id, status: 'ACTIVE', startedAt: new Date(), expiresAt },
+    });
+  }
+
+  /** Отмена подписки — откат на STARTER раньше срока (нарушение правил, чарджбэк и т.д.). */
+  async revokeSubscription(userId: string) {
+    const subscription = await this.prisma.subscription.findUnique({ where: { userId } });
+    if (!subscription) throw new NotFoundException('Subscription not found');
+
+    return this.prisma.subscription.update({
+      where: { userId },
+      data: { status: 'CANCELLED', expiresAt: new Date() },
+    });
+  }
+
+  // --- Логи действий staff ---
+
+  /** AuditLog уже писался при каждом @AuditLog-действии, но нигде не читался — эта ручка первая, которая его показывает. */
+  async listAuditLogs(params: { cursor?: string; actorId?: string; targetType?: string; limit?: number }) {
+    const limit = params.limit ?? 50;
+    const logs = await this.prisma.auditLog.findMany({
+      where: {
+        ...(params.actorId ? { actorId: params.actorId } : {}),
+        ...(params.targetType ? { targetType: params.targetType } : {}),
+      },
+      include: { actor: { include: { profile: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(params.cursor && { cursor: { id: params.cursor }, skip: 1 }),
+    });
+
+    const nextCursor = logs.length > limit ? logs.pop()!.id : null;
+
+    return {
+      items: logs.map((log) => ({
+        id: log.id,
+        actorId: log.actorId,
+        actorName: log.actor?.profile?.displayName ?? log.actor?.email ?? 'Система',
+        action: log.action,
+        targetType: log.targetType,
+        targetId: log.targetId,
+        metadata: log.metadata,
+        createdAt: log.createdAt,
+      })),
+      nextCursor,
+    };
+  }
+
+  // --- Просмотр чатов (только чтение, для арбитража споров/жалоб) ---
+
+  /**
+   * Поиск тредов по заказу или по пользователю (клиент ИЛИ фрилансер в
+   * треде) — саппорту/арбитру обычно известен либо заказ (из спора), либо
+   * сам пользователь (из тикета/жалобы), а не threadId напрямую.
+   */
+  async searchChatThreads(params: { orderId?: string; userId?: string }) {
+    if (!params.orderId && !params.userId) return [];
+
+    const threads = await this.prisma.chatThread.findMany({
+      where: params.orderId
+        ? { orderId: params.orderId }
+        : { OR: [{ freelancerId: params.userId }, { order: { clientId: params.userId } }] },
+      include: {
+        freelancer: { include: { profile: true } },
+        order: { include: { client: { include: { profile: true } }, category: true } },
+        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    return threads.map((t) => ({
+      threadId: t.id,
+      orderId: t.orderId,
+      orderTitle: t.order.title,
+      client: { id: t.order.clientId, displayName: t.order.client.profile?.displayName ?? t.order.client.email },
+      freelancer: { id: t.freelancerId, displayName: t.freelancer.profile?.displayName ?? t.freelancer.email },
+      lastMessageAt: t.messages[0]?.createdAt ?? t.createdAt,
+    }));
+  }
+
+  /** Полная переписка треда, без проверки "участник ли" — доступ ограничен только правом FinanceViewReports/DisputeView на роуте. */
+  async getChatThreadMessages(threadId: string) {
+    const thread = await this.prisma.chatThread.findUnique({
+      where: { id: threadId },
+      include: {
+        freelancer: { include: { profile: true } },
+        order: { include: { client: { include: { profile: true } } } },
+      },
+    });
+    if (!thread) throw new NotFoundException('Chat thread not found');
+
+    const messages = await this.prisma.chatMessage.findMany({
+      where: { threadId },
+      orderBy: { createdAt: 'asc' },
+      include: { sender: { include: { profile: true } }, invoice: true, file: true },
+    });
+
+    return {
+      threadId: thread.id,
+      orderId: thread.orderId,
+      orderTitle: thread.order.title,
+      client: { id: thread.order.clientId, displayName: thread.order.client.profile?.displayName ?? thread.order.client.email },
+      freelancer: { id: thread.freelancerId, displayName: thread.freelancer.profile?.displayName ?? thread.freelancer.email },
+      messages,
+    };
   }
 }

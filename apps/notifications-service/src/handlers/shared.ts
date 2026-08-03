@@ -1,9 +1,16 @@
 import type { DomainEventName } from '@taskhunt/shared-types';
-import type { PrismaClient } from '../../generated/prisma-client';
+import type { PrismaClient as GeneratedPrismaClient } from '../../generated/prisma-client';
 import type { NotificationChannel, NotificationPayload, NotificationSender } from '../senders/console-sender';
 
+interface OrderReadDelegate {
+  findUnique(args: {
+    where: { id: string };
+    select: { clientId: true; title: true };
+  }): Promise<{ clientId: string; title: string } | null>;
+}
+
 export interface HandlerContext {
-  prisma: PrismaClient;
+  prisma: GeneratedPrismaClient & { order: OrderReadDelegate };
   sender: NotificationSender;
 }
 

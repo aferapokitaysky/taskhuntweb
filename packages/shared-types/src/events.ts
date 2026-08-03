@@ -18,9 +18,13 @@ export enum DomainEventName {
   WorkSubmitted = 'WorkSubmitted',
   DisputeOpened = 'DisputeOpened',
   OrderInviteCreated = 'OrderInviteCreated',
+  OrderInviteResponded = 'OrderInviteResponded',
   EmailVerificationRequested = 'EmailVerificationRequested',
   PasswordResetRequested = 'PasswordResetRequested',
   SubscriptionExpiringSoon = 'SubscriptionExpiringSoon',
+  DeadlineExtensionRequested = 'DeadlineExtensionRequested',
+  DeadlineExtensionResponded = 'DeadlineExtensionResponded',
+  WalletDepositPaid = 'WalletDepositPaid',
 }
 
 export interface BaseDomainEvent<TName extends DomainEventName, TPayload> {
@@ -55,6 +59,11 @@ export type BidAcceptedEvent = BaseDomainEvent<
 export type OrderInviteCreatedEvent = BaseDomainEvent<
   DomainEventName.OrderInviteCreated,
   { inviteId: string; orderId: string; orderTitle: string; freelancerId: string; clientId: string }
+>;
+
+export type OrderInviteRespondedEvent = BaseDomainEvent<
+  DomainEventName.OrderInviteResponded,
+  { inviteId: string; orderId: string; orderTitle: string; freelancerId: string; clientId: string; accepted: boolean }
 >;
 
 export type InvoiceIssuedEvent = BaseDomainEvent<
@@ -102,6 +111,21 @@ export type SubscriptionExpiringSoonEvent = BaseDomainEvent<
   { userId: string; tierName: string; expiresAt: string }
 >;
 
+export type DeadlineExtensionRequestedEvent = BaseDomainEvent<
+  DomainEventName.DeadlineExtensionRequested,
+  { requestId: string; orderId: string; freelancerId: string; clientId: string; newDeadline: string }
+>;
+
+export type DeadlineExtensionRespondedEvent = BaseDomainEvent<
+  DomainEventName.DeadlineExtensionResponded,
+  { requestId: string; orderId: string; clientId: string; freelancerId: string; approved: boolean }
+>;
+
+export type WalletDepositPaidEvent = BaseDomainEvent<
+  DomainEventName.WalletDepositPaid,
+  { depositId: string; userId: string; amount: number; currency: string }
+>;
+
 export type DomainEvent =
   | UserRegisteredEvent
   | OrderCreatedEvent
@@ -114,6 +138,10 @@ export type DomainEvent =
   | WorkSubmittedEvent
   | DisputeOpenedEvent
   | OrderInviteCreatedEvent
+  | OrderInviteRespondedEvent
   | EmailVerificationRequestedEvent
   | PasswordResetRequestedEvent
-  | SubscriptionExpiringSoonEvent;
+  | SubscriptionExpiringSoonEvent
+  | DeadlineExtensionRequestedEvent
+  | DeadlineExtensionRespondedEvent
+  | WalletDepositPaidEvent;

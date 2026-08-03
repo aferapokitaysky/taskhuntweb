@@ -9,6 +9,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { WalletService } from './wallet.service';
 import { InvoiceService } from './invoice.service';
+import { DepositService } from './deposit.service';
 import { PayoutAddressesService } from './payout-addresses.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { SetAutoWithdrawDto } from './dto/set-auto-withdraw.dto';
@@ -42,12 +43,19 @@ export class WithdrawDto {
   label?: string;
 }
 
+export class CreateDepositDto {
+  @IsNumber()
+  @IsPositive()
+  amount!: number;
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller('wallet')
 export class WalletController {
   constructor(
     private readonly walletService: WalletService,
     private readonly invoiceService: InvoiceService,
+    private readonly depositService: DepositService,
     private readonly payoutAddressesService: PayoutAddressesService,
     @InjectQueue(PAYOUT_QUEUE) private readonly payoutQueue: Queue<PayoutJobData>,
   ) {}
@@ -128,8 +136,42 @@ export class WalletController {
   }
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('deposits')
+  createDeposit(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateDepositDto) {
+    return this.depositService.createDeposit(user.id, dto.amount);
+  }
+
+  @Get('deposits/:id/payment')
+  getDepositPaymentDetails(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.depositService.getPaymentDetails(user.id, id);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('invoices')
   issueInvoice(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateInvoiceDto) {
     return this.invoiceService.issueInvoice(user.id, dto);
+  }
+
+  @Get('invoices/:id/payment')
+  getInvoicePaymentDetails(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.invoiceService.getPaymentDetails(user.id, id);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('invoices/:id/pay-from-balance')
+  payInvoiceFromBalance(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.invoiceService.payFromBalance(user.id, id);
+  }
+
+  @Get('invoices/:id/receipt.pdf')
+  async getInvoiceReceiptPdf(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.invoiceService.generateInvoiceReceiptPdf(user.id, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="invoice-${id}.pdf"`);
+    res.send(pdf);
   }
 }

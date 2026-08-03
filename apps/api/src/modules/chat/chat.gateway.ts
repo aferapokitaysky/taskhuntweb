@@ -9,6 +9,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ChatService } from './chat.service';
+import { getAllowedOrigins } from '../../common/config/allowed-origins';
 
 interface AuthenticatedSocket extends Socket {
   data: { userId: string };
@@ -25,9 +26,7 @@ function roomName(orderId: string, freelancerId: string) {
  * Live presence (online/typing/last seen) реализуется поверх этих же
  * комнат события `presence:*` — вынесено в Phase 2, тут заложен только гейтвей.
  */
-const corsOrigin = process.env.WEB_PUBLIC_URL ?? 'http://localhost:3000';
-
-@WebSocketGateway({ namespace: '/chat', cors: { origin: corsOrigin, credentials: true } })
+@WebSocketGateway({ namespace: '/chat', cors: { origin: getAllowedOrigins(), credentials: true } })
 export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
   server!: Server;
@@ -65,7 +64,7 @@ export class ChatGateway implements OnGatewayConnection {
   ) {
     const freelancerId = data.freelancerId ?? socket.data.userId;
     const message = await this.chatService.sendTextMessage(data.orderId, freelancerId, socket.data.userId, data.body);
-    this.server.to(roomName(data.orderId, freelancerId)).emit('newMessage', message);
+    this.broadcastToOrder(data.orderId, freelancerId, 'newMessage', message);
     return message;
   }
 
@@ -78,8 +77,14 @@ export class ChatGateway implements OnGatewayConnection {
     socket.to(roomName(data.orderId, freelancerId)).emit('typing', { userId: socket.data.userId });
   }
 
-  /** Вызывается ChatEventsListener, чтобы разослать invoice-карточку в реальном времени. */
-  broadcastToOrder(orderId: string, freelancerId: string, event: string, payload: unknown) {
-    this.server.to(roomName(orderId, freelancerId)).emit(event, payload);
+  /**
+   * Вызывается ChatEventsListener/ChatController, чтобы разослать сообщение
+   * или обновление счёта в реальном времени. Раскладываем orderId/freelancerId
+   * поверх payload — страница /chats держит один сокет для ВСЕХ тредов сразу
+   * (не только открытого), и без этой пары полей клиент не может понять,
+   * какому треду в списке слева относится входящее 'newMessage'.
+   */
+  broadcastToOrder(orderId: string, freelancerId: string, event: string, payload: object) {
+    this.server.to(roomName(orderId, freelancerId)).emit(event, { ...payload, orderId, freelancerId });
   }
 }

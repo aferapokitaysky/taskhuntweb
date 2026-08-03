@@ -26,6 +26,25 @@ export function compatibilityPercent(orderTags: string[], freelancerSkillNames: 
   return Math.round((matched / orderTags.length) * 100);
 }
 
+/**
+ * "Чего не хватает" для explainable-матчинга (Codex, CODEX_CLAUDE_SYNC.md
+ * Request 004 / CodexTZ-for-Claud.md 016.009-011) — в отличие от matchReasons
+ * (почему подошло), это то, что фрилансер может улучшить сам: заполнить
+ * профиль, добавить портфолио, подтянуть навыки под заказ.
+ */
+function computeMissingForFreelancer(input: {
+  bio: string | null | undefined;
+  skillCount: number;
+  portfolioCount: number;
+  compatibilityPercent: number | null;
+}): string[] {
+  const missing: string[] = [];
+  if (input.portfolioCount === 0) missing.push('Нет портфолио');
+  if (!input.bio || input.skillCount === 0) missing.push('Профиль заполнен не полностью');
+  if (input.compatibilityPercent !== null && input.compatibilityPercent < 30) missing.push('Мало совпадающих навыков');
+  return missing;
+}
+
 interface FeedOrderInput {
   id: string;
   createdAt: Date;
@@ -184,7 +203,7 @@ export class MatchingService {
     const w = ORDER_RECOMMEND_WEIGHTS;
     const now = new Date();
 
-    const [acceptedBids, onboarding, openOrders, profile] = await Promise.all([
+    const [acceptedBids, onboarding, openOrders, profile, portfolioCount] = await Promise.all([
       this.prisma.bid.findMany({
         where: { freelancerId, status: 'ACCEPTED' },
         include: { order: { select: { categoryId: true } } },
@@ -200,6 +219,7 @@ export class MatchingService {
         where: { userId: freelancerId },
         include: { skills: { include: { skill: true } } },
       }),
+      this.prisma.portfolioItem.count({ where: { profile: { userId: freelancerId } } }),
     ]);
 
     const skillNames = profile?.skills?.map((s) => s.skill.name) ?? [];
@@ -244,11 +264,19 @@ export class MatchingService {
         }
       }
 
+      const compat = compatibilityPercent(order.tags ?? [], skillNames);
+
       return {
         ...order,
         matchScore: Math.round(score * 100) / 100,
         matchReasons: reasons,
-        compatibilityPercent: compatibilityPercent(order.tags ?? [], skillNames),
+        compatibilityPercent: compat,
+        missing: computeMissingForFreelancer({
+          bio: profile?.bio,
+          skillCount: skillNames.length,
+          portfolioCount,
+          compatibilityPercent: compat,
+        }),
       };
     });
 
@@ -272,7 +300,9 @@ export class MatchingService {
       include: {
         freelancer: {
           include: {
-            profile: { include: { skills: { include: { skill: true } } } },
+            profile: {
+              include: { skills: { include: { skill: true } }, _count: { select: { portfolioItems: true } } },
+            },
             subscription: { include: { tier: true } },
           },
         },
@@ -308,12 +338,19 @@ export class MatchingService {
       const activeSub = bid.freelancer.subscription;
       const isActiveSub = activeSub?.status === 'ACTIVE' && activeSub.expiresAt > now;
       const skillNames = bid.freelancer.profile?.skills?.map((s) => s.skill.name) ?? [];
+      const compat = compatibilityPercent(order.tags ?? [], skillNames);
       return {
         id: bid.freelancerId,
         bidId: bid.id,
         bidAmount: Number(bid.amount),
         deliveryDays: bid.deliveryDays,
-        compatibilityPercent: compatibilityPercent(order.tags ?? [], skillNames),
+        compatibilityPercent: compat,
+        missing: computeMissingForFreelancer({
+          bio: bid.freelancer.profile?.bio,
+          skillCount: skillNames.length,
+          portfolioCount: bid.freelancer.profile?._count?.portfolioItems ?? 0,
+          compatibilityPercent: compat,
+        }),
         profile: bid.freelancer.profile
           ? {
               successRate: bid.freelancer.profile.successRate,

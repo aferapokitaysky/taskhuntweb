@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { WalletService } from './wallet.service';
 import { LedgerService } from './ledger.service';
 import { InvoiceService } from './invoice.service';
+import { DepositService } from './deposit.service';
 import { NowPaymentsService } from './nowpayments.service';
 import { PayoutAddressesService } from './payout-addresses.service';
 import { WalletController } from './wallet.controller';
@@ -21,11 +22,12 @@ import { AutoWithdrawProcessor, AUTO_WITHDRAW_QUEUE } from './auto-withdraw.proc
     WalletService,
     LedgerService,
     InvoiceService,
+    DepositService,
     NowPaymentsService,
     PayoutAddressesService,
     PayoutProcessor,
     AutoWithdrawProcessor,
   ],
-  exports: [WalletService, LedgerService, InvoiceService, NowPaymentsService, PayoutAddressesService],
+  exports: [WalletService, LedgerService, InvoiceService, DepositService, NowPaymentsService, PayoutAddressesService],
 })
 export class WalletModule {}

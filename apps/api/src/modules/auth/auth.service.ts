@@ -1,4 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -43,6 +49,13 @@ export class AuthService {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) {
       throw new ConflictException('Email already registered');
+    }
+
+    if (ip) {
+      const bannedIp = await this.prisma.bannedIp.findUnique({ where: { ip } });
+      if (bannedIp) {
+        throw new ForbiddenException('Регистрация с этого адреса заблокирована');
+      }
     }
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
@@ -167,6 +180,25 @@ export class AuthService {
     const valid = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!valid) {
       throw new BadRequestException('Неверный текущий пароль');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+
+    return { changed: true };
+  }
+
+  /**
+   * Первичная установка пароля для OAuth-аккаунта (passwordHash изначально
+   * NULL — нечего проверять как "текущий пароль", в отличие от changePassword
+   * выше). Если пароль уже задан, отправляем именно сюда стучаться нельзя —
+   * иначе украденный access-токен позволил бы тихо переустановить пароль
+   * LOCAL-аккаунта в обход проверки текущего.
+   */
+  async setPassword(userId: string, newPassword: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (user.passwordHash) {
+      throw new BadRequestException('Пароль уже задан — используйте смену пароля');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);

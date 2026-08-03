@@ -1,9 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsGateway } from './notifications.gateway';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gateway: NotificationsGateway,
+  ) {}
 
   async listForUser(userId: string, unreadOnly?: boolean) {
     const where = {
@@ -44,8 +49,13 @@ export class NotificationsService {
     });
   }
 
-  async createForUser(data: { userId: string; title: string; message: string; eventName: string }) {
-    return this.prisma.notification.create({ data });
+  async createForUser(data: { userId: string; title: string; message: string; eventName: string; metadata?: Prisma.InputJsonValue }) {
+    const notification = await this.prisma.notification.create({ data });
+    // Тот же живой пуш, что и у NotificationsEventsListener/ChatService —
+    // раньше уведомления через этот путь (например, "подходящий заказ" от
+    // SavedSearchMatcherListener) появлялись только на следующем 30с-поллинге.
+    this.gateway.emitToUser(data.userId, 'notification', notification);
+    return notification;
   }
 
   async getPreferences(userId: string) {
