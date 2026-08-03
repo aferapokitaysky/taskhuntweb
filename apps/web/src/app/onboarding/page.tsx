@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import type { Category, MarketplaceRole, User } from '@/lib/types';
 import { Mascot } from '@/components/Mascot';
 import { Logo } from '@/components/Logo';
@@ -16,6 +17,7 @@ export default function OnboardingPage() {
 }
 
 function OnboardingForm() {
+  useRequireAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const role = useMemo<MarketplaceRole>(() => {

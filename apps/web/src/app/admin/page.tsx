@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { Toggle } from '@/components/Toggle';
 import { AppHeader } from '@/components/AppHeader';
 import { ErrorNotice } from '@/components/ErrorNotice';
@@ -259,6 +260,7 @@ interface ModerationQueue {
 }
 
 export default function AdminPage() {
+  useRequireAuth();
   const [tab, setTab] = useState<Tab>('users');
   const [me, setMe] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);

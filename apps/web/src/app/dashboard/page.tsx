@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { BoostIcon } from '@/components/icons/BoostIcon';
 import { BellIcon } from '@/components/icons/BellIcon';
 import { AppHeader } from '@/components/AppHeader';
@@ -71,6 +72,7 @@ export default function DashboardPage() {
 }
 
 function DashboardContent() {
+  useRequireAuth();
   const searchParams = useSearchParams();
   const [me, setMe] = useState<User | null>(null);
   const [wallet, setWallet] = useState<WalletBalance | null>(null);

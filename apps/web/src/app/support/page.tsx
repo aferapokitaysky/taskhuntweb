@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { AppHeader } from '@/components/AppHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorNotice } from '@/components/ErrorNotice';
@@ -73,6 +74,7 @@ export default function SupportPage() {
 }
 
 function SupportContent() {
+  useRequireAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);

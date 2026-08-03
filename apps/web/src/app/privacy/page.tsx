@@ -4,6 +4,7 @@ import { Logo } from '@/components/Logo';
 export const metadata = {
   title: 'Политика конфиденциальности',
   description: 'Политика обработки персональных данных TaskHunt',
+  alternates: { canonical: '/privacy' },
 };
 
 export default function PrivacyPage() {

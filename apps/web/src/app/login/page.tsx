@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { api, saveTokens } from '@/lib/api';
 import type { LoginResponse } from '@/lib/types';
@@ -9,7 +10,20 @@ import { OAuthButtons } from '@/components/OAuthButtons';
 import { AuthShell } from '@/components/AuthShell';
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Только относительный путь из нашего собственного /login?redirect=... —
+  // никогда не берём отсюда абсолютный URL (open redirect на чужой домен).
+  const redirectParam = searchParams.get('redirect');
+  const redirectTo = redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//') ? redirectParam : '/dashboard';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +46,7 @@ export default function LoginPage() {
         setTotpToken(result.totpToken);
       } else {
         saveTokens(result.accessToken, result.refreshToken);
-        router.push('/dashboard');
+        router.push(redirectTo);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось войти');

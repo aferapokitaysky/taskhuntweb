@@ -28,6 +28,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   return {
     title: data.profile.displayName,
     description: data.profile.bio?.slice(0, 160) ?? `Профиль фрилансера ${data.profile.displayName} на TaskHunt`,
+    alternates: { canonical: `/freelancers/${params.id}` },
   };
 }
 

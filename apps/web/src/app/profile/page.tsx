@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, API_URL, clearTokens, createSkill, downloadFile, uploadAvatar } from '@/lib/api';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import type { BidTemplate, PortfolioItem, SessionItem, Skill, User } from '@/lib/types';
 import { AppHeader } from '@/components/AppHeader';
 import { GithubIcon } from '@/components/icons/GithubIcon';
@@ -27,6 +28,7 @@ interface ProfileCompleteness {
 }
 
 export default function ProfilePage() {
+  useRequireAuth();
   const router = useRouter();
   const { showToast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);

@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'),
   title: { default: 'TaskHunt — фриланс-биржа с крипто-эскроу', template: '%s — TaskHunt' },
   description: TAGLINE,
+  alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     siteName: 'TaskHunt',

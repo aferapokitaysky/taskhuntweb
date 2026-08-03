@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { io, type Socket } from 'socket.io-client';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { AppHeader } from '@/components/AppHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorNotice } from '@/components/ErrorNotice';
@@ -35,6 +36,7 @@ export default function ChatsPage() {
 }
 
 function ChatsContent() {
+  useRequireAuth();
   const searchParams = useSearchParams();
   const [me, setMe] = useState<User | null>(null);
   const [threads, setThreads] = useState<ChatInboxThread[]>([]);
