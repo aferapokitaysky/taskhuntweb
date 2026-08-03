@@ -81,6 +81,7 @@ DATABASE_URL="postgresql://taskhunt:<тот же пароль, что и POSTGRE
 # apps/web/.env
 NEXT_PUBLIC_API_URL=https://api.taskhunt.example
 NEXT_PUBLIC_WEB_URL=https://taskhunt.example
+NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX   # необязателен — без него GA просто не грузится, см. layout.tsx
 ```
 
 `NEXT_PUBLIC_*` и `POSTGRES_PASSWORD` дополнительно нужно передать как shell-переменные (или положить в `.env` в корне репо — `docker compose` читает его сам) перед сборкой/запуском — `docker-compose.prod.yml` пробрасывает первые в build ARG, второй — в контейнер postgres:
@@ -88,8 +89,11 @@ NEXT_PUBLIC_WEB_URL=https://taskhunt.example
 ```bash
 export NEXT_PUBLIC_API_URL=https://api.taskhunt.example
 export NEXT_PUBLIC_WEB_URL=https://taskhunt.example
+export NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
 export POSTGRES_PASSWORD=<сгенерированный пароль>   # должен совпадать с паролем в DATABASE_URL выше
 ```
+
+Меняете любую из `NEXT_PUBLIC_*` — пересобирайте `web`-образ (`docker compose ... build web`), одного `restart`/`up -d` недостаточно: это build ARG'и Next.js, они запекаются в клиентский бандл на этапе сборки, а не читаются в рантайме.
 
 ## 5. Сборка и запуск
 
@@ -114,6 +118,27 @@ docker compose exec api node_modules/.bin/ts-node prisma/seed.ts
 - `curl -I https://admin.taskhunt.example` → 301 → `https://taskhunt.example/admin`
 - `curl https://api.taskhunt.example/health` → 200
 - Открыть `https://taskhunt.example/chats` и отправить сообщение — если WebSocket-проксирование в nginx настроено верно, сообщение доставляется мгновенно, без 15-секундного поллинга (значит апгрейд до WS прошёл, не откатился на polling).
+
+## Первый admin-аккаунт
+
+Отдельного логина/пароля для `/admin` нет — это тот же аккаунт, что и обычный сайт, просто с выданной staff-ролью в базе (см. [ARCHITECTURE.md](ARCHITECTURE.md#8-rbac-для-персонала-staff) про модель `StaffRole`/`Permission`/`UserStaffRole`). Сид (`prisma/seed.ts`) создаёт сами роли (`OWNER`, `FINANCE`, `SUPPORT`, `MODERATOR`, `ARBITRATOR`, `ANALYST`) и права, но НЕ назначает их ни одному реальному пользователю — это сознательно ручной шаг, чтобы не иметь захардкоженного дефолтного админ-аккаунта в проде.
+
+Порядок:
+1. Зарегистрируйтесь на сайте обычным способом (email+пароль или через Google/GitHub).
+2. Выдайте своему аккаунту роль `OWNER` (все права) прямо в базе:
+   ```bash
+   docker compose exec -T postgres psql -U taskhunt -d taskhunt -c "
+   UPDATE users SET \"isStaff\" = true WHERE email = 'вашпочта@example.com';
+   INSERT INTO user_staff_roles (\"userId\", \"roleId\")
+   SELECT u.id, r.id FROM users u, staff_roles r
+   WHERE u.email = 'вашпочта@example.com' AND r.name = 'OWNER'
+   ON CONFLICT DO NOTHING;
+   "
+   ```
+3. Перелогиньтесь (JWT, выданный ДО этого апдейта, не знает про новые права — сессия должна перевыпуститься).
+4. `/admin` (или `admin.taskhunt.example`, редиректит туда же) открывается под тем же логином.
+
+`isStaff = true` дополнительно скрывает аккаунт из всех публичных списков (поиск фрилансеров, лента заказов, публичная статистика) — см. `isStaff: false` фильтры в `UsersService.findFreelancers`, `OrdersService.findMany`, `StatsController`.
 
 ## Обновление на новый релиз
 
