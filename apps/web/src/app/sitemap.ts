@@ -15,6 +15,22 @@ interface PaginatedOrdersResponse {
   items: OrderListItem[];
 }
 
+interface CategoryNode {
+  id: string;
+  children?: CategoryNode[];
+}
+
+async function fetchCategoryIds(): Promise<string[]> {
+  try {
+    const res = await fetch(`${API_URL}/categories`, { next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    const categories: CategoryNode[] = await res.json();
+    return categories.flatMap((c) => [c.id, ...(c.children ?? []).map((child) => child.id)]);
+  } catch {
+    return [];
+  }
+}
+
 async function fetchFreelancerIds(): Promise<string[]> {
   try {
     const res = await fetch(`${API_URL}/freelancers`, { next: { revalidate: 3600 } });
@@ -51,7 +67,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
   const now = new Date();
 
-  const [freelancerIds, orderIds] = await Promise.all([fetchFreelancerIds(), fetchPublicOrderIds()]);
+  const [categoryIds, freelancerIds, orderIds] = await Promise.all([
+    fetchCategoryIds(),
+    fetchFreelancerIds(),
+    fetchPublicOrderIds(),
+  ]);
 
   return [
     { url: `${base}/`, lastModified: now, changeFrequency: 'weekly', priority: 1 },
@@ -60,8 +80,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/skills`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
     { url: `${base}/pricing`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
     { url: `${base}/register`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
+    { url: `${base}/referrals`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
     { url: `${base}/terms`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
     { url: `${base}/privacy`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
+    ...categoryIds.map((id) => ({
+      url: `${base}/categories/${id}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.6,
+    })),
     ...freelancerIds.map((id) => ({
       url: `${base}/freelancers/${id}`,
       lastModified: now,
